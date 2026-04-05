@@ -1,0 +1,3 @@
+# 全项目依赖（单虚拟环境）：合并 backend + frontend
+-r backend/requirements.txt
+-r frontend/requirements.txt
