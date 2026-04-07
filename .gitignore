@@ -1,0 +1,18 @@
+# env
+.env
+
+# python
+__pycache__/
+*.pyc
+
+# virtual env
+venv/
+
+# mac
+.DS_Store
+
+# SEC / 原始 10-K 缓存（体积大、可重建）
+data/raw/
+
+# vscode
+.vscode/

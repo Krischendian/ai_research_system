@@ -1,10 +1,29 @@
-"""FastAPI 最小入口：仅健康检查。"""
+"""FastAPI 入口：路由、CORS、APScheduler 生命周期。"""
+from __future__ import annotations
+
+import logging
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from research_automation.api.v1 import v1_router
+from research_automation.scheduler import shutdown_scheduler, start_scheduler
 
-app = FastAPI(title="Research Automation API")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    start_scheduler()
+    yield
+    shutdown_scheduler()
+
+
+app = FastAPI(title="Research Automation API", lifespan=lifespan)
 
 app.include_router(v1_router, prefix="/api/v1")
 
@@ -26,6 +45,7 @@ def root():
         "service": "Research Automation API",
         "health": "/health",
         "docs": "/docs",
+        "system_status": "/api/v1/system/status",
     }
 
 

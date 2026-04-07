@@ -1,0 +1,122 @@
+{
+  "markdown": "## 宏观\n\n- 大宗与汇率（5 条新闻）\n- 市场全景（5 条新闻）\n- 地缘与政策（5 条新闻）\n- 多主体行业动态（4 条新闻）\n- 其他要闻（12 条新闻）\n\n## 公司\n\n- 公司动态（2 条）\n- 科技与创新（3 条）\n- 市场与需求（1 条）\n- 金融交易（1 条）\n- 合并与收购（1 条）",
+  "macro": [
+    {
+      "topic": "大宗与汇率",
+      "count": 5,
+      "article_indices": [
+        1,
+        3,
+        5,
+        8,
+        35
+      ],
+      "tickers": []
+    },
+    {
+      "topic": "市场全景",
+      "count": 5,
+      "article_indices": [
+        10,
+        22,
+        30,
+        31,
+        11
+      ],
+      "tickers": []
+    },
+    {
+      "topic": "地缘与政策",
+      "count": 5,
+      "article_indices": [
+        14,
+        21,
+        27,
+        34,
+        29
+      ],
+      "tickers": []
+    },
+    {
+      "topic": "多主体行业动态",
+      "count": 4,
+      "article_indices": [
+        4,
+        25,
+        36,
+        38
+      ],
+      "tickers": []
+    },
+    {
+      "topic": "其他要闻",
+      "count": 12,
+      "article_indices": [
+        7,
+        9,
+        15,
+        16,
+        17,
+        23,
+        24,
+        26,
+        28,
+        32,
+        33,
+        37
+      ],
+      "tickers": []
+    }
+  ],
+  "company": [
+    {
+      "topic": "公司动态",
+      "count": 2,
+      "article_indices": [
+        6,
+        20
+      ],
+      "tickers": [
+        "NVDA"
+      ]
+    },
+    {
+      "topic": "科技与创新",
+      "count": 3,
+      "article_indices": [
+        12,
+        13,
+        18
+      ],
+      "tickers": []
+    },
+    {
+      "topic": "市场与需求",
+      "count": 1,
+      "article_indices": [
+        19
+      ],
+      "tickers": []
+    },
+    {
+      "topic": "金融交易",
+      "count": 1,
+      "article_indices": [
+        2
+      ],
+      "tickers": []
+    },
+    {
+      "topic": "合并与收购",
+      "count": 1,
+      "article_indices": [
+        39
+      ],
+      "tickers": []
+    }
+  ],
+  "articles_in_window": 39,
+  "window_start_ny": "2026-04-05T00:00:00-04:00",
+  "window_end_ny": "2026-04-06T00:00:00-04:00",
+  "provenance_note": "纽约昨日日历日 2026-04-05（2026-04-05T00:00:00-04:00–2026-04-06T00:00:00-04:00，America/New_York）；仅含 RSS 提供有效发布时间的条目，实时 feed 不一定覆盖当日全部报道。主题与条数由模型基于标题/提要归类，请核对原文。"
+}

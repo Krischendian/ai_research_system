@@ -6,7 +6,11 @@ import re
 from typing import Any
 
 from research_automation.extractors.llm_client import chat
-from research_automation.extractors.news_client import RawArticle, fetch_rss_articles
+from research_automation.extractors.news_client import (
+    RawArticle,
+    extract_tickers_from_text,
+    fetch_rss_articles,
+)
 from research_automation.models.news import MorningBrief, NewsItem
 
 
@@ -46,6 +50,22 @@ def _build_prompt(articles: list[RawArticle]) -> str:
     return "\n".join(lines)
 
 
+def _text_for_ticker_match(item: NewsItem, articles: list[RawArticle]) -> str:
+    """合并标题、摘要及可关联到的 RSS 提要，供 ticker 匹配。"""
+    parts: list[str] = [item.title or "", item.summary or ""]
+    t = item.title.strip().lower()
+    if not t:
+        return " ".join(parts)
+    for a in articles:
+        at = a["title"].strip().lower()
+        if not at:
+            continue
+        if t == at or t in at or at in t:
+            parts.append(a.get("description") or "")
+            break
+    return " ".join(parts)
+
+
 def _match_source_url(title: str, articles: list[RawArticle]) -> str | None:
     """按标题将 LLM 输出与 RSS 原文关联，获取可点击链接。"""
     t = title.strip().lower()
@@ -64,16 +84,78 @@ def _match_source_url(title: str, articles: list[RawArticle]) -> str | None:
     return None
 
 
-def _with_source_urls(items: list[NewsItem], articles: list[RawArticle]) -> list[NewsItem]:
-    return [
-        it.model_copy(update={"source_url": _match_source_url(it.title, articles)})
-        for it in items
-    ]
+def _finalize_news_items(items: list[NewsItem], articles: list[RawArticle]) -> list[NewsItem]:
+    """补齐原文链接与 ``matched_tickers``（基于监控池关键词匹配）。"""
+    out: list[NewsItem] = []
+    for it in items:
+        blob = _text_for_ticker_match(it, articles)
+        tickers = extract_tickers_from_text(blob)
+        url = _match_source_url(it.title, articles)
+        out.append(
+            it.model_copy(update={"matched_tickers": tickers, "source_url": url})
+        )
+    return out
+
+
+def _prioritize_articles_with_tickers(articles: list[RawArticle]) -> list[RawArticle]:
+    """把标题/提要已命中监控池的条目排在前面，利于 LLM 归入公司类。"""
+    hits: list[RawArticle] = []
+    rest: list[RawArticle] = []
+    for a in articles:
+        blob = f"{a.get('title') or ''} {a.get('description') or ''}"
+        if extract_tickers_from_text(blob):
+            hits.append(a)
+        else:
+            rest.append(a)
+    return hits + rest
+
+
+def _fallback_company_from_rss(articles: list[RawArticle], *, limit: int = 12) -> list[NewsItem]:
+    """
+    当 LLM 路径下公司新闻为空时，直接用 RSS 英文提要生成卡片（仍须命中监控池 ticker）。
+    摘要带「RSS 提要」前缀，避免与模型润色后的宏观区混淆期望。
+    """
+    out: list[NewsItem] = []
+    seen: set[str] = set()
+    for a in articles:
+        title = (a.get("title") or "").strip()
+        if not title:
+            continue
+        desc = (a.get("description") or "").strip()
+        blob = f"{title} {desc}"
+        tickers = extract_tickers_from_text(blob)
+        if not tickers:
+            continue
+        key = title.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        excerpt = desc[:520] + ("…" if len(desc) > 520 else "")
+        summary = (
+            f"【RSS 提要，原文摘录】{excerpt}"
+            if excerpt
+            else "【RSS】请结合英文标题与下方原文链接阅读。"
+        )
+        src = a.get("source") or "RSS"
+        src_field = src if str(src).startswith("RSS-") else f"RSS-{src}"
+        link = (a.get("link") or "").strip() or None
+        out.append(
+            NewsItem(
+                title=title,
+                summary=summary,
+                source=src_field,
+                source_url=link,
+                matched_tickers=tickers,
+            )
+        )
+        if len(out) >= limit:
+            break
+    return out
 
 
 def get_morning_brief(
     *,
-    max_rss_items: int = 20,
+    max_rss_items: int = 32,
 ) -> MorningBrief:
     """
     抓取 Reuters/Bloomberg RSS，调用 LLM 生成中文摘要并分为宏观 / 公司两类。
@@ -81,12 +163,13 @@ def get_morning_brief(
     - 不得捏造 RSS 中未出现的事实；摘要须严格基于给定标题与提要。
     - 输出须符合 ``MorningBrief`` JSON 结构。
     """
-    articles = fetch_rss_articles(max_items=max_rss_items, per_feed_limit=8)
+    articles = fetch_rss_articles(max_items=max_rss_items, per_feed_limit=7)
     if not articles:
         raise NewsBriefError(
             "未能从 RSS 获取任何新闻（网络、反爬或 feed 不可用）。请稍后重试。"
         )
 
+    articles = _prioritize_articles_with_tickers(articles)
     body = _build_prompt(articles)
     prompt = f"""你是财经新闻编辑助手。下面是同源 RSS 抓取的多条英文简讯（带标题与提要）。
 
@@ -143,17 +226,37 @@ def get_morning_brief(
                 out.append(NewsItem(title=t, summary=s, source=src))
             return out
 
-        macro = _as_items(macro_raw)
-        company = _as_items(company_raw)
+        macro = _finalize_news_items(_as_items(macro_raw), articles)
+        company_in = _finalize_news_items(_as_items(company_raw), articles)
+        # 公司类：LLM 标为公司且命中监控池 ticker 的条目
+        company = [it for it in company_in if it.matched_tickers]
+        # 宏观里若摘要/标题已命中 ticker，也并入公司版块（宏观列表仍全部保留，不去重删除）
+        seen_company = {it.title.strip().lower() for it in company}
+        for it in macro:
+            if not it.matched_tickers:
+                continue
+            key = it.title.strip().lower()
+            if key and key not in seen_company:
+                seen_company.add(key)
+                company.append(it)
+
+        extra_src = ""
+        if not company:
+            fb = _fallback_company_from_rss(articles)
+            if fb:
+                company = fb
+                extra_src = "；公司新闻含 RSS 直配条目（提要来自英文 RSS，未再经模型写中文摘要）。"
+
         if not macro and not company:
             raise ValueError("模型未返回有效新闻条目")
 
         return MorningBrief(
-            macro_news=_with_source_urls(macro, articles),
-            company_news=_with_source_urls(company, articles),
+            macro_news=macro,
+            company_news=company,
             data_source_label=(
-                "Reuters / Bloomberg 等公开 RSS（各条附「原文链接」）"
+                "Reuters / Bloomberg / TechCrunch 等公开 RSS（各条附「原文链接」）"
                 " + OpenAI 中文摘要与宏观/公司分类"
+                f"{extra_src}"
             ),
             provenance_note=(
                 "摘要由模型基于 RSS 提要生成，可能与报道原文不一致；"

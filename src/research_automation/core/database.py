@@ -29,7 +29,7 @@ def get_connection() -> sqlite3.Connection:
 
 
 def init_db(conn: sqlite3.Connection) -> None:
-    """创建 financials 表，字段与 AnnualFinancials 对齐，并带 ticker。"""
+    """创建 financials、companies、document_paragraphs 等表。"""
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS financials (
@@ -44,7 +44,107 @@ def init_db(conn: sqlite3.Connection) -> None:
         )
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS companies (
+            ticker TEXT NOT NULL PRIMARY KEY,
+            company_name TEXT NOT NULL,
+            sector TEXT NOT NULL,
+            country TEXT NOT NULL,
+            is_active INTEGER NOT NULL DEFAULT 1
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS document_paragraphs (
+            paragraph_id TEXT NOT NULL PRIMARY KEY,
+            doc_uid TEXT NOT NULL,
+            ticker TEXT NOT NULL,
+            doc_type TEXT NOT NULL,
+            context_year INTEGER,
+            quarter_label TEXT,
+            para_index INTEGER NOT NULL,
+            content TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_document_paragraphs_doc_uid
+        ON document_paragraphs(doc_uid)
+        """
+    )
     conn.commit()
+
+
+def replace_document_paragraphs(
+    doc_uid: str,
+    ticker: str,
+    doc_type: str,
+    *,
+    context_year: int | None = None,
+    quarter_label: str | None = None,
+    records: list[tuple[str, int, str]],
+) -> None:
+    """
+    替换某一文档下的全部段落：先按 ``doc_uid`` 删除再批量插入。
+
+    ``records``：``(paragraph_id, para_index, content)``。
+    """
+    sym = (ticker or "").strip().upper()
+    uid = (doc_uid or "").strip()
+    if not sym or not uid or not records:
+        return
+
+    conn = get_connection()
+    try:
+        init_db(conn)
+        conn.execute("DELETE FROM document_paragraphs WHERE doc_uid = ?", (uid,))
+        conn.executemany(
+            """
+            INSERT INTO document_paragraphs (
+                paragraph_id, doc_uid, ticker, doc_type,
+                context_year, quarter_label, para_index, content
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    pid,
+                    uid,
+                    sym,
+                    doc_type,
+                    context_year,
+                    quarter_label,
+                    idx,
+                    content,
+                )
+                for pid, idx, content in records
+            ],
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def fetch_paragraph_texts_by_ids(ids: list[str]) -> dict[str, str]:
+    """按段落 ID 批量取正文；缺失的 ID 不出现于结果中。"""
+    want = [i.strip() for i in ids if i and str(i).strip()]
+    if not want:
+        return {}
+
+    conn = get_connection()
+    try:
+        init_db(conn)
+        placeholders = ",".join("?" * len(want))
+        cur = conn.execute(
+            f"SELECT paragraph_id, content FROM document_paragraphs "
+            f"WHERE paragraph_id IN ({placeholders})",
+            want,
+        )
+        return {str(r["paragraph_id"]): str(r["content"]) for r in cur.fetchall()}
+    finally:
+        conn.close()
 
 
 def invalidate_financials_cache(ticker: str | None = None) -> None:
