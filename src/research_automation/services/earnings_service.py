@@ -1,12 +1,14 @@
-"""财报电话会：逐字稿 + LLM 分析（段落级溯源）。"""
+"""财报电话会：FMP → EDGAR 8-K → earningscall → sec-api.io；再经 LLM 分析（段落级溯源）。"""
 from __future__ import annotations
 
 import json
+import logging
 import re
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal
 
 from research_automation.core.database import replace_document_paragraphs
+from research_automation.core.verbatim_match import quote_matches_haystack
 from research_automation.core.paragraph_refs import normalize_paragraph_ref_list
 from research_automation.core.paragraph_text import (
     all_paragraph_id_set,
@@ -16,12 +18,27 @@ from research_automation.core.paragraph_text import (
     paragraphs_to_numbered_excerpt,
     split_into_paragraphs,
 )
-from research_automation.extractors.earnings_call import get_transcript
+from research_automation.extractors import fmp_client
+from research_automation.extractors.earningscall_lib import (
+    get_transcript_from_earningscall,
+)
+from research_automation.extractors.sec_8k_client import (
+    fetch_transcript_from_8k,
+    search_8k_transcript,
+)
 from research_automation.extractors.llm_client import chat
 from research_automation.models.earnings import (
     EarningsCallAnalysis,
     EarningsQuotation,
     EarningsViewpoint,
+)
+
+logger = logging.getLogger(__name__)
+
+# 无逐字稿时 API 返回的说明（与 HTTP detail 一致，便于前端展示）
+EARNINGS_NO_TRANSCRIPT_MESSAGE = (
+    "No earnings call transcript available：FMP、EDGAR 8-K、earningscall 与 sec-api.io（"
+    "SEC_API_KEY）均未返回该季度可用逐字稿；请换季度或检查网络与密钥配置。"
 )
 
 
@@ -34,6 +51,7 @@ class EarningsAnalysisError(Exception):
 
 
 def _extract_json_object(raw: str) -> dict[str, Any]:
+    """从模型原始字符串中提取 JSON 对象。"""
     text = raw.strip()
     m = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", text)
     if m:
@@ -52,6 +70,7 @@ def _extract_json_object(raw: str) -> dict[str, Any]:
 
 
 def _build_prompt(symbol: str, quarter: str, numbered_transcript: str) -> str:
+    """拼装 LLM 提示词（含段落溯源要求）。"""
     return f"""你是投研助理，根据下面**带段落 ID** 的【财报电话会逐字稿】撰写结构化分析。逐字稿可能为英文，分析输出以中文为主。
 
 **溯源要求**：
@@ -62,7 +81,7 @@ def _build_prompt(symbol: str, quarter: str, numbered_transcript: str) -> str:
 要求：
 1. summary：3～6 句中文概括本季度要点。
 2. management_viewpoints：5～8 条管理层核心观点；须能在逐字稿中找到依据。
-3. quotations：3～5 条重要原话，quote 保持**英文原文**勿翻译。
+3. quotations：5～8 条重要原话，quote 须从逐字稿**原样复制**英文子串（勿改标点与弯引号），勿翻译；**speaker** 须与逐字稿中发言人一致（若正文含「姓名:」或「姓名 (职务):」前缀请对应填写）。
 4. new_business_highlights：与新产品线、AI、服务、战略动向相关的要点（中文），无则空数组。
 
 仅输出一个 JSON 对象，键名必须为：
@@ -77,12 +96,8 @@ summary, summary_source_paragraph_ids, management_viewpoints, quotations, new_bu
 
 
 def _quote_in_transcript(quote: str, transcript: str) -> bool:
-    q = (quote or "").strip()
-    if not q:
-        return False
-    if q in transcript:
-        return True
-    return " ".join(q.split()) in " ".join(transcript.split())
+    """判断 quote 是否出现在逐字稿中（逐字归一化 + 模糊匹配）。"""
+    return quote_matches_haystack(quote, transcript, similarity_threshold=0.9)
 
 
 def _parse_viewpoints(
@@ -91,6 +106,7 @@ def _parse_viewpoints(
     idx_to_full: dict[int, str],
     allowed: set[str],
 ) -> list[EarningsViewpoint]:
+    """解析管理层观点 / 新业务要点列表。"""
     if not isinstance(raw, list):
         return []
     out: list[EarningsViewpoint] = []
@@ -120,6 +136,7 @@ def _collect_earnings_cited_ids(
     quotations: list[EarningsQuotation],
     highlights: list[EarningsViewpoint],
 ) -> set[str]:
+    """汇总所有被引用的段落 ID。"""
     s: set[str] = set(summary_ids)
     for v in viewpoints:
         s.update(v.source_paragraph_ids)
@@ -132,7 +149,11 @@ def _collect_earnings_cited_ids(
 
 def analyze_earnings_call(ticker: str, year: int, quarter: int) -> EarningsCallAnalysis:
     """
-    拉取逐字稿，分段入库，经 LLM 生成 ``EarningsCallAnalysis``（含段落溯源）。
+    优先 FMP，其次 EDGAR ``search_8k_transcript``，再 ``earningscall``，最后
+    ``fetch_transcript_from_8k``（sec-api.io，需 ``SEC_API_KEY``）；
+    将逐字稿分段入库后经 LLM 生成 ``EarningsCallAnalysis``。
+
+    无逐字稿时抛出 ``EarningsAnalysisError``（不再使用 Mock）。
     """
     symbol = (ticker or "").strip().upper()
     if not symbol:
@@ -141,9 +162,78 @@ def analyze_earnings_call(ticker: str, year: int, quarter: int) -> EarningsCallA
         raise EarningsAnalysisError("quarter 必须在 1～4 之间")
 
     qlabel = f"{year}Q{quarter}"
-    transcript = get_transcript(symbol, year, quarter)
-    if not transcript.strip():
-        raise EarningsAnalysisError("逐字稿为空")
+
+    fmp_tr: dict[str, Any] | None = None
+    try:
+        fmp_tr = fmp_client.get_earnings_transcript(symbol, year, quarter)
+    except Exception:
+        logger.exception("FMP 逐字稿拉取异常 ticker=%s %s", symbol, qlabel)
+        fmp_tr = None
+
+    transcript_origin: Literal["fmp", "sec_8k", "earningscall", "sec_api"]
+    transcript = ""
+
+    if fmp_tr and fmp_tr.get("content"):
+        dialogues = fmp_tr["content"]
+        transcript = fmp_client.dialogues_to_plaintext_for_llm(dialogues).strip()
+        transcript_origin = "fmp"
+        logger.info("电话会逐字稿来源=FMP ticker=%s %s", symbol, qlabel)
+    else:
+        sec_text: str | None = None
+        try:
+            sec_text = search_8k_transcript(
+                symbol,
+                lookback_days=14,
+                fiscal_year=year,
+                fiscal_quarter=quarter,
+            )
+        except Exception:
+            logger.exception("EDGAR 8-K 逐字稿拉取异常 ticker=%s %s", symbol, qlabel)
+            sec_text = None
+        if sec_text and sec_text.strip():
+            transcript = sec_text.strip()
+            transcript_origin = "sec_8k"
+            logger.info("电话会逐字稿来源=SEC_8K_EDGAR ticker=%s %s", symbol, qlabel)
+        else:
+            transcript = (
+                get_transcript_from_earningscall(symbol, year, quarter) or ""
+            ).strip()
+            if transcript:
+                transcript_origin = "earningscall"
+                logger.info(
+                    "电话会逐字稿来源=earningscall ticker=%s %s", symbol, qlabel
+                )
+            else:
+                api_text: str | None = None
+                try:
+                    api_text = fetch_transcript_from_8k(
+                        symbol,
+                        lookback_days=14,
+                        fiscal_year=year,
+                        fiscal_quarter=quarter,
+                    )
+                except Exception:
+                    logger.exception(
+                        "sec-api.io 8-K 逐字稿拉取异常 ticker=%s %s", symbol, qlabel
+                    )
+                    api_text = None
+                if api_text and api_text.strip():
+                    transcript = api_text.strip()
+                    transcript_origin = "sec_api"
+                    logger.info(
+                        "电话会逐字稿来源=SEC_API ticker=%s %s", symbol, qlabel
+                    )
+                else:
+                    transcript_origin = "earningscall"
+                    logger.info(
+                        "电话会无逐字稿 ticker=%s %s（已尝试全部来源）",
+                        symbol,
+                        qlabel,
+                    )
+
+    if not transcript:
+        logger.warning("无逐字稿 ticker=%s %s", symbol, qlabel)
+        raise EarningsAnalysisError(EARNINGS_NO_TRANSCRIPT_MESSAGE)
 
     doc_uid = build_earnings_doc_uid(symbol, year, quarter)
     chunks = split_into_paragraphs(transcript)
@@ -229,6 +319,27 @@ def analyze_earnings_call(ticker: str, year: int, quarter: int) -> EarningsCallA
     )
     source_paragraphs = {pid: id_to_text[pid] for pid in cited if pid in id_to_text}
 
+    if transcript_origin == "fmp":
+        ds_label = (
+            "逐字稿来源：Financial Modeling Prep (FMP) earning-call-transcript API；"
+            "分析由本地 LLM 基于该文本生成。"
+        )
+    elif transcript_origin == "sec_8k":
+        ds_label = (
+            "逐字稿来源：SEC EDGAR Form 8-K 附件（常见 EX-99.1 业绩说明/电话会文稿）；"
+            "分析由本地 LLM 基于该文本生成。"
+        )
+    elif transcript_origin == "sec_api":
+        ds_label = (
+            "逐字稿来源：sec-api.io Full-Text Search（8-K EX-99 等附件 URL 拉取）；"
+            "分析由本地 LLM 基于该文本生成。"
+        )
+    else:
+        ds_label = (
+            "逐字稿来源：earningscall 库（公开财报电话会文本）；"
+            "分析由本地 LLM 基于该文本生成。"
+        )
+
     return EarningsCallAnalysis(
         ticker=symbol,
         quarter=qlabel,
@@ -238,10 +349,8 @@ def analyze_earnings_call(ticker: str, year: int, quarter: int) -> EarningsCallA
         quotations=quotations,
         new_business_highlights=nbus,
         last_updated=datetime.now(timezone.utc).isoformat(),
-        data_source_label=(
-            "逐字稿来源：项目内 Mock 示例（AAPL 2024Q4 风格）；"
-            "Bloomberg 等付费源接口预留于 extractors/earnings_call._fetch_from_bloomberg。"
-        ),
+        data_source=transcript_origin,
+        data_source_label=ds_label,
         document_uid=doc_uid,
         source_paragraphs=source_paragraphs,
     )

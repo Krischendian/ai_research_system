@@ -1,11 +1,16 @@
 """财报电话会分析数据结构。"""
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
 class EarningsQuotation(BaseModel):
-    """电话会中的可引用原话。"""
+    """电话会中的可引用原话（LLM 输出中的 speaker 应对齐逐字稿发言人）。"""
 
-    speaker: str = ""
+    speaker: str = Field(
+        default="",
+        description="发言人姓名或角色（FMP 结构化逐字稿或模型从文中提取）",
+    )
     quote: str
     topic: str = ""  # 如 Guidance、China、AI
     source_paragraph_ids: list[str] = Field(
@@ -38,6 +43,8 @@ class EarningsCallAnalysis(BaseModel):
         description="新业务 / 产品线 / 战略动向要点",
     )
     last_updated: str = ""
+    # 逐字稿来源：FMP → EDGAR 8-K → earningscall → sec-api.io
+    data_source: Literal["fmp", "sec_8k", "earningscall", "sec_api"] | None = None
     data_source_label: str = ""
     document_uid: str = Field(
         "",

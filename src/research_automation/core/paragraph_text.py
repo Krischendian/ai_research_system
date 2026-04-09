@@ -33,6 +33,12 @@ def build_10k_item1_doc_uid(ticker: str, filing_year: int) -> str:
     return f"{sym}_10K_{filing_year}_Item1"
 
 
+def build_10k_profile_doc_uid(ticker: str, filing_year: int) -> str:
+    """10-K 多章节合并节选（Item 1 / 1A / 7 / Item 8 附注）入库用 doc_uid。"""
+    sym = (ticker or "").strip().upper()
+    return f"{sym}_10K_{filing_year}_ProfileSections"
+
+
 def build_10k_paragraph_id(doc_uid: str, para_index: int) -> str:
     """para_index 从 1 起。"""
     return f"{doc_uid}_para_{para_index}"

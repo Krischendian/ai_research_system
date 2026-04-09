@@ -10,12 +10,17 @@ if str(_fe_root) not in sys.path:
     sys.path.insert(0, str(_fe_root))
 
 import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
 import requests
 import streamlit as st
 
 from frontend.streamlit_helpers import notify_api_failure
 
 BACKEND_BASE = "http://127.0.0.1:8000"
+
+# 与后端 ``normalize_equity_ticker`` 同步：常见少打字母
+_TICKER_TYPOS = {"APPL": "AAPL"}
 
 # 与 API corporate_actions.action_type 枚举一致
 _CORP_ACTION_LABELS = {
@@ -95,8 +100,24 @@ if "earnings_error" not in st.session_state:
 if "earnings_payload" not in st.session_state:
     st.session_state.earnings_payload = None
 
-ticker = st.text_input("股票代码", value="AAPL")
-earnings_quarter = st.text_input("电话会季度", value="2024Q4", help="格式：2024Q4")
+# 与晨报「深度分析」跳转联动：预填 ticker 并可自动触发一次查询
+if "deep_ticker_widget" not in st.session_state:
+    st.session_state["deep_ticker_widget"] = "AAPL"
+if "deep_earnings_quarter" not in st.session_state:
+    st.session_state["deep_earnings_quarter"] = "2024Q4"
+if "deep_dive_prefill_ticker" in st.session_state:
+    st.session_state["deep_ticker_widget"] = st.session_state.pop(
+        "deep_dive_prefill_ticker"
+    )
+
+_auto_query = st.session_state.pop("deep_dive_auto_query", False)
+
+ticker = st.text_input("股票代码", key="deep_ticker_widget")
+earnings_quarter = st.text_input(
+    "电话会季度",
+    key="deep_earnings_quarter",
+    help="格式：2024Q4",
+)
 
 
 def _fmt_usd(v: float | None) -> str:
@@ -111,7 +132,208 @@ def _fmt_ratio(v: float | None) -> str:
     return f"{v * 100:.2f}%"
 
 
-if st.button("查询"):
+def _usd_amount_to_billions(v: float | None) -> float | None:
+    """
+    将营收/EBITDA 等金额转为「十亿美元」用于纵轴。
+
+    SQLite/SEC 解析常见为 **百万美元**（如 AAPL 营收约 383_285）；
+    FMP 等 API 常为 **美元** 原值（≥1e9）。按量级区分，避免误用 /1e9 把百万美元压成 0。
+    """
+    if v is None:
+        return None
+    x = float(v)
+    if abs(x) >= 1_000_000:
+        return x / 1e9
+    return x / 1e3
+
+
+def _financial_trend_figure(rows: list) -> object | None:
+    """最近至多三个财年：营收、EBITDA、毛利率、净负债/权益比分面折线；悬停显示数值。"""
+    if not rows:
+        return None
+    valid = [r for r in rows if r.get("year") is not None]
+    if not valid:
+        return None
+    sorted_rows = sorted(valid, key=lambda x: int(x["year"]))[-3:]
+    metric_order = [
+        "营收（十亿美元）",
+        "EBITDA（十亿美元）",
+        "毛利率（%）",
+        "净负债/权益比",
+    ]
+    rec: list[dict] = []
+    for r in sorted_rows:
+        y = int(r["year"])
+        rv = r.get("revenue")
+        if rv is not None:
+            try:
+                b_rev = _usd_amount_to_billions(float(rv))
+            except (TypeError, ValueError):
+                b_rev = None
+            if b_rev is not None:
+                rec.append({"年份": y, "指标": "营收（十亿美元）", "数值": b_rev})
+        eb = r.get("ebitda")
+        if eb is not None:
+            try:
+                b_ebit = _usd_amount_to_billions(float(eb))
+            except (TypeError, ValueError):
+                b_ebit = None
+            if b_ebit is not None:
+                rec.append({"年份": y, "指标": "EBITDA（十亿美元）", "数值": b_ebit})
+        gm = r.get("gross_margin")
+        if gm is not None:
+            rec.append({"年份": y, "指标": "毛利率（%）", "数值": float(gm) * 100})
+        nd = r.get("net_debt_to_equity")
+        if nd is not None:
+            rec.append({"年份": y, "指标": "净负债/权益比", "数值": float(nd)})
+    if not rec:
+        return None
+    df_c = pd.DataFrame(rec)
+    present = [m for m in metric_order if m in set(df_c["指标"])]
+    if not present:
+        return None
+    df_c["指标"] = pd.Categorical(df_c["指标"], categories=present, ordered=True)
+    df_c = df_c.sort_values(["指标", "年份"])
+    fig = px.line(
+        df_c,
+        x="年份",
+        y="数值",
+        facet_row="指标",
+        markers=True,
+        category_orders={"指标": present},
+    )
+    fig.update_layout(
+        title="财务趋势（最近三年）",
+        showlegend=False,
+        margin=dict(l=12, r=12, t=48, b=12),
+        height=max(280, 160 * len(present)),
+    )
+    fig.update_traces(hovertemplate="财年：%{x}<br>数值：%{y:,.4f}<extra></extra>")
+    fig.update_xaxes(type="linear", dtick=1)
+    fig.for_each_yaxis(lambda ax: ax.update(autorange=True, matches=None))
+    return fig
+
+
+def _parse_mix_percentage_str(raw: str | None) -> float | None:
+    """从「45.2%」类字符串解析占比数值（用于饼图）。"""
+    if raw is None or not str(raw).strip():
+        return None
+    t = str(raw).strip().replace("%", "").replace(",", "").strip()
+    try:
+        v = float(t)
+    except ValueError:
+        return None
+    if v <= 0:
+        return None
+    return v
+
+
+def _format_mix_absolute_hint(v: object) -> str:
+    """模型或扩展字段中的绝对额（常见为美元）；无则返回空串。"""
+    if v is None:
+        return ""
+    try:
+        x = float(v)
+    except (TypeError, ValueError):
+        return ""
+    if x <= 0:
+        return ""
+    if abs(x) >= 1_000_000:
+        return f"金额（约）：{x / 1e9:.2f} 十亿美元"
+    return f"金额（约）：{x:,.0f} 百万美元"
+
+
+def _revenue_mix_pie_figure(items: list, title: str) -> go.Figure | None:
+    """业务线/地区占比环形图；图例可点选隐藏扇区。"""
+    names: list[str] = []
+    values: list[float] = []
+    custom_lines: list[str] = []
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        nm = (it.get("segment_name") or "").strip() or "—"
+        pv = _parse_mix_percentage_str(it.get("percentage"))
+        if pv is None:
+            continue
+        names.append(nm)
+        values.append(pv)
+        amt_raw = it.get("absolute")
+        if amt_raw is None:
+            amt_raw = it.get("amount_usd")
+        custom_lines.append(_format_mix_absolute_hint(amt_raw))
+    if not names:
+        return None
+    fig = go.Figure(
+        data=[
+            go.Pie(
+                labels=names,
+                values=values,
+                hole=0.38,
+                textinfo="percent",
+                textposition="inside",
+                insidetextorientation="radial",
+                hovertemplate=(
+                    "<b>%{label}</b><br>"
+                    "占比：%{value:.2f}%"
+                    "%{customdata}<extra></extra>"
+                ),
+                customdata=[
+                    f"<br>{c}" if c else "" for c in custom_lines
+                ],
+            )
+        ]
+    )
+    fig.update_layout(
+        title=dict(text=title, x=0.5, xanchor="center"),
+        margin=dict(t=56, b=8, l=24, r=24),
+        showlegend=True,
+        legend=dict(
+            orientation="v",
+            yanchor="middle",
+            y=0.5,
+            xanchor="left",
+            x=1.02,
+        ),
+        uirevision=title,
+    )
+    return fig
+
+
+def _mix_source_expander(
+    items: list,
+    srcp: dict,
+    *,
+    key_prefix: str,
+    ticker: str,
+    expander_title: str,
+) -> None:
+    """各分项 📖 溯源（饼图替代列表后保留）。"""
+    if not items:
+        return
+    with st.expander(expander_title, expanded=False):
+        for i, s in enumerate(items):
+            if not isinstance(s, dict):
+                continue
+            sx1, sx2 = st.columns([10, 1])
+            with sx1:
+                st.caption(
+                    f"{s.get('segment_name') or '—'} — {s.get('percentage') or '—'}"
+                )
+            with sx2:
+                gp = s.get("source_paragraph_ids") or []
+                if gp and st.button(
+                    "📖",
+                    key=f"{key_prefix}_{ticker}_{i}",
+                    help="查看原文段落",
+                ):
+                    _open_paragraph_viewer(
+                        gp,
+                        srcp,
+                        unique_key=f"{key_prefix}_d_{ticker}_{i}",
+                    )
+
+
+if st.button("查询") or _auto_query:
     st.session_state.fin_error = None
     st.session_state.fin_payload = None
     st.session_state.profile_error = None
@@ -121,7 +343,8 @@ if st.button("查询"):
     st.session_state.queried = True
 
     with st.spinner("加载中..."):
-        sym = ticker.strip().upper()
+        # 与后端 normalize_equity_ticker 一致；勿在 text_input 实例化后写 key「deep_ticker_widget」
+        sym = _TICKER_TYPOS.get(ticker.strip().upper(), ticker.strip().upper())
         if not sym:
             msg = "请输入股票代码"
             st.session_state.fin_error = msg
@@ -129,6 +352,11 @@ if st.button("查询"):
             st.session_state.earnings_error = msg
             notify_api_failure(ValueError(msg), prefix="")
         else:
+            raw_u = ticker.strip().upper()
+            if raw_u != sym:
+                st.caption(
+                    f"已将代码 **{raw_u}** 纠正为 **{sym}** 再请求 API（与 SEC 一致）。"
+                )
             try:
                 r = requests.get(
                     f"{BACKEND_BASE}/api/v1/companies/{sym}/financials",
@@ -168,9 +396,19 @@ if st.button("查询"):
                 )
 
 if st.session_state.queried:
-    tab_fin, tab_call = st.tabs(["财务与画像", "电话会议"])
+    if "deep_view_radio" not in st.session_state:
+        st.session_state.deep_view_radio = "财务与画像"
 
-    with tab_fin:
+    st.radio(
+        "深度分析视图",
+        ["财务与画像", "电话会议"],
+        horizontal=True,
+        key="deep_view_radio",
+        label_visibility="collapsed",
+    )
+    _deep_tab = st.session_state.deep_view_radio
+
+    if _deep_tab == "财务与画像":
         st.subheader("财务数据")
         if st.session_state.fin_error:
             st.error(f"财务数据加载失败：{st.session_state.fin_error}")
@@ -179,18 +417,28 @@ if st.session_state.queried:
             st.caption(
                 f"标的 `{p.get('ticker')}` · 数据时间 `{p.get('last_updated', '')}`"
             )
+            ds = (p.get("data_source") or "").strip()
+            if ds:
+                st.caption(f"**财务数据来源**：{ds}")
+            else:
+                st.caption("**财务数据来源**：暂无（尚未从 SEC 解析入库）")
             dsl = (p.get("data_source_label") or "").strip()
             if dsl:
                 st.caption(f"**数据溯源**：{dsl}")
             purl = p.get("primary_source_url")
             if purl:
-                st.markdown(f"[→ Yahoo Finance 行情与报表入口（原文数据）]({purl})")
+                st.markdown(f"[→ SEC EDGAR 检索入口]({purl})")
             rows = p.get("financials") or []
             if not rows:
                 st.info(
-                    "暂无财务数据，请先在后端抓取并入库（例如运行 tests/test_financials.py）。"
+                    "暂无财务数据。请在项目根执行："
+                    "`PYTHONPATH=src python scripts/batch_fetch_financials.py --ticker "
+                    f"{p.get('ticker') or ticker} --force` 从 **SEC EDGAR** 抓取后再查询。"
                 )
             else:
+                trend_fig = _financial_trend_figure(rows)
+                if trend_fig is not None:
+                    st.plotly_chart(trend_fig, use_container_width=True)
                 display_rows = []
                 for row in rows:
                     display_rows.append(
@@ -218,6 +466,9 @@ if st.session_state.queried:
             st.caption(
                 f"标的 `{prof.get('ticker')}` · 更新于 `{prof.get('last_updated', '')}`"
             )
+            val_warn = (prof.get("validation_warning") or "").strip()
+            if val_warn:
+                st.warning(val_warn)
             psl = (prof.get("data_source_label") or "").strip()
             if psl:
                 st.caption(f"**数据溯源**：{psl}")
@@ -235,14 +486,33 @@ if st.session_state.queried:
 
             st.subheader("管理层展望（未来指引）")
             st.caption(
-                "须来自披露原文的抽取结果；若为占位则说明节选/原文未明确写出。"
+                "须来自披露原文的抽取结果；10-K 常不提供量化指引，属披露习惯而非系统异常。"
             )
-            _sourced_block(
-                prof.get("future_guidance") or "—",
-                fpid.get("future_guidance") or [],
-                srcp,
-                unique_key=f"{prof.get('ticker')}_fg",
+            _fg_raw = prof.get("future_guidance")
+            _fg_text = (
+                ""
+                if _fg_raw is None
+                else str(_fg_raw).strip()
             )
+            _fg_placeholder = (not _fg_text) or ("未明确提及" in _fg_text)
+            if _fg_placeholder:
+                st.info(
+                    "本次 10-K 未提供量化展望。建议查看「电话会议」部分，"
+                    "管理层可能在财报电话会中透露更多细节。"
+                )
+                if st.button(
+                    "跳转到电话会议",
+                    key=f"jump_call_{prof.get('ticker')}_fg",
+                ):
+                    st.session_state.deep_view_radio = "电话会议"
+                    st.rerun()
+            else:
+                _sourced_block(
+                    _fg_text,
+                    fpid.get("future_guidance") or [],
+                    srcp,
+                    unique_key=f"{prof.get('ticker')}_fg",
+                )
 
             st.subheader("管理层对行业的判断")
             st.caption("仅收录管理层在披露中的明确表述；非模型对行业的独立判断。")
@@ -325,56 +595,45 @@ if st.session_state.queried:
 
             seg = prof.get("revenue_by_segment") or []
             geo = prof.get("revenue_by_geography") or []
+            _t = str(prof.get("ticker") or ticker or "x")
 
             c1, c2 = st.columns(2)
             with c1:
-                st.markdown("**业务线营收占比**")
-                if seg:
-                    for si, s in enumerate(seg):
-                        sx1, sx2 = st.columns([10, 1])
-                        with sx1:
-                            st.caption(
-                                f"{s.get('segment_name')} — {s.get('percentage')}"
-                            )
-                        with sx2:
-                            gp = s.get("source_paragraph_ids") or []
-                            if gp and st.button(
-                                "📖",
-                                key=f"seg_{prof.get('ticker')}_{si}",
-                                help="查看原文段落",
-                            ):
-                                _open_paragraph_viewer(
-                                    gp,
-                                    srcp,
-                                    unique_key=f"seg_d_{prof.get('ticker')}_{si}",
-                                )
+                fig_seg = _revenue_mix_pie_figure(seg, "业务线营收占比")
+                if fig_seg is None:
+                    st.markdown(
+                        '<p style="color:#888;margin:0.2rem 0;">无数据</p>',
+                        unsafe_allow_html=True,
+                    )
                 else:
-                    st.caption("无数据")
+                    st.plotly_chart(fig_seg, use_container_width=True)
+                    st.caption("点击图例可隐藏/显示对应扇区；悬停查看占比与金额（若有）。")
+                _mix_source_expander(
+                    seg,
+                    srcp,
+                    key_prefix="seg",
+                    ticker=_t,
+                    expander_title="业务线 · 原文段落",
+                )
             with c2:
-                st.markdown("**地区营收占比**")
-                if geo:
-                    for gi, s in enumerate(geo):
-                        gx1, gx2 = st.columns([10, 1])
-                        with gx1:
-                            st.caption(
-                                f"{s.get('segment_name')} — {s.get('percentage')}"
-                            )
-                        with gx2:
-                            gp = s.get("source_paragraph_ids") or []
-                            if gp and st.button(
-                                "📖",
-                                key=f"geo_{prof.get('ticker')}_{gi}",
-                                help="查看原文段落",
-                            ):
-                                _open_paragraph_viewer(
-                                    gp,
-                                    srcp,
-                                    unique_key=f"geo_d_{prof.get('ticker')}_{gi}",
-                                )
+                fig_geo = _revenue_mix_pie_figure(geo, "地区营收占比")
+                if fig_geo is None:
+                    st.markdown(
+                        '<p style="color:#888;margin:0.2rem 0;">无数据</p>',
+                        unsafe_allow_html=True,
+                    )
                 else:
-                    st.caption("无数据")
+                    st.plotly_chart(fig_geo, use_container_width=True)
+                    st.caption("点击图例可隐藏/显示对应扇区；悬停查看占比与金额（若有）。")
+                _mix_source_expander(
+                    geo,
+                    srcp,
+                    key_prefix="geo",
+                    ticker=_t,
+                    expander_title="地区 · 原文段落",
+                )
 
-    with tab_call:
+    else:
         st.subheader("Earnings Call（财报电话会）")
         if st.session_state.earnings_error:
             st.error(f"电话会议加载失败：{st.session_state.earnings_error}")
@@ -384,6 +643,17 @@ if st.session_state.queried:
                 f"标的 `{ec.get('ticker')}` · 季度 `{ec.get('quarter')}` · "
                 f"更新 `{ec.get('last_updated', '')}`"
             )
+            ec_ds = (ec.get("data_source") or "").strip()
+            ds_label = {
+                "fmp": "FMP",
+                "sec_8k": "SEC 8-K (EDGAR)",
+                "sec_api": "SEC (sec-api.io)",
+                "earningscall": "earningscall",
+            }.get(ec_ds, ec_ds)
+            if ec_ds:
+                st.caption(f"**电话会逐字稿来源**：{ds_label}")
+            else:
+                st.caption("**电话会逐字稿来源**：无（本响应不应出现，若出现请反馈）")
             dsl = (ec.get("data_source_label") or "").strip()
             if dsl:
                 st.caption(f"**数据溯源**：{dsl}")

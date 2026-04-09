@@ -14,5 +14,8 @@ venv/
 # SEC / 原始 10-K 缓存（体积大、可重建）
 data/raw/
 
+# 宏观 RSS 磁盘缓存（可重建）
+data/cache/
+
 # vscode
 .vscode/

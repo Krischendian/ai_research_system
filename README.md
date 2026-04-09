@@ -8,26 +8,27 @@
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
-│  Streamlit（frontend/、根目录 app.py）                        │
-│  HTTP 调用 → http://127.0.0.1:8000/api/v1/...               │
+│  Streamlit（根目录 app.py → frontend/pages/）               │
+│  HTTP → http://127.0.0.1:8000/api/v1/...                    │
 └───────────────────────────┬─────────────────────────────────┘
                             │
 ┌───────────────────────────▼─────────────────────────────────┐
-│  FastAPI（src/research_automation/main.py）                  │
-│  api/v1/*  →  薄路由，异常映射为 HTTP                       │
+│  FastAPI（src/research_automation/main.py）                 │
+│  api/v1/*  →  薄路由，HTTP 异常与业务错误映射                │
 └───────────────────────────┬─────────────────────────────────┘
                             │
 ┌───────────────────────────▼─────────────────────────────────┐
-│  services/        业务编排、Prompt、结果校验与组装              │
-│  extractors/      纯外部 IO：Yahoo、SEC、RSS、OpenAI          │
-│  core/            SQLite、公司表、调度器、段落拆分工具          │
-│  models/          Pydantic 契约（API 与对内一致）               │
+│  services/        业务编排、Prompt、逐字校验、结果组装       │
+│  extractors/      SEC 10-K/8-K、FMP、Benzinga、Finnhub、    │
+│                   RSS、OpenAI、earningscall、sec-api.io 等   │
+│  core/            SQLite、公司表、调度器、段落拆分与引用     │
+│  models/          Pydantic 契约（与 OpenAPI 一致）           │
 └───────────────────────────┬─────────────────────────────────┘
                             │
 ┌───────────────────────────▼─────────────────────────────────┐
-│  data/research.db      财务、公司、document_paragraphs        │
-│  data/raw/             10-K 文本缓存、SEC 辅助 JSON 等          │
-│  data/reports/         调度器落盘的隔夜/昨日总结 JSON          │
+│  data/research.db       财务行、公司、document_paragraphs     │
+│  data/raw/              10-K 章节缓存、SEC 辅助、新闻洞察缓存  │
+│  data/reports/          调度器落盘的隔夜/昨日总结等 JSON     │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -36,12 +37,12 @@
 | 层级 | 职责 | 反例 |
 |------|------|------|
 | `api/v1/` | 解析参数、调用 service、抛出 `HTTPException` | 在路由里写长 Prompt 或直连 SQLite |
-| `services/` | 业务流程、调用 LLM、合并多数据源 | 在这里发裸 `requests` 抓 SEC（应放 `extractors/`） |
+| `services/` | 业务流程、调用 LLM、合并多数据源 | 在 service 里裸抓 SEC（应放 `extractors/`） |
 | `extractors/` | HTTP/文件/第三方 SDK，返回原始或弱结构化数据 | 依赖具体 API 路由 |
 | `models/` | 数据结构，不写业务分支 | 在模型里调 `chat()` |
 | `core/` | DB、调度、与领域无关的工具 | 耦合某一则 API 的 DTO |
 
-**与旧目录 `backend/` 的关系**：仓库中仍保留历史布局 `backend/app/...`，**当前主实现以 `src/research_automation/` 为准**（`uvicorn research_automation.main:app`）。新功能请只改 `src/` 侧，避免双轨漂移。
+**与 `backend/` 目录**：`backend/main.py` 仅为历史遗留的极简 FastAPI 样例（少量路由），**生产与本地联调请以 `src/research_automation/` 为准**（`uvicorn research_automation.main:app`）。新功能只改 `src/`，避免双轨漂移。
 
 ---
 
@@ -49,185 +50,244 @@
 
 | 类别 | 技术 |
 |------|------|
-| 语言 | Python 3.10+ |
+| 语言 | Python 3.10+（仓库内 `pyrightconfig.json` 标定 3.12 供类型检查） |
 | API | FastAPI、Uvicorn、Pydantic v2 |
-| 前端 | Streamlit（多页：深度分析、晨报） |
-| 数据库 | SQLite（`data/research.db`），财务读路径带进程内短缓存 |
+| 前端 | Streamlit 多页（`st.navigation`）、`requests`、**Plotly**（深度分析图表） |
+| 数据库 | SQLite（`data/research.db`） |
 | LLM | OpenAI Chat Completions（`extractors/llm_client.py`） |
-| 财务 | yfinance → `financials` 表 |
-| 披露 | SEC EDGAR（`extractors/sec_edgar.py`，须合规 User-Agent） |
-| 新闻 | feedparser + requests（Reuters/Bloomberg/TechCrunch 等 RSS） |
-| 调度 | APScheduler（`scheduler.py`，随 FastAPI `lifespan` 启停） |
-| 其它 | BeautifulSoup、lxml、python-dotenv |
+| 财务（实时拉取逻辑） | **Financial Modeling Prep** `stable` 端点优先（`fmp_client`）；失败或无数据时 **SEC EDGAR 10-K Item 8**（`sec_edgar`） |
+| 财务（REST 读库） | `GET /api/v1/companies/{ticker}/financials` **只读 SQLite**；入库依赖批量脚本 |
+| 业务画像 | 10-K 多章节节选 + LLM；规则补全分部/地区占比 |
+| 电话会逐字稿 | **FMP** → **EDGAR 8-K 附件**（`sec_8k_client`）→ **earningscall** → **sec-api.io**（需 `SEC_API_KEY`）；再经 LLM，段落溯源 |
+| 公司新闻 | **Benzinga** 优先，`BENZINGA_API_KEY`；失败或为空时 **Finnhub** 兜底（`FINNHUB_API_KEY`） |
+| 宏观新闻 | 多源 RSS（`news_client`），与公司源合并去重 |
+| 晨报洞察 | `services/news_insights.py`：聚类、条目重要性、`analyst_briefing`（24h 磁盘缓存） |
+| 调度 | APScheduler（随 FastAPI `lifespan` 启停） |
+| 其它 | BeautifulSoup、lxml、pandas、python-dotenv、certifi、feedparser |
 
-依赖安装：根目录 `requirements.txt` 聚合 `backend/requirements.txt` 与 `frontend/requirements.txt`。
+**依赖文件**
 
----
-
-## 3. 功能清单（便于对标扩展）
-
-| 能力 | 说明 | 典型入口 |
-|------|------|----------|
-| 财务序列 | 多公司年度指标入库与查询 | `GET /api/v1/companies/{ticker}/financials` |
-| 业务画像 | 10-K Item 1 分段入库 + LLM 抽取；**段落级溯源**（`field_paragraph_ids`、`source_paragraphs`） | `GET /api/v1/companies/{ticker}/business-profile` |
-| 财报电话会 | Mock 逐字稿 + LLM；**段落溯源**；预留 Bloomberg | `GET /api/v1/companies/{ticker}/earnings?quarter=2024Q4` |
-| 晨报 | RSS 聚合 + 宏观/公司分类 | `GET /api/v1/news/morning-brief` |
-| 隔夜速递 | NY 时段窗口 + 一句摘要 + 条目列表 | `GET /api/v1/news/overnight` |
-| 昨日总结 | NY「昨日」全天 RSS + 宏观/公司主题归类 Markdown | `GET /api/v1/news/yesterday-summary` |
-| 系统/调度 | 调度状态、手动触发（需环境变量） | `GET /api/v1/system/status`、`POST /api/v1/system/scheduler/trigger` |
-| 定时任务 | 月初 06:00 财务批处理；每日 06:30 隔夜+昨日报告落盘 `data/reports/` | 见下文「调度器」 |
-
-**前端**
-
-- **深度分析**（`frontend/pages/01_DeepDive.py`）：财务表、画像字段、管理层原话、公司动态、营收拆分；结论旁 **📖** 打开原文段落（依赖 `st.dialog` 或降级 expander）。
-- **自动化晨报**（`frontend/pages/02_MorningBrief.py`）：隔夜速递、昨日总结（可折叠）、晨报正文。
+- `requirements.txt`：`-r backend/requirements.txt` + `-r frontend/requirements.txt`（前端含 **plotly**）。
+- `requirements-dev.txt`：在上一项基础上增加 **pytest**。
 
 ---
 
-## 4. 限制与已知约束（接手前必读）
+## 3. API 功能清单
 
-1. **SQLite / 单进程**：POC 级；高并发或长时间任务需迁移 PostgreSQL 与任务队列，并Review 调度与 DB 锁。
-2. **LLM 与 RSS**：摘要、分类、主题归并均可能错漏；**必须**通过 `source_url`、`primary_source_url`、`source_paragraphs` 回查。
-3. **SEC**：须设置 `SEC_EDGAR_USER_AGENT`（见 `.env.example`）；频率与爬取策略受 SEC 政策约束，部分 RSS 返回 **401** 属常态，代码已做「单源失败不致命」处理。
-4. **电话会**：当前为 **Mock 逐字稿**；接入付费源时在 `extractors/earnings_call.py` 扩展分支。
-5. **隔夜/昨日新闻**：依赖 RSS **发布时间戳**；无时间戳的条目会被时间窗过滤掉。
-6. **Streamlit**：子页通过 `from frontend.xxx` 导入；**须在项目根执行** `streamlit run ...`，且根目录 `app.py` 已将项目根加入 `sys.path`（见该文件）。Streamlit **端口** 使用 `--server.port`，不是 `--port`。
-7. **环境变量与进程**：`export` 只对当前 shell 生效；**uvicorn 进程**需在启动前继承变量，或写入项目根 `.env`（调度器、`OPENAI_API_KEY` 等由 `python-dotenv` 加载）。
+| 能力 | 说明 | 入口 |
+|------|------|------|
+| 财务序列 | **仅读** `data/research.db` 中已入库年度行；无数据时需先跑 `scripts/batch_fetch_financials.py`（脚本内 `get_financials()`：**优先 FMP**，否则 SEC） | `GET /api/v1/companies/{ticker}/financials` |
+| 业务画像 | 10-K **多章节**合并节选 + LLM；分部/地区占比支持 Item 1 散文 % 与 Item 7/8 美元表推算；`key_quotes` 禁止来自 Item 1A 风险模板句 | `GET /api/v1/companies/{ticker}/business-profile` |
+| 财报电话会 | 多源逐字稿 + LLM；`quotations` 须为逐字稿子串；`data_source`：`fmp` / `sec_8k` / `earningscall` / `sec_api` | `GET /api/v1/companies/{ticker}/earnings?quarter=2024Q4` |
+| 晨报 | 宏观 + 公司新闻经 **两次 LLM**（摘要分区 + 聚类/评分/早评）；见下表「晨报 JSON」 | `GET /api/v1/news/morning-brief` |
+| 隔夜速递 | 新闻时区窗口 + 摘要 + 条目（公司源 Benzinga/Finnhub + RSS） | `GET /api/v1/news/overnight` |
+| 昨日总结 | 「昨日」全天 RSS + 公司源合并，主题归类 | `GET /api/v1/news/yesterday-summary` |
+| 系统/调度 | 状态与手动触发（需环境变量） | `GET /api/v1/system/status`、`POST /api/v1/system/scheduler/trigger` |
+
+**晨报响应要点（`models/news.py`）**
+
+- `macro_news` / `company_news`：`NewsItem` 含 `title`、`summary`、`source`、`source_url`、`published_at`、`matched_tickers`、**`sentiment`**（`positive` \| `negative` \| `neutral`，摘要 LLM 输出）、**`importance_score`**（聚类后写回，1–10）。
+- `clusters` / `top_news`：`ClusterNewsItem` 同样可带 **`sentiment`**（从对应简讯透传）。
+- `analyst_briefing`、`data_source_label`、`provenance_note` 等见 OpenAPI。
+
+**路径参数股票代码**：`financials` / `profiles` / `earnings` 均经 `core/ticker_normalize.normalize_equity_ticker`（例如 **APPL → AAPL**）。
 
 ---
 
-## 5. 环境与启动
+## 4. 前端页面
 
-### 5.1 环境要求
+| 页面 | 文件 | 说明 |
+|------|------|------|
+| 深度分析 | `frontend/pages/01_DeepDive.py` | **财务**：表格上方 **Plotly** 分面折线「财务趋势（最近三年）」；金额单位启发式（`\|x\|≥1e6` 视为美元÷1e9，否则视为百万美元÷1e3），避免 SEC 百万美元入库时被误÷1e9。**业务画像**：`revenue_by_segment` / `revenue_by_geography` 用 **环形饼图**（Plotly），分项溯源在 expander；**管理层展望**：`future_guidance` 为空或含「未明确提及」时友好提示 + **跳转到电话会议**（写 `st.session_state.deep_view_radio`）。**视图切换**：横向 `st.radio`（`key=deep_view_radio`）替代不可编程的 `st.tabs`，便于从展望区跳转。**电话会**、**📖** 段落、`deep_dive_prefill_ticker` / `deep_dive_auto_query` 与晨报联动。勿在带 `key` 的 `text_input` 实例化后改写同 key 的 `session_state`。 |
+| 自动化晨报 | `frontend/pages/02_MorningBrief.py` | 分析师早评、今日必读、主题聚类、隔夜/昨日、宏观/公司新闻。**公司新闻**直接渲染 API 的 `company_news`（不与 `top_news` 按标题去重）。**主列表**：`importance_score` **≥4**（缺省按 **5**）；**≤3** 归入底部折叠 **「📦 背景资料（低分新闻）」**（无低分时整区不渲染）。标题条 **情绪底色**：优先 API **`sentiment`**，否则 `morning_brief_helpers.sentiment_from_text`。**深度分析**按钮对 `matched_tickers` **去重**，避免重复代码并排多钮。逻辑辅助见 `frontend/morning_brief_helpers.py`（含 `sentiment_for_item`、`sentiment_bg_color` 等）。 |
+
+**入口**：项目根 `streamlit run app.py --server.port 8501`。默认后端 `http://127.0.0.1:8000`（`BACKEND_BASE`）；改端口时请同步修改各页。
+
+---
+
+## 5. SEC 10-K 与业务画像（实现要点）
+
+- **`get_10k_sections(ticker, year)`**（`extractors/sec_edgar.py`）：`item1` / `item1a` / `item7` / `item8_notes`，缓存于 `data/raw/10k/{SYM}_{year}_sec_*.txt`。
+- **画像合并顺序**：Item 1 → Item 7 → Item 8 附注 → Item 1A。
+- **规则补全**：`revenue_by_segment` / `revenue_by_geography` 可由 Item 1 散文与 Item 7/8 表推算；FMP 分部可覆盖或校验 LLM 列表。
+
+契约见 `models/company.py`（`BusinessProfile`、`SegmentMix`）与 `services/profile_service.py`。
+
+---
+
+## 6. 财报电话会与 8-K / sec-api
+
+- **链路**（`services/earnings_service.py`）：**FMP** → **EDGAR 8-K**（`SEC_EDGAR_USER_AGENT`）→ **earningscall** → **sec-api.io**（可选 `SEC_API_KEY`）。
+- **无稿**：**HTTP 503**。
+- **模块**：`extractors/sec_8k_client.py`。
+
+---
+
+## 7. 财务：FMP、批量入库与 REST 的关系
+
+| 环节 | 行为 |
+|------|------|
+| `financial_service.get_financials(ticker)` | 优先 `fmp_client`，否则 `sec_edgar.get_financial_statements` |
+| `scripts/batch_fetch_financials.py` | 写入 SQLite；`--force` 覆盖；调度器或手动运行 |
+| `GET .../financials` | 只读库；空表时提示跑 batch |
+
+入库常见为 **百万美元** 量级整数（与 10-K 表脚注一致）；前端展示大额时已做 **十亿美元** 换算启发式，勿与 FMP 全美元混淆。
+
+---
+
+## 8. 限制与已知约束
+
+1. **SQLite / 单进程**：POC 级。
+2. **LLM 与 RSS**：摘要、情绪、聚类可能错漏；务必对照原文链接与段落。
+3. **SEC**：`SEC_EDGAR_USER_AGENT`；遵守频率政策；部分 RSS **401** 常见。
+4. **财务 REST**：须先 batch 入库。
+5. **电话会**：依赖多源可用性与密钥层级。
+6. **Benzinga / Finnhub**：皆无则公司新闻可能偏少。
+7. **FMP**：无 key 时跳过 FMP 链路；逐字稿免费层常见 402。
+8. **隔夜/昨日**：依赖时间戳与时间窗。
+9. **Streamlit**：项目根运行；`--server.port`；`deep_view_radio` 等 key 勿与 widget 生命周期冲突。
+10. **`.env`**：写入文件并重启进程，避免仅 `export` 与 API 进程不一致。
+
+---
+
+## 9. 环境与启动
+
+### 9.1 要求
 
 - Python **3.10+**
-- 可访问外网（OpenAI、Yahoo、SEC、部分 RSS）
-- macOS / Linux（Windows 注意路径与 `venv\Scripts\activate`）
+- 外网（OpenAI、SEC、RSS、可选 FMP / Benzinga / Finnhub / earningscall / sec-api）
+- macOS / Linux（Windows 注意 `venv\Scripts\activate`）
 
-### 5.2 安装
+### 9.2 安装依赖
 
 ```bash
-cd ai_research_system
+cd /path/to/project
 python3 -m venv venv
 source venv/bin/activate
-pip install -r requirements.txt
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python -m pip install -r requirements-dev.txt   # 测试
 ```
 
-### 5.3 配置 `.env`
+venv 问题可运行 `bash scripts/recreate_venv.sh`。
 
-复制 `.env.example` 为 `.env`，至少配置：
+### 9.3 配置 `.env`
 
-- `OPENAI_API_KEY`：真实密钥（勿提交 `.env`）。
-- `SEC_EDGAR_USER_AGENT`：建议按 SEC 要求填写可识别应用及联系方式。
-- 可选：`SCHEDULER_TIMEZONE`、`SCHEDULER_TEST_MODE`、`SCHEDULER_ENABLE_MANUAL_TRIGGER` 等（见 `.env.example`）。
+复制 `.env.example` 为 `.env`：
 
-### 5.4 启动后端
+| 变量 | 说明 |
+|------|------|
+| `OPENAI_API_KEY` | 必填 |
+| `SEC_EDGAR_USER_AGENT` | 强烈建议；10-K/8-K |
+| `NEWS_TIMEZONE` | 默认 `America/New_York` |
+| `BENZINGA_API_KEY` | 可选；公司新闻优先 |
+| `FINNHUB_API_KEY` | 可选；兜底 |
+| `FMP_API_KEY` | 可选；财务与电话会 FMP 源 |
+| `SEC_API_KEY` | 可选；sec-api.io |
+| `SCHEDULER_TIMEZONE` | 默认 `Asia/Shanghai` |
+| `SCHEDULER_TEST_MODE` | `1` 时约 15s 跑一次隔夜+昨日 |
+| `SCHEDULER_ENABLE_MANUAL_TRIGGER` | `1` 允许手动触发任务 |
 
-**必须在项目根目录**，并设置 `PYTHONPATH=src`：
+### 9.4 启动后端
 
 ```bash
 source venv/bin/activate
 PYTHONPATH=src uvicorn research_automation.main:app --reload --port 8000
 ```
 
-- Swagger：`http://127.0.0.1:8000/docs`
-- 健康检查：`http://127.0.0.1:8000/health`
-- 系统状态：`http://127.0.0.1:8000/api/v1/system/status`
+- 文档：`http://127.0.0.1:8000/docs` · 健康：`/health` · 调度：`/api/v1/system/status`
 
-启动日志中应出现 **APScheduler 已启动**（若依赖已安装）。端口被占用时换 `--port 8001` 并同步改前端 `BACKEND_BASE`。
-
-### 5.5 启动前端（Streamlit）
-
-**推荐**：项目根目录使用多页导航入口（侧边栏 **深度分析 / 自动化晨报**）：
+### 9.5 启动前端
 
 ```bash
 source venv/bin/activate
 streamlit run app.py --server.port 8501
 ```
 
-也可用 `frontend/app.py`（Streamlit 会自动识别 `frontend/pages/` 下页面），但根目录 `app.py` 与 `st.navigation` 的页标题、图标更完整。
+### 9.6 准备数据（可选）
 
-前端默认请求 `http://127.0.0.1:8000`；若 API 端口变更，请改 `frontend/pages/01_DeepDive.py` 与 `02_MorningBrief.py` 中的 `BACKEND_BASE`。
+```bash
+PYTHONPATH=src python scripts/batch_fetch_financials.py --ticker AAPL --force
+```
 
-### 5.6 准备示例数据（可选）
+监控池：`research_automation.core.company_manager`（如 `seed_default_tech_companies`）。
 
-- 财务入库：`PYTHONPATH=src python tests/test_financials.py` 或 `PYTHONPATH=src python scripts/batch_fetch_financials.py`
-- 监控池公司：见 `company_manager.seed_default_tech_companies` 等
+### 9.7 调度器
 
-### 5.7 调度器行为摘要
-
-| 任务 | Cron（默认时区 `Asia/Shanghai`，可改 env） | 说明 |
+| 任务 | 默认 Cron（`SCHEDULER_TIMEZONE`，默认上海） | 说明 |
 |------|---------------------------------------------|------|
-| 财务批处理 | 每月 1 日 06:00 | 调用 `scripts/batch_fetch_financials.run_batch_fetch` |
-| 晨间报告 | 每日 06:30 | 顺序执行隔夜 + 昨日总结，写入 `data/reports/overnight_*.json`、`daily_*.json` |
+| 财务批处理 | 每月 1 日 06:00 | `batch_fetch_financials` |
+| 晨间报告 | 每日 06:30 | 隔夜 → 昨日总结 → `data/reports/` |
 
-测试：`SCHEDULER_TEST_MODE=1` 写入 `.env` 并重启 API，约 15 秒后各跑一次报告任务。手动触发需 `SCHEDULER_ENABLE_MANUAL_TRIGGER=1`，见 `POST /api/v1/system/scheduler/trigger`（body 如 `{"job":"reports"}`）。
+手动触发：`SCHEDULER_ENABLE_MANUAL_TRIGGER=1` 后 `POST /api/v1/system/scheduler/trigger`，body 如 `{"job":"reports"}`。`job`：`batch` \| `overnight` \| `daily` \| `reports`。
 
 ---
 
-## 6. 目录结构（主路径）
+## 10. 目录结构（主路径）
 
 ```text
-ai_research_system/
-├── app.py                      # Streamlit 推荐入口（navigation → frontend/pages）
+├── app.py                         # Streamlit 入口（st.navigation）
 ├── frontend/
-│   ├── app.py                  # 简易欢迎页（若单独 run 则与 pages 多页并存）
 │   ├── pages/
-│   │   ├── 01_DeepDive.py      # 深度分析
-│   │   └── 02_MorningBrief.py  # 晨报 / 隔夜 / 昨日总结
+│   │   ├── 01_DeepDive.py         # 财务趋势图、饼图、画像、电话会、radio 切换
+│   │   └── 02_MorningBrief.py     # 晨报、隔夜、昨日、低分折叠、情绪色
+│   ├── morning_brief_helpers.py   # 情绪、NY 标签、财务摘要、ticker 页路径
 │   └── streamlit_helpers.py
-├── src/research_automation/    # ★ 主后端包
-│   ├── main.py                 # FastAPI + lifespan（调度器）
+├── src/research_automation/
+│   ├── main.py
 │   ├── scheduler.py
-│   ├── api/v1/                 # financials, profiles, earnings, news, system
-│   ├── services/               # profile, news, overnight, daily_summary, earnings
-│   ├── extractors/             # yahoo_finance, sec_edgar, news_client, llm_client, earnings_call
-│   ├── core/                   # database, company_manager, paragraph_*
-│   └── models/                 # financial, company, news, earnings, system
+│   ├── api/v1/
+│   ├── services/                  # 含 news_service、news_insights、…
+│   ├── extractors/
+│   ├── core/
+│   └── models/                    # news.py：NewsItem.sentiment 等
 ├── scripts/
-│   └── batch_fetch_financials.py
-├── tests/                      # unittest / 脚本式验证
+│   ├── batch_fetch_financials.py
+│   └── recreate_venv.sh
+├── tests/
 ├── data/
-│   ├── research.db             # 运行后生成
-│   ├── raw/                    # 10-K 缓存等（大类勿提交大体积时注意 .gitignore）
-│   └── reports/                # 调度器 JSON
+│   ├── research.db
+│   ├── raw/                       # 含 news_insights 缓存子目录等
+│   └── reports/
+├── backend/                       # 遗留样例，非主入口
 ├── requirements.txt
+├── requirements-dev.txt
+├── pyrightconfig.json
 ├── .env.example
 ├── README.md
-└── backend/                    # 历史/备用布局，非当前主入口
+└── project_plan.md
 ```
 
 ---
 
-## 7. 自动化测试与调试
+## 11. 测试
 
 ```bash
 source venv/bin/activate
 export PYTHONPATH=src
-
-python -m unittest tests.test_financials tests.test_news_fallback tests.test_news_tickers tests.test_earnings -v
-# LLM 连通性（需有效 OPENAI_API_KEY）
-python tests/test_llm.py
+python -m pytest tests/ -q
 ```
 
-新增模块后优先在 `tests/` 增加**不依赖外网**的单测，或对 LLM/RSS 使用 `unittest.mock`。
+- 离线 / mock：如 `tests/test_profiles.py`。
+- 外网：如 `tests/test_sec_sections.py`。
+- 密钥：`tests/test_llm.py`、`tests/test_sec_8k.py` 等。
 
 ---
 
-## 8. 给工程扩展 / AI Agent 的提示
+## 12. 给扩展 / AI Agent 的提示
 
-1. **先读契约**：`models/*.py` 与 OpenAPI `/docs` 保持一致；改响应体时同步更新前端解析。
-2. **新数据源**：新增 `extractors/foo.py`，在对应 `services/*` 拼接，**不要**在 `api` 里堆逻辑。
-3. **新业务 API**：在 `api/v1/` 新建路由文件，于 `api/v1/__init__.py` 注册；保持前缀风格 `/api/v1/...`。
-4. **段落溯源**：10-K / 电话会段落键名与 `document_paragraphs` 表结构在 `core/database.py`、`core/paragraph_text.py`；改 Prompt 时保持 **JSON 里 `p<number>` 或完整 `PARAGRAPH_ID`** 的约定，并在 service 层用 `paragraph_refs.normalize_paragraph_ref_list` 校验。
-5. **调度新增任务**：改 `scheduler.py`，状态写入 `scheduler_last_runs.json`；必要时扩展 `GET /api/v1/system/status` 的模型。
-6. **CORS**：当前允许本地 Streamlit 源；生产部署需收紧 `main.py` 中 `CORSMiddleware`。
+1. **契约优先**：改 `models/*.py` 时同步 OpenAPI 与 Streamlit 字段（如 `sentiment`、`importance_score`）。
+2. **晨报**：摘要 Prompt 在 `news_service.py`；聚类/评分在 `news_insights.py`；新增字段需贯通 `news_items_to_flat_dicts` 与前端 `sentiment_for_item`。
+3. **新数据源**：`extractors/` + `services/`，勿在 `api` 堆业务。
+4. **段落溯源**：`normalize_paragraph_ref_list`、画像/电话会 `source_paragraphs`。
+5. **Streamlit**：`text_input` / `radio` 的 `session_state` 与官方生命周期一致；深度分析用 `deep_view_radio` 切换子视图。
+6. **CORS**：`main.py` 仅本地 Streamlit；生产收紧。
 
 ---
 
-## 9. 文档与合规
+## 13. 文档与合规
 
-- 项目规划雏形见仓库内 `project_plan.md`（部分路径描述较早，**以 `src/research_automation` 实际结构为准**）。
-- 使用 SEC 数据请阅读：https://www.sec.gov/os/accessing-edgar-data
+- `project_plan.md` 与代码冲突时，**以本 README 与 `src/` 为准**。
+- SEC：<https://www.sec.gov/os/accessing-edgar-data>
 
-如有异常：先看 **uvicorn 终端堆栈** 与 **`/docs` 返回的 `detail`**，再查 **SQLite 是否已 `init_db`**、**`.env` 是否被 API 进程加载**。
+排查：**uvicorn 日志** → **`/docs` detail** → **`.env`** → **`research.db` + batch** → **电话会多源** → **晨报缓存**（`data/raw/news_insights/`）。

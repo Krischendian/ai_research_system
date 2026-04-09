@@ -69,7 +69,8 @@ class BusinessProfile(BaseModel):
     data_source_label: str = ""  # 数据溯源（示例节选 + LLM 等）
     primary_source_url: Optional[str] = None  # 法定披露检索入口（如 EDGAR）
     document_uid: Optional[str] = Field(
-        None, description="10-K Item1 文档唯一键（与 document_paragraphs.doc_uid 一致）"
+        None,
+        description="10-K 节选文档唯一键（Item1+ 多章节合并时与 document_paragraphs.doc_uid 一致）",
     )
     field_paragraph_ids: dict[str, list[str]] = Field(
         default_factory=dict,
@@ -78,4 +79,8 @@ class BusinessProfile(BaseModel):
     source_paragraphs: dict[str, str] = Field(
         default_factory=dict,
         description="本响应涉及的段落 ID → 原文全文",
+    )
+    validation_warning: Optional[str] = Field(
+        None,
+        description="与 FMP 业务线营收基准比对后的提示；偏差超阈值时提醒人工复核",
     )

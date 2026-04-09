@@ -1,17 +1,36 @@
-"""晨报：RSS 原文 + LLM 摘要与宏观/公司分类。"""
+"""晨报：宏观为多源 RSS（按序回退 + 缓存），仍空则回退 RSS_FEEDS；公司优先 Benzinga，失败或为空时回退 Finnhub。"""
 from __future__ import annotations
 
 import json
 import re
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
+from zoneinfo import ZoneInfo
+
+from research_automation.core.company_manager import get_active_tickers
+from research_automation.extractors.finnhub_news import (
+    company_news_item_to_raw_article,
+    get_company_news as finnhub_get_company_news,
+    merge_finnhub_and_rss,
+)
 from research_automation.extractors.llm_client import chat
+from research_automation.extractors.benzinga_client import (
+    benzinga_news_dict_to_raw_article,
+    get_company_news as benzinga_get_company_news,
+)
 from research_automation.extractors.news_client import (
     RawArticle,
     extract_tickers_from_text,
+    fetch_macro_news_with_fallback,
     fetch_rss_articles,
 )
 from research_automation.models.news import MorningBrief, NewsItem
+from research_automation.services.news_insights import (
+    apply_scores_to_morning_items,
+    compute_news_insights,
+    news_items_to_flat_dicts,
+)
 
 
 class NewsBriefError(Exception):
@@ -23,6 +42,7 @@ class NewsBriefError(Exception):
 
 
 def _extract_json_object(raw: str) -> dict[str, Any]:
+    """从模型回复中解析 JSON 对象。"""
     text = raw.strip()
     m = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", text)
     if m:
@@ -40,18 +60,56 @@ def _extract_json_object(raw: str) -> dict[str, Any]:
     return data
 
 
-def _build_prompt(articles: list[RawArticle]) -> str:
+def _normalize_news_date(d: date | str) -> str:
+    if isinstance(d, date):
+        return d.isoformat()
+    s = str(d).strip()
+    return s[:10] if len(s) >= 10 else s
+
+
+def _is_finnhub_article(a: RawArticle) -> bool:
+    """判断是否来自结构化公司新闻源（Benzinga 或 Finnhub；合并后 source 以对应前缀开头）。"""
+    s = str(a.get("source") or "").strip()
+    return s.startswith("Finnhub") or s.startswith("Benzinga")
+
+
+def _published_at_from_article(a: RawArticle) -> str | None:
+    """优先 Finnhub Unix，否则 ``published_at_utc``（ISO）。"""
+    u = a.get("finnhub_datetime_unix")
+    if u is not None:
+        try:
+            dt_utc = datetime.fromtimestamp(int(u), tz=timezone.utc)
+            return dt_utc.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        except (TypeError, ValueError, OSError):
+            pass
+    iso = a.get("published_at_utc")
+    if iso:
+        s = str(iso).strip()
+        return s or None
+    return None
+
+
+def _build_split_prompt(macro: list[RawArticle], company: list[RawArticle]) -> str:
+    """分别编号宏观（多源市场 RSS）与公司（Benzinga/Finnhub）素材，供模型严格分区归类。"""
     lines: list[str] = []
-    for i, a in enumerate(articles, start=1):
+    lines.append("【宏观 — 路透 / 彭博 / WSJ / FT / Yahoo 等 RSS】仅以下编号可用于 macro_news：")
+    for i, a in enumerate(macro, start=1):
         desc = (a.get("description") or "")[:800]
         lines.append(
-            f"{i}. [来源:{a.get('source','')}] 标题:{a.get('title','')} 提要:{desc}"
+            f"  M{i}. [来源:{a.get('source','')}] 标题:{a.get('title','')} 提要:{desc}"
+        )
+    lines.append("")
+    lines.append("【公司 — Benzinga / Finnhub】仅以下编号可用于 company_news：")
+    for i, a in enumerate(company, start=1):
+        desc = (a.get("description") or "")[:800]
+        lines.append(
+            f"  C{i}. [来源:{a.get('source','')}] 标题:{a.get('title','')} 提要:{desc}"
         )
     return "\n".join(lines)
 
 
 def _text_for_ticker_match(item: NewsItem, articles: list[RawArticle]) -> str:
-    """合并标题、摘要及可关联到的 RSS 提要，供 ticker 匹配。"""
+    """合并标题、摘要及匹配到的原文提要，供 ticker 关键词命中。"""
     parts: list[str] = [item.title or "", item.summary or ""]
     t = item.title.strip().lower()
     if not t:
@@ -62,43 +120,107 @@ def _text_for_ticker_match(item: NewsItem, articles: list[RawArticle]) -> str:
             continue
         if t == at or t in at or at in t:
             parts.append(a.get("description") or "")
+            for x in a.get("implied_tickers") or []:
+                parts.append(f"${str(x).strip().upper()}")
             break
     return " ".join(parts)
 
 
-def _match_source_url(title: str, articles: list[RawArticle]) -> str | None:
-    """按标题将 LLM 输出与 RSS 原文关联，获取可点击链接。"""
+def _match_article_for_title(title: str, articles: list[RawArticle]) -> RawArticle | None:
+    """按标题将 LLM 输出与原始条目关联（精确优先，再子串）。"""
     t = title.strip().lower()
     if not t:
         return None
     for a in articles:
         if a["title"].strip().lower() == t:
-            link = (a.get("link") or "").strip()
-            return link or None
+            return a
     for a in articles:
         at = a["title"].strip().lower()
         if t in at or at in t:
-            link = (a.get("link") or "").strip()
-            if link:
-                return link
+            return a
     return None
 
 
-def _finalize_news_items(items: list[NewsItem], articles: list[RawArticle]) -> list[NewsItem]:
-    """补齐原文链接与 ``matched_tickers``（基于监控池关键词匹配）。"""
+def _finalize_news_items(
+    items: list[NewsItem],
+    articles: list[RawArticle],
+) -> list[NewsItem]:
+    """补齐 source_url、published_at、matched_tickers。"""
+    from research_automation.core.company_manager import list_companies
+
+    active_pool = {
+        c.ticker.strip().upper()
+        for c in list_companies(active_only=True)
+        if c.ticker.strip()
+    }
     out: list[NewsItem] = []
     for it in items:
         blob = _text_for_ticker_match(it, articles)
         tickers = extract_tickers_from_text(blob)
-        url = _match_source_url(it.title, articles)
+        art = _match_article_for_title(it.title, articles)
+        url = None
+        pub: str | None = None
+        if art is not None:
+            link = (art.get("link") or "").strip()
+            url = link or None
+            pub = _published_at_from_article(art)
+            for x in art.get("implied_tickers") or []:
+                u = str(x).strip().upper()
+                if u in active_pool:
+                    tickers = sorted(set(tickers) | {u})
         out.append(
-            it.model_copy(update={"matched_tickers": tickers, "source_url": url})
+            it.model_copy(
+                update={
+                    "matched_tickers": tickers,
+                    "source_url": url,
+                    "published_at": pub,
+                }
+            )
         )
     return out
 
 
+def get_company_news(
+    ticker: str,
+    from_date: date | str,
+    to_date: date | str,
+) -> list[RawArticle]:
+    """
+    公司新闻：优先 Benzinga ``/api/v2/news``；失败或空列表时回退 Finnhub ``company-news``。
+    """
+    sym = (ticker or "").strip().upper()
+    if not sym:
+        return []
+
+    fd = _normalize_news_date(from_date)
+    td = _normalize_news_date(to_date)
+    bz = benzinga_get_company_news(sym, fd, td)
+    if bz:
+        return [benzinga_news_dict_to_raw_article(it, sym) for it in bz]
+
+    out: list[RawArticle] = []
+    for it in finnhub_get_company_news(sym, from_date, to_date):
+        out.append(company_news_item_to_raw_article(it, sym))
+    return out
+
+
+def fetch_company_news_raw_articles_for_tickers(
+    tickers: list[str],
+    from_date: date | str,
+    to_date: date | str,
+) -> list[RawArticle]:
+    """多 ticker 拉取公司新闻（内部逐 symbol；Benzinga 优先、Finnhub 兜底）。"""
+    merged: list[RawArticle] = []
+    for sym in tickers:
+        sym = sym.strip().upper()
+        if not sym:
+            continue
+        merged.extend(get_company_news(sym, from_date, to_date))
+    return merged
+
+
 def _prioritize_articles_with_tickers(articles: list[RawArticle]) -> list[RawArticle]:
-    """把标题/提要已命中监控池的条目排在前面，利于 LLM 归入公司类。"""
+    """标题/提要已命中监控池的公司源条目排在前面。"""
     hits: list[RawArticle] = []
     rest: list[RawArticle] = []
     for a in articles:
@@ -110,80 +232,58 @@ def _prioritize_articles_with_tickers(articles: list[RawArticle]) -> list[RawArt
     return hits + rest
 
 
-def _fallback_company_from_rss(articles: list[RawArticle], *, limit: int = 12) -> list[NewsItem]:
-    """
-    当 LLM 路径下公司新闻为空时，直接用 RSS 英文提要生成卡片（仍须命中监控池 ticker）。
-    摘要带「RSS 提要」前缀，避免与模型润色后的宏观区混淆期望。
-    """
-    out: list[NewsItem] = []
-    seen: set[str] = set()
-    for a in articles:
-        title = (a.get("title") or "").strip()
-        if not title:
-            continue
-        desc = (a.get("description") or "").strip()
-        blob = f"{title} {desc}"
-        tickers = extract_tickers_from_text(blob)
-        if not tickers:
-            continue
-        key = title.lower()
-        if key in seen:
-            continue
-        seen.add(key)
-        excerpt = desc[:520] + ("…" if len(desc) > 520 else "")
-        summary = (
-            f"【RSS 提要，原文摘录】{excerpt}"
-            if excerpt
-            else "【RSS】请结合英文标题与下方原文链接阅读。"
-        )
-        src = a.get("source") or "RSS"
-        src_field = src if str(src).startswith("RSS-") else f"RSS-{src}"
-        link = (a.get("link") or "").strip() or None
-        out.append(
-            NewsItem(
-                title=title,
-                summary=summary,
-                source=src_field,
-                source_url=link,
-                matched_tickers=tickers,
-            )
-        )
-        if len(out) >= limit:
-            break
-    return out
-
-
 def get_morning_brief(
     *,
     max_rss_items: int = 32,
 ) -> MorningBrief:
     """
-    抓取 Reuters/Bloomberg RSS，调用 LLM 生成中文摘要并分为宏观 / 公司两类。
+    宏观新闻使用 ``fetch_macro_news_with_fallback``（路透 / 彭博 / WSJ / FT / Yahoo 按序、10s 超时、6h 缓存）；
+    若仍为空则回退 ``RSS_FEEDS`` 多源合并。公司新闻优先 Benzinga，失败或为空则回退 Finnhub。
 
-    - 不得捏造 RSS 中未出现的事实；摘要须严格基于给定标题与提要。
-    - 输出须符合 ``MorningBrief`` JSON 结构。
+    宏观与公司列表再经 ``merge_finnhub_and_rss`` 去重合并；不用 RSS 作为公司新闻兜底。
     """
-    articles = fetch_rss_articles(max_items=max_rss_items, per_feed_limit=7)
-    if not articles:
+    ny = ZoneInfo("America/New_York")
+    today_ny = datetime.now(ny).date()
+    from_ny = today_ny - timedelta(days=2)
+    macro_feed, macro_from_cache = fetch_macro_news_with_fallback(
+        max_items=max_rss_items,
+    )
+    if not macro_feed:
+        macro_feed = fetch_rss_articles(
+            max_items=max_rss_items,
+            per_feed_limit=7,
+        )
+        macro_from_cache = False
+
+    company_raw = fetch_company_news_raw_articles_for_tickers(
+        get_active_tickers(),
+        from_ny.isoformat(),
+        today_ny.isoformat(),
+    )
+    if not macro_feed and not company_raw:
         raise NewsBriefError(
-            "未能从 RSS 获取任何新闻（网络、反爬或 feed 不可用）。请稍后重试。"
+            "未能从宏观与公司新闻源获取任何新闻（网络或 RSS 不可用；公司侧请检查"
+            " BENZINGA_API_KEY / FINNHUB_API_KEY）。请稍后重试。"
         )
 
-    articles = _prioritize_articles_with_tickers(articles)
-    body = _build_prompt(articles)
-    prompt = f"""你是财经新闻编辑助手。下面是同源 RSS 抓取的多条英文简讯（带标题与提要）。
+    merged = merge_finnhub_and_rss(company_raw, macro_feed)
+    macro_articles = [a for a in merged if not _is_finnhub_article(a)]
+    company_articles = [a for a in merged if _is_finnhub_article(a)]
+    company_articles = _prioritize_articles_with_tickers(company_articles)
+
+    body = _build_split_prompt(macro_articles, company_articles)
+    prompt = f"""你是财经新闻编辑助手。下方分为两段素材：
+- 【宏观 — 路透 / 彭博 / WSJ / FT / Yahoo 等 RSS】条目编号以 M 开头，**macro_news 只能从这一段选**，且 title 必须与对应条目的英文标题**完全一致**。
+- 【公司 — Benzinga / Finnhub】条目编号以 C 开头，**company_news 只能从这一段选**，且 title 必须与对应条目的英文标题**完全一致**。
 
 任务：
-1. 为每条单独生成**中文摘要**（60～120 字），只综合已给出的标题与提要，禁止编造数字、机构立场或 RSS 未出现的信息。
-2. 将每条归类为二选一：
-   - **宏观**：央行/利率/通胀、地缘与政策、大宗商品与汇率、市场整体/指数层面、国际机构宏观展望等与**非单一公司**强相关；
-   - **公司**：具体企业财报/指引、并购、管理层变动、单公司产品与订单、针对**明确公司主体**的事件。
-3. 每条输出字段：title 使用**原文英文标题**（与输入一致，勿自行改写事实性信息）、summary（你的中文摘要）、source（格式为「RSS-来源标签」，与输入中的来源一致，例如「RSS-Reuters」或「RSS-Bloomberg」）。
+1. 为每条单独生成**中文摘要**（60～120 字），只综合已给出的标题与提要，禁止编造数字、机构立场或未出现的信息。
+2. macro_news 仅覆盖 M 编号素材；company_news 仅覆盖 C 编号素材。不要跨区归类。
+3. 每条输出字段：title（**原文英文标题**，与输入一致）、summary（中文摘要）、source（与输入来源字段**完全一致**）、sentiment（必填，对**该股/该主题短期市场影响**的粗分类，仅三选一：**positive** | **negative** | **neutral**；信息不足或纯事实无倾向时用 neutral）。
+4. 只输出一个 JSON 对象，键为 macro_news 与 company_news，值均为数组，元素形状：{{"title","summary","source","sentiment"}}。
+5. 若某一侧无可用条目，对应数组可为空。
 
-4. 只输出一个 JSON 对象，键为 macro_news 与 company_news，值均为数组，元素形状：{{"title","summary","source"}}。
-5. 若某条可同时偏向两类，选更主要的一类；两大类总数不必与输入条数相等（可合并极度过短的重复项或不适用项丢弃），但**至少应覆盖输入中多数独立新闻**。
-
-输入简讯：
+素材：
 {body}
 """
 
@@ -223,45 +323,61 @@ def get_morning_brief(
                     continue
                 if not src:
                     src = "RSS"
-                out.append(NewsItem(title=t, summary=s, source=src))
+                out.append(
+                    NewsItem(
+                        title=t,
+                        summary=s,
+                        source=src,
+                        sentiment=it.get("sentiment"),
+                    )
+                )
             return out
 
-        macro = _finalize_news_items(_as_items(macro_raw), articles)
-        company_in = _finalize_news_items(_as_items(company_raw), articles)
-        # 公司类：LLM 标为公司且命中监控池 ticker 的条目
+        macro = _finalize_news_items(_as_items(macro_raw), macro_articles)
+        company_in = _finalize_news_items(_as_items(company_raw), company_articles)
         company = [it for it in company_in if it.matched_tickers]
-        # 宏观里若摘要/标题已命中 ticker，也并入公司版块（宏观列表仍全部保留，不去重删除）
-        seen_company = {it.title.strip().lower() for it in company}
-        for it in macro:
-            if not it.matched_tickers:
-                continue
-            key = it.title.strip().lower()
-            if key and key not in seen_company:
-                seen_company.add(key)
-                company.append(it)
-
-        extra_src = ""
-        if not company:
-            fb = _fallback_company_from_rss(articles)
-            if fb:
-                company = fb
-                extra_src = "；公司新闻含 RSS 直配条目（提要来自英文 RSS，未再经模型写中文摘要）。"
 
         if not macro and not company:
             raise ValueError("模型未返回有效新闻条目")
 
+        # 单次 LLM：聚类 + 重要性 + 分析师早评（结果 24h 磁盘缓存）
+        flat_for_insights = news_items_to_flat_dicts(macro + company)
+        clusters, top_news, analyst_briefing, score_map = compute_news_insights(
+            flat_for_insights,
+            context="morning_brief",
+            date_key=today_ny.isoformat(),
+            monitor_tickers=get_active_tickers(),
+        )
+        macro_scored, company_scored = apply_scores_to_morning_items(
+            macro, company, score_map
+        )
+
+        macro_src_bits = [
+            "宏观：多源 **市场 RSS** 按序回退（路透 Markets → 彭博 Markets → WSJ Markets →"
+            " FT Markets → Yahoo News RSS；单次请求超时 10s），"
+            "成功结果写入 ``data/cache/macro_news_cache.json``（**6 小时**有效）；"
+            "全部失败时用未过期缓存。"
+        ]
+        if macro_from_cache:
+            macro_src_bits.append("**本次宏观素材来自磁盘缓存。**")
+        macro_src_bits.append(
+            "若宏观链路与缓存皆空，再回退站内 **RSS_FEEDS**（Bloomberg / TechCrunch / Reuters 等）。"
+            " 公司：优先 **Benzinga**（BENZINGA_API_KEY，24h 缓存），"
+            "失败或为空时 **Finnhub**（FINNHUB_API_KEY）；与公司新闻合并去重后分区摘要。"
+            " OpenAI 中文摘要与分类；聚类/评分/早评为第二次模型调用（见 clusters / top_news）。"
+        )
+
         return MorningBrief(
-            macro_news=macro,
-            company_news=company,
-            data_source_label=(
-                "Reuters / Bloomberg / TechCrunch 等公开 RSS（各条附「原文链接」）"
-                " + OpenAI 中文摘要与宏观/公司分类"
-                f"{extra_src}"
-            ),
+            macro_news=macro_scored,
+            company_news=company_scored,
+            data_source_label=" ".join(macro_src_bits),
             provenance_note=(
-                "摘要由模型基于 RSS 提要生成，可能与报道原文不一致；"
+                "摘要由模型基于提要生成，可能与报道原文不一致；"
                 "请务必点击原文链接核对，不构成任何投资建议。"
             ),
+            clusters=clusters,
+            top_news=top_news,
+            analyst_briefing=analyst_briefing,
         )
     except Exception as e:
         raise NewsBriefError(f"晨报结构校验失败：{e}") from e

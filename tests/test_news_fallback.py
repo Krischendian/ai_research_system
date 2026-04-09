@@ -1,4 +1,4 @@
-"""晨报：RSS 直配兜底与排序。"""
+"""晨报辅助：Finnhub/RSS 区分与公司条目排序。"""
 from __future__ import annotations
 
 import unittest
@@ -8,56 +8,56 @@ from research_automation.extractors.news_client import RawArticle
 from research_automation.services import news_service
 
 
-class TestNewsFallback(unittest.TestCase):
-    @patch("research_automation.services.news_service.extract_tickers_from_text")
-    def test_fallback_builds_items_when_tickers_hit(self, mock_xt) -> None:
-        def _xt(blob: str) -> list[str]:
-            return ["AAPL"] if "Apple" in blob else []
-
-        mock_xt.side_effect = _xt
-        arts: list[RawArticle] = [
-            RawArticle(
-                title="Apple previews new software",
-                link="https://example.com/a",
-                description="The company said developers will get tools.",
-                source="TechCrunch",
-            ),
-            RawArticle(
-                title="Oil prices mixed",
-                link="https://example.com/o",
-                description="Crude futures.",
-                source="Bloomberg",
-            ),
-        ]
-        items = news_service._fallback_company_from_rss(arts, limit=5)
-        self.assertEqual(len(items), 1)
-        self.assertEqual(items[0].title, "Apple previews new software")
-        self.assertIn("AAPL", items[0].matched_tickers)
+class TestNewsHelpers(unittest.TestCase):
+    def test_is_finnhub_article(self) -> None:
+        """来源以 Finnhub / Benzinga 前缀为判据，用于合并列表分区。"""
+        fh: RawArticle = {
+            "title": "t",
+            "link": "u",
+            "description": "",
+            "source": "Finnhub-Bloomberg",
+        }
+        bz: RawArticle = {
+            "title": "t1",
+            "link": "u1",
+            "description": "",
+            "source": "Benzinga-Newsdesk",
+        }
+        rss: RawArticle = {
+            "title": "t2",
+            "link": "u2",
+            "description": "",
+            "source": "Reuters",
+        }
+        self.assertTrue(news_service._is_finnhub_article(fh))
+        self.assertTrue(news_service._is_finnhub_article(bz))
+        self.assertFalse(news_service._is_finnhub_article(rss))
 
     @patch("research_automation.services.news_service.extract_tickers_from_text")
     def test_prioritize_puts_hits_first(self, mock_xt) -> None:
+        """已命中 ticker 的 Finnhub 条目排在未命中之前。"""
         mock_xt.side_effect = lambda blob: (
             ["MSFT"] if "Microsoft" in blob else (["AAPL"] if "Apple" in blob else [])
         )
         arts: list[RawArticle] = [
-            RawArticle(
-                title="Oil war",
-                link="",
-                description="energy",
-                source="B",
-            ),
-            RawArticle(
-                title="Microsoft AI",
-                link="",
-                description="cloud",
-                source="B",
-            ),
-            RawArticle(
-                title="Apple store",
-                link="",
-                description="retail",
-                source="B",
-            ),
+            {
+                "title": "Oil war",
+                "link": "",
+                "description": "energy",
+                "source": "Finnhub-X",
+            },
+            {
+                "title": "Microsoft AI",
+                "link": "",
+                "description": "cloud",
+                "source": "Finnhub-X",
+            },
+            {
+                "title": "Apple store",
+                "link": "",
+                "description": "retail",
+                "source": "Finnhub-X",
+            },
         ]
         out = news_service._prioritize_articles_with_tickers(arts)
         titles = [x["title"] for x in out]

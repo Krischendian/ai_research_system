@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-批量从 Yahoo Finance 抓取财务数据并写入 SQLite ``financials`` 表。
+批量抓取财务数据并写入 SQLite ``financials`` 表（仅 SEC EDGAR 10-K Item 8）。
 
 默认处理 ``companies`` 表中 ``is_active=1`` 的全部 ticker；
 可用 ``--ticker`` 只更新单一标的；``--force`` 会忽略本地已有数据并重新抓取。
@@ -19,12 +19,12 @@ if str(_SRC) not in sys.path:
 
 from research_automation.core.company_manager import get_active_tickers  # noqa: E402
 from research_automation.core.database import read_financials, save_financials  # noqa: E402
-from research_automation.extractors.yahoo_finance import get_financials  # noqa: E402
+from research_automation.services.financial_service import get_financials  # noqa: E402
 
 
 def _parse_args() -> argparse.Namespace:
     """解析命令行参数。"""
-    p = argparse.ArgumentParser(description="批量抓取 Yahoo 财务数据并写入 financials 表")
+    p = argparse.ArgumentParser(description="批量抓取财务数据并写入 financials 表（SEC 优先）")
     p.add_argument(
         "--ticker",
         type=str,
@@ -71,9 +71,10 @@ def run_batch_fetch(*, ticker: str | None = None, force: bool = False) -> int:
                 print("跳过（已有数据，使用 --force 可覆盖）")
                 continue
 
-            rows = get_financials(sym)
+            bundle = get_financials(sym)
+            rows = bundle.financials
             if not rows:
-                msg = "未取到有效财务数据"
+                msg = "未取到有效 SEC 财务数据"
                 failures.append((sym, msg))
                 print(f"失败：{msg}")
                 continue

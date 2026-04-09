@@ -21,5 +21,7 @@ class CompanyFinancials(BaseModel):
     ticker: str  # 股票代码，如 AAPL
     financials: list[AnnualFinancials]  # 各年度财务数据列表（通常含最近三年）
     last_updated: str  # 本条数据最后更新时间（建议 ISO8601 字符串）
+    # 主数据源标识：如 SEC EDGAR；无有效行时为 None
+    data_source: str | None = None
     data_source_label: str = ""  # 数据溯源说明（人读）
-    primary_source_url: str | None = None  # 对外原始数据入口（如 Yahoo Quote）
+    primary_source_url: str | None = None  # 对外原始数据入口（如 SEC 检索）

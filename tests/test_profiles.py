@@ -13,16 +13,26 @@ _PROFILE_EXCERPT_FIXTURE = (
 ).read_text(encoding="utf-8")
 
 
+def _mock_10k_sections() -> dict[str, str]:
+    """与旧版单文件 Item1 节选等价：测试用合并后正文仍含 fixture 全文。"""
+    return {
+        "item1": _PROFILE_EXCERPT_FIXTURE,
+        "item1a": "",
+        "item7": "",
+        "item8_notes": "",
+    }
+
+
 def _non_placeholder(s: str) -> bool:
     return bool(s) and s not in ("原文未明确提及", "NOT_FOUND")
 
 
 class TestBusinessProfileFields(unittest.TestCase):
     @patch("research_automation.services.profile_service.chat")
-    @patch("research_automation.services.profile_service.get_10k_text")
-    def test_future_and_industry_fields_populated(self, mock_10k, mock_chat) -> None:
+    @patch("research_automation.services.profile_service.get_10k_sections")
+    def test_future_and_industry_fields_populated(self, mock_sections, mock_chat) -> None:
         """Mock LLM：新字段须为可展示的抽取内容（非占位）。"""
-        mock_10k.return_value = _PROFILE_EXCERPT_FIXTURE
+        mock_sections.return_value = _mock_10k_sections()
         mock_chat.return_value = json.dumps(
             {
                 "core_business": "设计制造移动设备与个人电脑，并提供软件与服务。",
@@ -100,14 +110,14 @@ class TestBusinessProfileFields(unittest.TestCase):
         types_found = {a.action_type for a in profile.corporate_actions}
         self.assertEqual(types_found, {"new_business", "acquisition", "partnership"})
         self.assertTrue(all(a.source_quote for a in profile.corporate_actions))
-        mock_10k.assert_called_once()
+        mock_sections.assert_called_once()
         mock_chat.assert_called_once()
 
     @patch("research_automation.services.profile_service.chat")
-    @patch("research_automation.services.profile_service.get_10k_text")
-    def test_missing_guidance_fields_get_placeholder(self, mock_10k, mock_chat) -> None:
+    @patch("research_automation.services.profile_service.get_10k_sections")
+    def test_missing_guidance_fields_get_placeholder(self, mock_sections, mock_chat) -> None:
         """Mock LLM 省略新字段时，服务端应回落到占位文案。"""
-        mock_10k.return_value = _PROFILE_EXCERPT_FIXTURE
+        mock_sections.return_value = _mock_10k_sections()
         mock_chat.return_value = json.dumps(
             {
                 "core_business": "测试业务",
@@ -124,10 +134,89 @@ class TestBusinessProfileFields(unittest.TestCase):
         self.assertEqual(profile.corporate_actions, [])
 
     @patch("research_automation.services.profile_service.chat")
-    @patch("research_automation.services.profile_service.get_10k_text")
-    def test_key_quotes_non_verbatim_dropped(self, mock_10k, mock_chat) -> None:
+    @patch("research_automation.services.profile_service.get_10k_sections")
+    def test_item1_rule_fallback_fills_revenue_mix(self, mock_sections, mock_chat) -> None:
+        """模型未返回分部/地区时，从 Item 1 原文规则解析补全。"""
+        mock_sections.return_value = _mock_10k_sections()
+        mock_chat.return_value = json.dumps(
+            {
+                "core_business": "测试业务",
+                "revenue_by_segment": [],
+                "revenue_by_geography": [],
+                "future_guidance": None,
+                "industry_view": None,
+                "key_quotes": [],
+                "corporate_actions": [],
+                "field_sources": {
+                    "core_business": [],
+                    "future_guidance": [],
+                    "industry_view": [],
+                },
+            },
+            ensure_ascii=False,
+        )
+        profile = get_profile("MIX")
+        names = {s.segment_name for s in profile.revenue_by_segment}
+        self.assertIn("iPhone", names)
+        self.assertIn("Services", names)
+        geos = {g.segment_name for g in profile.revenue_by_geography}
+        self.assertIn("Americas", geos)
+        self.assertIn("Greater China", geos)
+        self.assertIn("规则解析补全", profile.data_source_label)
+
+    @patch("research_automation.services.profile_service.chat")
+    @patch("research_automation.services.profile_service.get_10k_sections")
+    def test_item8_dollar_table_fallback(self, mock_sections, mock_chat) -> None:
+        """Item 7 内「dollars in millions」表：按金额推算占比。"""
+        tbl = (
+            "The following table shows net sales by category for 2025, 2024 and 2023 "
+            "(dollars in millions): iPhone $ 209,586 Mac 33,708 iPad 28,023 "
+            "Wearables, Home and Accessories 35,686 Services (1) 109,158 "
+            "Total net sales $ 416,161\n"
+            "The following table shows net sales by reportable segment for 2025, 2024 "
+            "and 2023 (dollars in millions): Americas $ 178,353 Europe 111,032 "
+            "Greater China 64,377 Japan 28,703 Rest of Asia Pacific 33,696 "
+            "Total net sales $ 416,161\n"
+        )
+        mock_sections.return_value = {
+            "item1": "Item 1. Business\nShort.\n",
+            "item1a": "",
+            "item7": tbl,
+            "item8_notes": "",
+        }
+        mock_chat.return_value = json.dumps(
+            {
+                "core_business": "测试",
+                "revenue_by_segment": [],
+                "revenue_by_geography": [],
+                "future_guidance": None,
+                "industry_view": None,
+                "key_quotes": [],
+                "corporate_actions": [],
+                "field_sources": {
+                    "core_business": [],
+                    "future_guidance": [],
+                    "industry_view": [],
+                },
+            },
+            ensure_ascii=False,
+        )
+        profile = get_profile("TBL")
+        self.assertGreaterEqual(len(profile.revenue_by_segment), 1)
+        self.assertGreaterEqual(len(profile.revenue_by_geography), 1)
+        self.assertTrue(
+            any(s.segment_name == "iPhone" for s in profile.revenue_by_segment)
+        )
+        self.assertTrue(
+            any(g.segment_name == "Americas" for g in profile.revenue_by_geography)
+        )
+        self.assertIn("Net sales", profile.data_source_label)
+
+    @patch("research_automation.services.profile_service.chat")
+    @patch("research_automation.services.profile_service.get_10k_sections")
+    def test_key_quotes_non_verbatim_dropped(self, mock_sections, mock_chat) -> None:
         """节选内不存在的 quote 须在服务端丢弃，不得入库。"""
-        mock_10k.return_value = _PROFILE_EXCERPT_FIXTURE
+        mock_sections.return_value = _mock_10k_sections()
         mock_chat.return_value = json.dumps(
             {
                 "core_business": "x",
@@ -150,10 +239,10 @@ class TestBusinessProfileFields(unittest.TestCase):
         self.assertEqual(profile.key_quotes, [])
 
     @patch("research_automation.services.profile_service.chat")
-    @patch("research_automation.services.profile_service.get_10k_text")
-    def test_corporate_actions_non_verbatim_dropped(self, mock_10k, mock_chat) -> None:
+    @patch("research_automation.services.profile_service.get_10k_sections")
+    def test_corporate_actions_non_verbatim_dropped(self, mock_sections, mock_chat) -> None:
         """source_quote 不在节选内则整条动态丢弃。"""
-        mock_10k.return_value = _PROFILE_EXCERPT_FIXTURE
+        mock_sections.return_value = _mock_10k_sections()
         mock_chat.return_value = json.dumps(
             {
                 "core_business": "x",
@@ -176,6 +265,86 @@ class TestBusinessProfileFields(unittest.TestCase):
 
         profile = get_profile("BADACTION")
         self.assertEqual(profile.corporate_actions, [])
+
+    @patch("research_automation.services.profile_service.get_segment_revenue")
+    @patch("research_automation.services.profile_service.chat")
+    @patch("research_automation.services.profile_service.get_10k_sections")
+    def test_fmp_segment_override_when_empty(
+        self, mock_sections, mock_chat, mock_fmp_seg
+    ) -> None:
+        """无业务线占比时以 FMP 分部数据覆盖。"""
+        mock_sections.return_value = {
+            "item1": "No segment percents here.\n",
+            "item1a": "",
+            "item7": "",
+            "item8_notes": "",
+        }
+        mock_chat.return_value = json.dumps(
+            {
+                "core_business": "测试",
+                "revenue_by_segment": [],
+                "revenue_by_geography": [],
+                "future_guidance": None,
+                "industry_view": None,
+                "key_quotes": [],
+                "corporate_actions": [],
+                "field_sources": {
+                    "core_business": [],
+                    "future_guidance": [],
+                    "industry_view": [],
+                },
+            },
+            ensure_ascii=False,
+        )
+        mock_fmp_seg.return_value = [
+            {"segment": "Alpha", "percentage": 60.0, "absolute": 600.0},
+            {"segment": "Beta", "percentage": 40.0, "absolute": 400.0},
+        ]
+        profile = get_profile("FMPFILL")
+        self.assertEqual(len(profile.revenue_by_segment), 2)
+        names = {s.segment_name for s in profile.revenue_by_segment}
+        self.assertEqual(names, {"Alpha", "Beta"})
+        self.assertIn("FMP Revenue Product Segmentation", profile.data_source_label)
+        self.assertIsNone(profile.validation_warning)
+
+    @patch("research_automation.services.profile_service.get_segment_revenue")
+    @patch("research_automation.services.profile_service.chat")
+    @patch("research_automation.services.profile_service.get_10k_sections")
+    def test_fmp_segment_validation_warning_large_gap(
+        self, mock_sections, mock_chat, mock_fmp_seg
+    ) -> None:
+        """与 FMP 能对齐的分部占比差超过 10% 时写入 validation_warning。"""
+        mock_sections.return_value = {
+            "item1": "Plain.\n",
+            "item1a": "",
+            "item7": "",
+            "item8_notes": "",
+        }
+        mock_chat.return_value = json.dumps(
+            {
+                "core_business": "测试",
+                "revenue_by_segment": [{"segment_name": "iPhone", "percentage": "15%"}],
+                "revenue_by_geography": [],
+                "future_guidance": None,
+                "industry_view": None,
+                "key_quotes": [],
+                "corporate_actions": [],
+                "field_sources": {
+                    "core_business": [],
+                    "future_guidance": [],
+                    "industry_view": [],
+                },
+            },
+            ensure_ascii=False,
+        )
+        mock_fmp_seg.return_value = [
+            {"segment": "iPhone", "percentage": 50.0, "absolute": 500.0},
+            {"segment": "Mac", "percentage": 50.0, "absolute": 500.0},
+        ]
+        profile = get_profile("FMPWARN")
+        self.assertEqual(profile.validation_warning, "业务线占比与财报披露偏差较大，请人工复核")
+        self.assertEqual(profile.revenue_by_segment[0].segment_name, "iPhone")
+        self.assertEqual(profile.revenue_by_segment[0].percentage, "15%")
 
 
 if __name__ == "__main__":

@@ -10,14 +10,15 @@ from research_automation.core.database import (
     read_financials,
     save_financials,
 )
-from research_automation.extractors.yahoo_finance import get_financials
+from research_automation.services.financial_service import get_financials
 
 
 def main() -> None:
     ticker = "AAPL"
 
-    data = get_financials(ticker)
-    print(f"[抓取] 共 {len(data)} 条年度记录")
+    bundle = get_financials(ticker)
+    data = bundle.financials
+    print(f"[抓取] 共 {len(data)} 条年度记录 data_source={bundle.data_source!r}")
     for row in data:
         pprint(row.model_dump())
 

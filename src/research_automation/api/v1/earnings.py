@@ -1,10 +1,11 @@
-"""财报电话会分析路由（v1，Mock 逐字稿 + LLM）。"""
+"""财报电话会分析路由（v1，FMP / earningscall 逐字稿 + LLM）。"""
 from __future__ import annotations
 
 import re
 
 from fastapi import APIRouter, HTTPException
 
+from research_automation.core.ticker_normalize import normalize_equity_ticker
 from research_automation.models.earnings import EarningsCallAnalysis
 from research_automation.services.earnings_service import EarningsAnalysisError, analyze_earnings_call
 
@@ -29,11 +30,11 @@ def get_earnings_analysis(
     quarter: str = "2024Q4",
 ) -> EarningsCallAnalysis:
     """
-    返回指定季度财报电话会的分析结果（Mock 逐字稿 + OpenAI 结构化总结）。
+    返回指定季度财报电话会分析（FMP → EDGAR 8-K → earningscall → sec-api.io + OpenAI 结构化总结）。
 
-    示例：``GET /api/v1/companies/AAPL/earnings?quarter=2024Q4``
+    无逐字稿时 HTTP 503。示例：``GET /api/v1/companies/AAPL/earnings?quarter=2024Q4``
     """
-    symbol = (ticker or "").strip().upper()
+    symbol = normalize_equity_ticker(ticker)
     if not symbol:
         raise HTTPException(status_code=400, detail="股票代码不能为空")
     year, qn = _parse_quarter(quarter)

@@ -1,44 +1,34 @@
-"""隔夜速递：纽约时段窗口内 RSS 筛选 + 一句中文要点（LLM）。"""
+"""隔夜速递：新闻时区下隔夜窗口内筛选 + 一句中文要点（LLM）；时间以 Finnhub Unix 优先。"""
 from __future__ import annotations
 
-from datetime import datetime, timedelta, time, timezone
-from zoneinfo import ZoneInfo
+from datetime import datetime
 
+from research_automation.core.news_time import (
+    article_published_in_news_tz,
+    filter_articles_in_half_open_window,
+    get_news_timezone_name,
+    overnight_window,
+)
+from research_automation.core.company_manager import get_active_tickers
+from research_automation.extractors.finnhub_news import merge_finnhub_and_rss
 from research_automation.extractors.llm_client import chat
 from research_automation.extractors.news_client import (
-    RawArticle,
     extract_tickers_from_text,
     fetch_rss_articles,
-    parse_published_at_utc,
 )
 from research_automation.models.news import OvernightNewsItem, OvernightNewsResponse
-from research_automation.services.news_service import NewsBriefError
-
-_NY = ZoneInfo("America/New_York")
-
-
-def overnight_window_ny(
-    *,
-    now_ny: datetime | None = None,
-) -> tuple[datetime, datetime]:
-    """
-    纽约本地日历：「昨天 16:00」至「今天 08:00」半开区间 [start, end)。
-
-    ``now_ny`` 仅用于测试注入；默认 ``datetime.now(America/New_York)``。
-    """
-    now = now_ny or datetime.now(_NY)
-    if now.tzinfo is None:
-        now = now.replace(tzinfo=_NY)
-    else:
-        now = now.astimezone(_NY)
-    d = now.date()
-    start = datetime.combine(d - timedelta(days=1), time(16, 0), tzinfo=_NY)
-    end = datetime.combine(d, time(8, 0), tzinfo=_NY)
-    return start, end
+from research_automation.services.news_insights import (
+    compute_news_insights,
+    overnight_items_to_flat_dicts,
+)
+from research_automation.services.news_service import (
+    NewsBriefError,
+    fetch_company_news_raw_articles_for_tickers,
+)
 
 
 def _normalize_overnight_summary(text: str) -> str:
-    """确保以「隔夜重点关注：」开头（模型偶发漏前缀时补齐）。"""
+    """规范化模型输出：确保以「隔夜重点关注：」开头（漏写前缀时补齐）。"""
     s = (text or "").strip()
     if not s:
         return "隔夜重点关注：（模型未返回有效摘要，请查看下列条目。）"
@@ -51,42 +41,13 @@ def _normalize_overnight_summary(text: str) -> str:
 
 
 def _source_label(raw: str) -> str:
+    """将原始 source 字段转为展示用短标签（空则视为 RSS）。"""
     s = (raw or "").strip()
     if not s:
         return "RSS"
-    return s if str(s).startswith("RSS-") else f"RSS-{s}"
-
-
-def _filter_articles_in_window(
-    articles: list[RawArticle],
-    start: datetime,
-    end: datetime,
-) -> list[RawArticle]:
-    """保留发布时间落在 [start, end)（纽约）内的条目；无时间戳的条目丢弃。"""
-    out: list[RawArticle] = []
-    for a in articles:
-        iso = a.get("published_at_utc")
-        if not iso:
-            continue
-        try:
-            pub_utc = parse_published_at_utc(str(iso))
-            pub_ny = pub_utc.astimezone(_NY)
-        except (TypeError, ValueError):
-            continue
-        if start <= pub_ny < end:
-            out.append(a)
-
-    def _sort_key(a: RawArticle) -> datetime:
-        p = a.get("published_at_utc")
-        if not p:
-            return datetime.min.replace(tzinfo=timezone.utc)
-        try:
-            return parse_published_at_utc(str(p))
-        except (TypeError, ValueError):
-            return datetime.min.replace(tzinfo=timezone.utc)
-
-    out.sort(key=_sort_key, reverse=True)
-    return out
+    if s.startswith("Finnhub") or s.startswith("Benzinga") or s.startswith("RSS-"):
+        return s
+    return f"RSS-{s}"
 
 
 def _build_overnight_prompt(
@@ -94,6 +55,7 @@ def _build_overnight_prompt(
     start: datetime,
     end: datetime,
 ) -> str:
+    """拼装送往 LLM 的隔夜素材说明（含时间窗与编号条目）。"""
     lines: list[str] = []
     for i, it in enumerate(items, start=1):
         desc = (it.summary or "")[:640]
@@ -102,12 +64,13 @@ def _build_overnight_prompt(
             f"标题:{it.title} "
             f"提要:{desc}"
         )
+    tz_label = get_news_timezone_name()
     window = (
         f"{start.strftime('%Y-%m-%d %H:%M')} 至 {end.strftime('%Y-%m-%d %H:%M')} "
-        f"(America/New_York)"
+        f"({tz_label})"
     )
     body = "\n".join(lines)
-    return f"""你是财经新闻编辑。以下为纽约时间窗口 {window} 内、来自公开 RSS 的英文标题与提要摘录。
+    return f"""你是财经新闻编辑。以下为本地时间窗口 {window} 内、来自公司新闻源（Benzinga/Finnhub）与 RSS 的英文标题与提要摘录。
 
 任务：用**恰好一句中文**概括隔夜对投研**最需一并扫一眼**的要点。
 - 句式必须以「隔夜重点关注：」开头。
@@ -125,24 +88,35 @@ def get_overnight_news(
     per_feed_limit: int = 12,
 ) -> OvernightNewsResponse:
     """
-    实时拉取 RSS，按「纽约昨天 16:00～今天 08:00」筛选，调用 LLM 生成一句中文总结。
+    拉取 RSS 与公司新闻（Benzinga 优先、Finnhub 兜底），合并去重后按「新闻时区昨天 16:00～今天 08:00」筛选；
 
-    无带时间戳且落在窗口内的条目时，``news_list`` 为空，``summary`` 为说明性文案（仍可 HTTP 200）。
+    每条发布时间优先取 API Unix，否则用 RSS 的 UTC 时间；无有效时间则丢弃。
+    再调用 LLM 生成一句中文总结。公司源无数据时仍仅依赖 RSS，保持兼容。
     """
-    articles = fetch_rss_articles(
+    rss_batch = fetch_rss_articles(
         max_items=max_rss_items,
         per_feed_limit=per_feed_limit,
     )
+    start, end = overnight_window()
+    from_d = start.date()
+    to_d = end.date()
+    company_raw = fetch_company_news_raw_articles_for_tickers(
+        get_active_tickers(),
+        from_d.isoformat(),
+        to_d.isoformat(),
+    )
+    articles = merge_finnhub_and_rss(company_raw, rss_batch)
     if not articles:
         raise NewsBriefError(
-            "未能从 RSS 获取任何新闻（网络、反爬或 feed 不可用）。请稍后重试。"
+            "未能从 RSS 与公司新闻源获取任何新闻（网络、密钥或 feed 不可用）。请稍后重试。"
         )
 
-    start, end = overnight_window_ny()
     window_start = start.isoformat()
     window_end = end.isoformat()
+    tz_name = get_news_timezone_name()
 
-    filtered = _filter_articles_in_window(articles, start, end)
+    filtered = filter_articles_in_half_open_window(articles, start, end)
+    active = set(get_active_tickers())
     news_list: list[OvernightNewsItem] = []
     for a in filtered:
         title = (a.get("title") or "").strip()
@@ -150,19 +124,14 @@ def get_overnight_news(
             continue
         desc = (a.get("description") or "").strip()
         blob = f"{title} {desc}"
-        tickers = extract_tickers_from_text(blob)
-        iso = a.get("published_at_utc")
-        pub_ny_s: str | None = None
-        if iso:
-            try:
-                pub_ny_s = (
-                    parse_published_at_utc(str(iso))
-                    .astimezone(_NY)
-                    .replace(microsecond=0)
-                    .isoformat()
-                )
-            except (TypeError, ValueError):
-                pub_ny_s = None
+        tickers_set = set(extract_tickers_from_text(blob))
+        for x in a.get("implied_tickers") or []:
+            u = str(x).strip().upper()
+            if u in active:
+                tickers_set.add(u)
+        tickers = sorted(tickers_set)
+        pub_local = article_published_in_news_tz(a)
+        pub_ny_s: str | None = pub_local.isoformat() if pub_local else None
         link = (a.get("link") or "").strip() or None
         news_list.append(
             OvernightNewsItem(
@@ -176,21 +145,25 @@ def get_overnight_news(
         )
 
     provenance = (
-        "条目来自 Reuters / Bloomberg / TechCrunch 等公开 RSS，时间窗以 "
-        "America/New_York 昨天 16:00～今天 08:00 为准；"
-        "仅保留 RSS 提供有效发布时间的稿件。摘要由模型基于提要生成，请点原文核对。"
+        "条目来自 Finnhub 公司新闻（须 FINNHUB_API_KEY）与 Reuters / Bloomberg / TechCrunch 等 RSS，"
+        f"合并去重；时间窗以 {tz_name} 下「昨日 16:00～今日 08:00」为准，"
+        "发布时间优先采用 Finnhub Unix 时间戳，否则回退 RSS。"
+        "仅保留带有效发布时间的稿件。摘要由模型基于提要生成，请点原文核对。"
     )
 
     if not news_list:
         return OvernightNewsResponse(
             summary=(
-                "隔夜重点关注：本时间窗内当前 RSS 批次未匹配到带有效发布时间的新闻条目；"
+                "隔夜重点关注：本时间窗内未匹配到带有效发布时间的新闻条目；"
                 "可能因网络延迟或各源未暴露时间戳，请稍后重试或结合下方完整晨报浏览。"
             ),
             news_list=[],
             window_start_ny=window_start,
             window_end_ny=window_end,
             provenance_note=provenance,
+            clusters=[],
+            top_news=[],
+            analyst_briefing="",
         )
 
     prompt = _build_overnight_prompt(news_list, start, end)
@@ -203,10 +176,27 @@ def get_overnight_news(
 
     summary = _normalize_overnight_summary(reply)
 
+    # 聚类 / 评分 / 早评（与一句摘要分立；同一批新闻 24h 缓存）
+    insight_date_key = f"{start.date().isoformat()}_{end.date().isoformat()}"
+    flat_ins = overnight_items_to_flat_dicts(news_list)
+    clusters, top_news, analyst_briefing, score_map = compute_news_insights(
+        flat_ins,
+        context="overnight",
+        date_key=insight_date_key,
+        monitor_tickers=sorted(active),
+    )
+    scored_list: list[OvernightNewsItem] = []
+    for i, it in enumerate(news_list):
+        sc = score_map.get(i, 5)
+        scored_list.append(it.model_copy(update={"importance_score": sc}))
+
     return OvernightNewsResponse(
         summary=summary,
-        news_list=news_list,
+        news_list=scored_list,
         window_start_ny=window_start,
         window_end_ny=window_end,
         provenance_note=provenance,
+        clusters=clusters,
+        top_news=top_news,
+        analyst_briefing=analyst_briefing,
     )

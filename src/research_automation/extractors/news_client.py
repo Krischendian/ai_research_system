@@ -1,11 +1,14 @@
 """从 Reuters / Bloomberg 等平台 RSS 拉取新闻（原始条目，未经过 LLM）。"""
 from __future__ import annotations
 
+import json
 import logging
 import re
+import time
 from datetime import datetime, timezone
 from email import utils as email_utils
-from typing import TypedDict
+from pathlib import Path
+from typing import Any, TypedDict
 
 from typing_extensions import NotRequired
 
@@ -41,6 +44,17 @@ DEFAULT_HEADERS = {
     ),
 }
 
+# 晨报宏观：按可靠性顺序尝试，先成功先返回（见 ``fetch_macro_news_with_fallback``）
+MACRO_RSS_FEEDS: list[tuple[str, str]] = [
+    ("http://feeds.reuters.com/reuters/MarketsNews", "Reuters"),
+    ("http://feeds.bloomberg.com/markets/news.rss", "Bloomberg"),
+    ("http://feeds.wsj.com/wsj/rss/markets", "WSJ"),
+    ("http://www.ft.com/rss/markets", "FT"),
+    ("https://finance.yahoo.com/news/rssindex", "Yahoo Finance"),
+]
+
+_MACRO_CACHE_TTL_SEC = 6 * 3600
+
 # （URL, 在 source 字段中展示的标签）
 # 科技/行业类源置前，便于「公司新闻」命中 ticker；地缘类仍在列表后部。
 RSS_FEEDS: list[tuple[str, str]] = [
@@ -64,6 +78,113 @@ class RawArticle(TypedDict):
     source: str
     # 发布时间（UTC），ISO8601；部分条目无则不含此键
     published_at_utc: NotRequired[str]
+    # Finnhub API 原始 Unix 秒级时间戳；与时间窗过滤时优先于 published_at_utc
+    finnhub_datetime_unix: NotRequired[int]
+    # Finnhub 等按 ticker 拉取时可带，用于公司类匹配（与监控池取交集）
+    implied_tickers: NotRequired[list[str]]
+
+
+def _project_root() -> Path:
+    return Path(__file__).resolve().parents[3]
+
+
+def _macro_cache_path() -> Path:
+    d = _project_root() / "data" / "cache"
+    d.mkdir(parents=True, exist_ok=True)
+    return d / "macro_news_cache.json"
+
+
+def _article_to_dict(a: RawArticle) -> dict[str, Any]:
+    row: dict[str, Any] = {
+        "title": a["title"],
+        "link": a["link"],
+        "description": a["description"],
+        "source": a["source"],
+    }
+    if "published_at_utc" in a:
+        row["published_at_utc"] = a["published_at_utc"]
+    if "finnhub_datetime_unix" in a:
+        row["finnhub_datetime_unix"] = a["finnhub_datetime_unix"]
+    if "implied_tickers" in a:
+        row["implied_tickers"] = a["implied_tickers"]
+    return row
+
+
+def _dict_to_article(row: dict[str, Any]) -> RawArticle | None:
+    if not isinstance(row, dict):
+        return None
+    title = (row.get("title") or "").strip()
+    if not title:
+        return None
+    art: RawArticle = RawArticle(
+        title=title,
+        link=str(row.get("link") or "").strip(),
+        description=str(row.get("description") or "").strip(),
+        source=str(row.get("source") or "").strip() or "RSS",
+    )
+    pub = row.get("published_at_utc")
+    if pub:
+        art["published_at_utc"] = str(pub).strip()
+    if "finnhub_datetime_unix" in row:
+        try:
+            art["finnhub_datetime_unix"] = int(row["finnhub_datetime_unix"])
+        except (TypeError, ValueError):
+            pass
+    it = row.get("implied_tickers")
+    if isinstance(it, list):
+        art["implied_tickers"] = [str(x).strip() for x in it if str(x).strip()]
+    return art
+
+
+def _save_macro_cache(feed_url: str, feed_label: str, articles: list[RawArticle]) -> None:
+    path = _macro_cache_path()
+    payload = {
+        "saved_at": time.time(),
+        "feed_url": feed_url,
+        "feed_label": feed_label,
+        "articles": [_article_to_dict(a) for a in articles],
+    }
+    try:
+        path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    except OSError as e:
+        logger.warning("宏观新闻缓存写入失败 %s: %s", path, e)
+
+
+def _load_macro_cache_if_fresh() -> tuple[list[RawArticle], bool]:
+    """若缓存未过期则返回条目与 True；否则 ([], False)。"""
+    path = _macro_cache_path()
+    if not path.exists() or path.stat().st_size == 0:
+        return [], False
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as e:
+        logger.warning("宏观新闻缓存读取失败 %s: %s", path, e)
+        return [], False
+    if not isinstance(raw, dict):
+        return [], False
+    try:
+        saved = float(raw.get("saved_at", 0))
+    except (TypeError, ValueError):
+        return [], False
+    if time.time() - saved > _MACRO_CACHE_TTL_SEC:
+        return [], False
+    rows = raw.get("articles")
+    if not isinstance(rows, list):
+        return [], False
+    out: list[RawArticle] = []
+    for row in rows:
+        a = _dict_to_article(row) if isinstance(row, dict) else None
+        if a is not None:
+            out.append(a)
+    if not out:
+        return [], False
+    label = str(raw.get("feed_label") or "cache")
+    logger.warning(
+        "宏观 RSS 全部源不可用，使用磁盘缓存（来源 %s，约 %.0f 分钟前写入）",
+        label,
+        (time.time() - saved) / 60,
+    )
+    return out, True
 
 
 def _struct_time_to_utc(st: object) -> datetime | None:
@@ -128,10 +249,10 @@ def _plain_text(html_or_text: str) -> str:
     return " ".join(text.split())
 
 
-def _parse_feed(url: str, label: str) -> list[RawArticle]:
+def _parse_feed(url: str, label: str, *, timeout_sec: float = 20.0) -> list[RawArticle]:
     items: list[RawArticle] = []
     try:
-        resp = requests.get(url, timeout=20, headers=DEFAULT_HEADERS)
+        resp = requests.get(url, timeout=timeout_sec, headers=DEFAULT_HEADERS)
         resp.raise_for_status()
         parsed = feedparser.parse(resp.content)
     except Exception as exc:
@@ -158,6 +279,51 @@ def _parse_feed(url: str, label: str) -> list[RawArticle]:
             ).isoformat().replace("+00:00", "Z")
         items.append(art)
     return items
+
+
+def fetch_macro_news_with_fallback(
+    *,
+    max_items: int = 32,
+) -> tuple[list[RawArticle], bool]:
+    """
+    按 ``MACRO_RSS_FEEDS`` 顺序拉取宏观 RSS：首个成功且有条目即返回；全部失败则读 6h 内缓存。
+
+    :return: ``(articles, from_cache)`` — ``from_cache`` 为 True 表示来自磁盘缓存。
+    """
+    if max_items <= 0:
+        return [], False
+
+    errors: list[str] = []
+    for url, label in MACRO_RSS_FEEDS:
+        try:
+            batch = _parse_feed(url, label, timeout_sec=10.0)
+        except Exception as exc:
+            errors.append(f"{label} ({url}): {exc}")
+            logger.warning("宏观 RSS 源失败 %s: %s", label, exc)
+            continue
+        if batch:
+            trimmed = batch[:max_items]
+            _save_macro_cache(url, label, trimmed)
+            logger.info(
+                "宏观 RSS 已选用 %s（%s），条目 %s",
+                label,
+                url,
+                len(trimmed),
+            )
+            return trimmed, False
+        errors.append(f"{label} ({url}): empty feed")
+
+    logger.error(
+        "宏观 RSS 全部源失败或无条目（%s 个）；尝试读取缓存",
+        len(MACRO_RSS_FEEDS),
+    )
+    for line in errors[:8]:
+        logger.error("宏观 RSS 尝试记录: %s", line)
+
+    cached, ok = _load_macro_cache_if_fresh()
+    if ok and cached:
+        return cached[:max_items], True
+    return [], False
 
 
 def _company_name_variants(legal_name: str) -> set[str]:

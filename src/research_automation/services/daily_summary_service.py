@@ -1,84 +1,45 @@
-"""昨日总结：纽约日历「昨日」全天 RSS 筛选 + LLM 宏观/公司主题归类。"""
+"""昨日总结：新闻时区「昨日」全天筛选 + LLM 宏观/公司主题归类；时间以 Finnhub Unix 优先。"""
 from __future__ import annotations
 
 import json
+import logging
 import re
-from datetime import datetime, timedelta, time, timezone
 from typing import Any
 
-from zoneinfo import ZoneInfo
-
-from research_automation.extractors.llm_client import chat
-from research_automation.extractors.news_client import (
-    RawArticle,
-    fetch_rss_articles,
-    parse_published_at_utc,
+from research_automation.core.news_time import (
+    filter_articles_in_half_open_window,
+    get_news_timezone_name,
+    yesterday_full_day_window,
 )
+from research_automation.core.company_manager import get_active_tickers
+from research_automation.extractors.finnhub_news import merge_finnhub_and_rss
+from research_automation.extractors.llm_client import chat
+from research_automation.extractors.news_client import RawArticle, fetch_rss_articles
 from research_automation.models.news import YesterdaySummaryResponse, YesterdayThemeGroup
-from research_automation.services.news_service import NewsBriefError
+from research_automation.services.news_insights import (
+    compute_news_insights,
+    raw_articles_with_tickers_to_flat,
+)
+from research_automation.services.news_service import (
+    NewsBriefError,
+    fetch_company_news_raw_articles_for_tickers,
+)
 
-_NY = ZoneInfo("America/New_York")
-
-
-def yesterday_calendar_window_ny(
-    *,
-    now_ny: datetime | None = None,
-) -> tuple[datetime, datetime]:
-    """
-    纽约本地日历「昨天」的 00:00 至「今天」00:00，即昨日全天 [start, end)。
-    与「00:00–23:59」等价（半开区间上界为今日 0 点）。
-    """
-    now = now_ny or datetime.now(_NY)
-    if now.tzinfo is None:
-        now = now.replace(tzinfo=_NY)
-    else:
-        now = now.astimezone(_NY)
-    today_d = now.date()
-    yday_d = today_d - timedelta(days=1)
-    start = datetime.combine(yday_d, time(0, 0), tzinfo=_NY)
-    end = datetime.combine(today_d, time(0, 0), tzinfo=_NY)
-    return start, end
+logger = logging.getLogger(__name__)
 
 
 def _source_label(raw: str) -> str:
+    """将原始 source 字段转为展示用短标签（空则视为 RSS）。"""
     s = (raw or "").strip()
     if not s:
         return "RSS"
-    return s if str(s).startswith("RSS-") else f"RSS-{s}"
-
-
-def _filter_yesterday_articles(
-    articles: list[RawArticle],
-    start: datetime,
-    end: datetime,
-) -> list[RawArticle]:
-    """保留发布时刻落在纽约昨日 [start, end) 的 RSS 条目。"""
-    out: list[RawArticle] = []
-    for a in articles:
-        iso = a.get("published_at_utc")
-        if not iso:
-            continue
-        try:
-            pub_ny = parse_published_at_utc(str(iso)).astimezone(_NY)
-        except (TypeError, ValueError):
-            continue
-        if start <= pub_ny < end:
-            out.append(a)
-
-    def _sk(x: RawArticle) -> datetime:
-        p = x.get("published_at_utc")
-        if not p:
-            return datetime.min.replace(tzinfo=timezone.utc)
-        try:
-            return parse_published_at_utc(str(p))
-        except (TypeError, ValueError):
-            return datetime.min.replace(tzinfo=timezone.utc)
-
-    out.sort(key=_sk, reverse=True)
-    return out
+    if s.startswith("Finnhub") or s.startswith("Benzinga") or s.startswith("RSS-"):
+        return s
+    return f"RSS-{s}"
 
 
 def _safe_json_obj(raw: str) -> dict[str, Any]:
+    """从模型回复中剥离 Markdown 代码块后解析 JSON 对象，失败则抛出异常。"""
     text = (raw or "").strip()
     m = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", text)
     if m:
@@ -167,6 +128,7 @@ def _build_markdown(
     macro: list[YesterdayThemeGroup],
     company: list[YesterdayThemeGroup],
 ) -> str:
+    """由结构化主题列表生成 Markdown 简报（宏观 / 公司两节）。"""
     lines = ["## 宏观", ""]
     if not macro:
         lines.append("- （无）")
@@ -183,6 +145,8 @@ def _build_markdown(
 
 
 def _build_llm_prompt(filtered: list[RawArticle], *, date_label: str, n: int) -> str:
+    """拼装昨日全文新闻列表与归类任务说明，供 LLM 输出 JSON。"""
+    tz_name = get_news_timezone_name()
     body_lines: list[str] = []
     for i, a in enumerate(filtered, start=1):
         desc = (a.get("description") or "")[:520]
@@ -192,7 +156,7 @@ def _build_llm_prompt(filtered: list[RawArticle], *, date_label: str, n: int) ->
             f"提要:{desc}"
         )
     body = "\n".join(body_lines)
-    return f"""你是财经编辑。以下为纽约本地日期 {date_label} 当日（全天 America/New_York）内、公开 RSS 的英文简讯（编号 1 至 {n}）。
+    return f"""你是财经编辑。以下为本地日期 {date_label} 当日（全天 {tz_name}）内、公司新闻源（Benzinga/Finnhub）与 RSS 合并后的英文简讯（编号 1 至 {n}）。
 
 任务：
 1. 将每一条编号**恰好归入一类**：「宏观」下的某一个主题，或「公司」下的某一个主题；编号 1..{n} 必须**各出现一次**，不得遗漏或重复。
@@ -213,29 +177,39 @@ def get_yesterday_summary(
     per_feed_limit: int = 20,
 ) -> YesterdaySummaryResponse:
     """
-    拉取 RSS，筛出纽约「昨日」全天内有发布时间的条目，经 LLM 做宏观/公司主题归类与 Markdown 汇总。
+    拉取 RSS 与公司新闻（Benzinga 优先、Finnhub 兜底），合并去重后筛出新闻时区「昨日」全天内有有效发布时间的条目；
+
+    发布时间优先 API 返回的 Unix，否则 RSS；公司源为空时仍可仅用 RSS。
+    再经 LLM 做宏观/公司主题归类并生成 Markdown。
     """
-    articles = fetch_rss_articles(
+    rss_batch = fetch_rss_articles(
         max_items=max_rss_items,
         per_feed_limit=per_feed_limit,
     )
-    if not articles:
+    start, end = yesterday_full_day_window()
+    yday = start.date().isoformat()
+    company_raw = fetch_company_news_raw_articles_for_tickers(
+        get_active_tickers(),
+        yday,
+        yday,
+    )
+    if not rss_batch and not company_raw:
         raise NewsBriefError(
-            "未能从 RSS 获取任何新闻（网络、反爬或 feed 不可用）。请稍后重试。"
+            "未能从 RSS 与公司新闻源获取任何新闻（网络、密钥或 feed 不可用）。请稍后重试。"
         )
-
-    start, end = yesterday_calendar_window_ny()
+    articles = merge_finnhub_and_rss(company_raw, rss_batch)
     window_start = start.isoformat()
     window_end = end.isoformat()
     date_label = start.strftime("%Y-%m-%d")
+    tz_name = get_news_timezone_name()
 
-    filtered = _filter_yesterday_articles(articles, start, end)
+    filtered = filter_articles_in_half_open_window(articles, start, end)
     n = len(filtered)
 
     provenance = (
-        f"纽约昨日日历日 {date_label}（{window_start}–{window_end}，America/New_York）；"
-        "仅含 RSS 提供有效发布时间的条目，实时 feed 不一定覆盖当日全部报道。"
-        "主题与条数由模型基于标题/提要归类，请核对原文。"
+        f"昨日日历日 {date_label}（{window_start}–{window_end}，{tz_name}）；"
+        "含 Benzinga/Finnhub 公司新闻与 RSS 合并去重；发布时间优先 API Unix，否则 RSS；"
+        "仅统计带有效发布时间的条目。主题归类与聚类/评分/早评为独立模型调用；请核对原文。"
     )
 
     if n == 0:
@@ -248,6 +222,9 @@ def get_yesterday_summary(
             window_start_ny=window_start,
             window_end_ny=window_end,
             provenance_note=provenance,
+            clusters=[],
+            top_news=[],
+            analyst_briefing="",
         )
 
     prompt = _build_llm_prompt(filtered, date_label=date_label, n=n)
@@ -274,6 +251,17 @@ def get_yesterday_summary(
     )
     markdown = _build_markdown(macro_g, company_g)
 
+    # 聚类 / 重要性 / 分析师早评（单次 LLM，24h 缓存；与主题归类分离）
+    active = set(get_active_tickers())
+    flat_ins = raw_articles_with_tickers_to_flat(filtered, active)
+    logger.info("昨日总结 洞察输入条数=%d（时间窗内）", len(flat_ins))
+    clusters, top_news, analyst_briefing, _ = compute_news_insights(
+        flat_ins,
+        context="yesterday_summary",
+        date_key=date_label,
+        monitor_tickers=sorted(active),
+    )
+
     return YesterdaySummaryResponse(
         markdown=markdown,
         macro=macro_g,
@@ -282,4 +270,7 @@ def get_yesterday_summary(
         window_start_ny=window_start,
         window_end_ny=window_end,
         provenance_note=provenance,
+        clusters=clusters,
+        top_news=top_news,
+        analyst_briefing=analyst_briefing,
     )
