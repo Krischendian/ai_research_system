@@ -49,6 +49,12 @@ def _num(v: Any) -> float | None:
 
 
 def _year_from_row(row: dict[str, Any]) -> int | None:
+    fy = row.get("fiscalYear")
+    if fy is not None and str(fy).strip():
+        try:
+            return int(str(fy).strip()[:4])
+        except ValueError:
+            pass
     cy = row.get("calendarYear")
     if cy is not None and str(cy).strip():
         try:
@@ -204,8 +210,15 @@ def get_financials(ticker: str, years: int = 3) -> list[AnnualFinancials]:
     """
     获取公司年度财务指标（收入、EBITDA、毛利率、资本支出、净负债/权益）。
 
-    使用 FMP 的 income-statement、cash-flow-statement、balance-sheet-statement、key-metrics。
-    按财年（``AnnualFinancials.year``）降序返回至多 ``years`` 条；字段缺失为 None。
+    调用 FMP **stable** 端点（与 ``/stable`` 文档一致，查询参数 ``symbol``）：
+
+    - ``income-statement``（利润表）
+    - ``cash-flow-statement``（现金流）
+    - ``balance-sheet-statement``（资产负债表）
+    - ``key-metrics``（毛利率、净负债/权益等）
+
+    按 ``fiscalYear`` / ``calendarYear`` / ``date`` 对齐财年（``AnnualFinancials.year``），
+    降序返回至多 ``years`` 条；字段缺失为 ``None``。
     """
     sym = (ticker or "").strip().upper()
     if not sym or years < 1:
@@ -567,7 +580,7 @@ def get_earnings_transcript(
     ticker: str, year: int, quarter: int
 ) -> dict[str, Any] | None:
     """
-    获取指定季度财报电话会逐字稿（FMP stable ``earning-call-transcript``）。
+    获取指定季度财报电话会逐字稿（FMP stable ``earning-call-transcript``，参数 ``symbol`` / ``year`` / ``quarter``）。
 
     返回 ``None`` 表示无数据或请求失败。成功时结构示例::
 
@@ -575,12 +588,12 @@ def get_earnings_transcript(
             "quarter": "2024Q4",
             "date": "2024-10-31",
             "content": [
-                {"speaker": "Tim Cook", "position": "CEO", "text": "..."},
+                {"speaker": "Tim Cook", "text": "..."},
                 ...
             ],
         }
 
-    FMP 常将全文放在单个 ``content`` 字符串中；本函数会尽量按「发言人:」拆成结构化 ``content`` 列表。
+    FMP 常将全文放在单个 ``content`` 字符串中；本函数会尽量按「发言人:」拆行并只保留 ``speaker`` + ``text``。
     """
     sym = (ticker or "").strip().upper()
     if not sym or quarter < 1 or quarter > 4:
@@ -615,8 +628,127 @@ def get_earnings_transcript(
     date_val = row.get("date")
     date_str = str(date_val).strip()[:10] if date_val is not None else ""
 
+    # 对外契约：每条含 speaker + text（position 可选，供 LLM 拼接仍保留）
+    content: list[dict[str, str]] = []
+    for d in dialogues:
+        content.append(
+            {
+                "speaker": str(d.get("speaker") or "").strip(),
+                "text": str(d.get("text") or "").strip(),
+            }
+        )
+
     return {
         "quarter": f"{year}Q{quarter}",
         "date": date_str,
-        "content": dialogues,
+        "content": content,
     }
+
+
+# ---------------------------------------------------------------------------
+# Insider trading (stable search)
+# ---------------------------------------------------------------------------
+
+
+def _insider_trade_side(row: dict[str, Any]) -> str:
+    """归一为 ``Buy`` / ``Sell`` / ``Other``（优先 ``acquisitionOrDisposition``）。"""
+    ad = str(row.get("acquisitionOrDisposition") or "").strip().upper()
+    if ad == "A":
+        return "Buy"
+    if ad == "D":
+        return "Sell"
+    tt = str(row.get("transactionType") or "").strip().upper()
+    if "PURCHASE" in tt or tt.startswith("P-"):
+        return "Buy"
+    if "SALE" in tt or tt.startswith("S-"):
+        return "Sell"
+    return "Other"
+
+
+def _insider_total_value(row: dict[str, Any]) -> float | None:
+    v = _num(row.get("totalValue") or row.get("value"))
+    if v is not None:
+        return v
+    sh = _num(row.get("securitiesTransacted"))
+    px = _num(row.get("price"))
+    if sh is not None and px is not None and px > 0:
+        return sh * px
+    return None
+
+
+def get_insider_trades(ticker: str, limit: int = 50) -> list[dict[str, Any]]:
+    """
+    内部人士交易（FMP stable ``insider-trading/search``；旧路径 ``/insider-trading`` 已 404）。
+
+    返回字典列表，键包含：``transactionDate``、``filingDate``、``insiderName``、
+    ``transactionType``（``Buy`` / ``Sell`` / ``Other``）、``shares``、``price``、
+    ``totalValue``、``securityName``、``url``、``raw_transaction_type`` 等。
+    无密钥、错误或空结果时返回 ``[]``。
+    """
+    key = _api_key()
+    if not key:
+        return []
+    sym = (ticker or "").strip().upper()
+    if not sym:
+        return []
+    lim = max(1, min(int(limit), 500))
+    params: dict[str, str | int] = {
+        "symbol": sym,
+        "page": 0,
+        "limit": lim,
+        "apikey": key,
+    }
+    url = f"{BASE_URL}/insider-trading/search"
+    try:
+        r = requests.get(
+            url,
+            params=params,
+            headers=_REQUEST_HEADERS,
+            timeout=_DEFAULT_TIMEOUT_SEC,
+        )
+        r.raise_for_status()
+        data = r.json()
+    except (requests.RequestException, ValueError) as e:
+        logger.warning("FMP insider-trading/search 失败 ticker=%s: %s", sym, e)
+        return []
+
+    if isinstance(data, dict):
+        if data.get("Error Message"):
+            logger.warning(
+                "FMP insider-trading/search 错误 ticker=%s: %s",
+                sym,
+                data.get("Error Message"),
+            )
+            return []
+        return []
+
+    if not isinstance(data, list):
+        return []
+
+    out: list[dict[str, Any]] = []
+    for raw in data:
+        if not isinstance(raw, dict):
+            continue
+        shares = _num(raw.get("securitiesTransacted"))
+        price = _num(raw.get("price"))
+        tv = _insider_total_value(raw)
+        side = _insider_trade_side(raw)
+        out.append(
+            {
+                "symbol": str(raw.get("symbol") or sym).strip().upper(),
+                "transactionDate": str(raw.get("transactionDate") or "").strip()[:10],
+                "filingDate": str(raw.get("filingDate") or "").strip()[:10],
+                "insiderName": str(raw.get("reportingName") or "").strip(),
+                "insiderTitle": str(raw.get("typeOfOwner") or "").strip(),
+                "transactionType": side,
+                "raw_transaction_type": str(raw.get("transactionType") or "").strip(),
+                "shares": shares,
+                "price": price,
+                "totalValue": tv,
+                "securitiesOwned": _num(raw.get("securitiesOwned")),
+                "securityName": str(raw.get("securityName") or "").strip(),
+                "url": str(raw.get("url") or "").strip() or None,
+                "formType": str(raw.get("formType") or "").strip() or None,
+            }
+        )
+    return out

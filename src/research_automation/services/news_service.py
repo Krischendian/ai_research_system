@@ -187,6 +187,14 @@ def get_company_news(
 ) -> list[RawArticle]:
     """
     公司新闻：优先 Benzinga ``/api/v2/news``；失败或空列表时回退 Finnhub ``company-news``。
+
+    每条 ``RawArticle`` 与画像/展示常用字段对应关系：
+
+    - **title** → 标题
+    - **description** → 摘要（与 Benzinga ``summary`` / Finnhub 摘要一致，可用作 ``summary``）
+    - **link** → 原文链接（可用作 ``source_url``）
+    - **published_at_utc**（及 ``finnhub_datetime_unix``）→ 发布时间；业务侧可用
+      :func:`raw_article_to_profile_news_fields` 统一为 ``published_at`` 字符串
     """
     sym = (ticker or "").strip().upper()
     if not sym:
@@ -202,6 +210,34 @@ def get_company_news(
     for it in finnhub_get_company_news(sym, from_date, to_date):
         out.append(company_news_item_to_raw_article(it, sym))
     return out
+
+
+def raw_article_to_profile_news_fields(article: RawArticle) -> dict[str, str] | None:
+    """
+    将 ``RawArticle`` 转为画像补充逻辑使用的规范字段。
+
+    无有效 ``link`` 时返回 ``None``（不生成无外链的新闻动态）。
+    """
+    url = (article.get("link") or "").strip()
+    if not url:
+        return None
+    title = (article.get("title") or "").strip()
+    summary = (article.get("description") or "").strip()
+    pub = (article.get("published_at_utc") or "").strip()
+    if not pub and "finnhub_datetime_unix" in article:
+        try:
+            ts = int(article["finnhub_datetime_unix"])
+            pub = datetime.fromtimestamp(ts, tz=timezone.utc).isoformat().replace(
+                "+00:00", "Z"
+            )
+        except (TypeError, ValueError, OSError):
+            pub = ""
+    return {
+        "title": title,
+        "summary": summary,
+        "source_url": url,
+        "published_at": pub,
+    }
 
 
 def fetch_company_news_raw_articles_for_tickers(

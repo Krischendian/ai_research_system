@@ -1,8 +1,10 @@
 """深度分析：财务数据 + 业务画像。"""
 from __future__ import annotations
 
+import html
 import sys
 from pathlib import Path
+from typing import Any, cast
 
 # 双保险：单独打开 /DeepDive 时也能解析 `frontend` 包
 _fe_root = Path(__file__).resolve().parent.parent.parent
@@ -59,6 +61,111 @@ def _open_paragraph_viewer(
             _body()
 
 
+def _open_key_quote_source_viewer(
+    paragraph_ids: list,
+    source_map: dict,
+    *,
+    source_url: str | None,
+    unique_key: str,
+) -> None:
+    """关键原话：优先展示逐字稿段落；若无段落文本则给深度分析页链接。"""
+    pmap = source_map or {}
+    pids = [str(p) for p in (paragraph_ids or []) if p]
+    url = (source_url or "").strip()
+    dlg = getattr(st, "dialog", None)
+
+    def _body() -> None:
+        shown = False
+        for pid in pids:
+            blob = pmap.get(pid)
+            if blob:
+                shown = True
+                st.markdown(f"**`{pid}`**")
+                st.write(str(blob))
+        if not shown and url:
+            st.caption("当前响应未包含逐字稿段落全文，请在深度分析页查看。")
+        if url:
+            st.markdown(f"[→ 打开深度分析（电话会原文）]({url})")
+
+    if callable(dlg):
+
+        @dlg("原文与溯源")
+        def _wrapped() -> None:
+            _body()
+
+        _wrapped()
+    else:
+        with st.expander("📖 原文与溯源", expanded=True):
+            _body()
+
+
+def _open_excerpt_dialog(title: str, excerpt: str) -> None:
+    """弹窗展示模型返回的原文摘录字符串（如行业判断 industry_view_source）。"""
+    body = (excerpt or "").strip()
+    if not body:
+        return
+    dlg = getattr(st, "dialog", None)
+
+    def _body() -> None:
+        st.markdown(body)
+
+    if callable(dlg):
+
+        @dlg(title)
+        def _wrapped() -> None:
+            _body()
+
+        _wrapped()
+    else:
+        with st.expander(f"📖 {title}", expanded=True):
+            _body()
+
+
+def _open_industry_trace_dialog(
+    excerpt: str | None,
+    paragraph_ids: list,
+    source_map: dict,
+) -> None:
+    """行业判断：摘录（若有）+ 10-K 段落，统一 dialog；无 dialog 时用展开区。"""
+    ex = (excerpt or "").strip()
+    pids = [str(p) for p in (paragraph_ids or []) if p]
+    if not ex and not pids:
+        return
+    pmap = source_map or {}
+    dlg = getattr(st, "dialog", None)
+
+    def _body() -> None:
+        if ex:
+            st.markdown("**原文依据（摘录）**")
+            st.markdown(ex)
+        if pids:
+            if ex:
+                st.divider()
+            st.markdown("**10-K 原文段落**")
+            for pid in pids:
+                st.markdown(f"**`{pid}`**")
+                st.write(str(pmap.get(pid, "（无文本）")))
+
+    if callable(dlg):
+
+        @dlg("行业判断 · 溯源")
+        def _wrapped() -> None:
+            _body()
+
+        _wrapped()
+    else:
+        with st.expander("📖 行业判断 · 溯源", expanded=True):
+            _body()
+
+
+def _paragraph_ids_have_bodies(paragraph_ids: list, source_map: dict) -> bool:
+    pmap = source_map or {}
+    for p in paragraph_ids or []:
+        if pmap.get(str(p)):
+            return True
+    return False
+
+
 def _sourced_block(
     markdown_text: str,
     paragraph_ids: list,
@@ -109,6 +216,21 @@ if "deep_dive_prefill_ticker" in st.session_state:
     st.session_state["deep_ticker_widget"] = st.session_state.pop(
         "deep_dive_prefill_ticker"
     )
+if "deep_dive_prefill_quarter" in st.session_state:
+    st.session_state["deep_earnings_quarter"] = st.session_state.pop(
+        "deep_dive_prefill_quarter"
+    )
+
+# 全局搜索等外链：/DeepDive?ticker=…&quarter=… 仅在与上次 URL 签名不同时写入，避免覆盖用户已改的输入
+_qp_sig = f"{st.query_params.get('ticker') or ''}|{st.query_params.get('quarter') or ''}"
+if _qp_sig != st.session_state.get("_deep_dive_url_qp_sig"):
+    st.session_state["_deep_dive_url_qp_sig"] = _qp_sig
+    _t_qp = (st.query_params.get("ticker") or "").strip()
+    _q_qp = (st.query_params.get("quarter") or "").strip()
+    if _t_qp:
+        st.session_state["deep_ticker_widget"] = _t_qp
+    if _q_qp:
+        st.session_state["deep_earnings_quarter"] = _q_qp
 
 _auto_query = st.session_state.pop("deep_dive_auto_query", False)
 
@@ -439,24 +561,76 @@ if st.session_state.queried:
                 trend_fig = _financial_trend_figure(rows)
                 if trend_fig is not None:
                     st.plotly_chart(trend_fig, use_container_width=True)
+                # 按年升序，计算 YoY%
+                sorted_rows = sorted(
+                    [r for r in rows if r.get("year") is not None],
+                    key=lambda x: int(x["year"]),
+                )
+
+                def _yoy(curr: float | None, prev: float | None) -> str:
+                    if curr is None or prev is None or prev == 0:
+                        return "—"
+                    pct = (curr - prev) / abs(prev) * 100
+                    sign = "+" if pct >= 0 else ""
+                    return f"{sign}{pct:.1f}%"
+
                 display_rows = []
-                for row in rows:
+                for i, row in enumerate(sorted_rows):
+                    prev = sorted_rows[i - 1] if i > 0 else None
+                    nd = row.get("net_debt_to_equity")
+                    prev_nd = prev.get("net_debt_to_equity") if prev else None
                     display_rows.append(
                         {
-                            "年份": row.get("year"),
+                            "财年": int(row.get("year")),
                             "营收（美元）": _fmt_usd(row.get("revenue")),
-                            "EBITDA（美元）": _fmt_usd(row.get("ebitda")),
-                            "资本支出（美元）": _fmt_usd(row.get("capex")),
-                            "毛利率": _fmt_ratio(row.get("gross_margin")),
-                            "净负债/权益比": (
-                                f"{row.get('net_debt_to_equity'):.4f}"
-                                if row.get("net_debt_to_equity") is not None
-                                else "—"
+                            "营收 YoY": _yoy(
+                                row.get("revenue"),
+                                prev.get("revenue") if prev else None,
                             ),
+                            "EBITDA（美元）": _fmt_usd(row.get("ebitda")),
+                            "EBITDA YoY": _yoy(
+                                row.get("ebitda"),
+                                prev.get("ebitda") if prev else None,
+                            ),
+                            "资本支出（美元）": _fmt_usd(row.get("capex")),
+                            "CAPEX YoY": _yoy(
+                                row.get("capex"),
+                                prev.get("capex") if prev else None,
+                            ),
+                            "毛利率": _fmt_ratio(row.get("gross_margin")),
+                            "毛利率 YoY": _yoy(
+                                row.get("gross_margin"),
+                                prev.get("gross_margin") if prev else None,
+                            ),
+                            "净负债/权益比": (
+                                f"{nd:.4f}" if nd is not None else "—"
+                            ),
+                            "净负债/权益比 YoY": _yoy(nd, prev_nd),
                         }
                     )
                 df = pd.DataFrame(display_rows)
-                st.dataframe(df, use_container_width=True, hide_index=True)
+                st.caption(
+                    "单位：美元原值（FMP）或百万美元（SEC）；YoY% 为同比变化。"
+                )
+
+                # 用颜色高亮 YoY 列：正数绿，负数红
+                yoy_cols = [c for c in df.columns if "YoY" in c]
+
+                def _color_yoy(val: str) -> str:
+                    if val == "—" or not isinstance(val, str):
+                        return ""
+                    if val.startswith("+"):
+                        return "color: #2e7d32; font-weight: bold"
+                    if val.startswith("-"):
+                        return "color: #c62828; font-weight: bold"
+                    return ""
+
+                _sty = cast(Any, df.style)
+                try:
+                    styled = _sty.map(_color_yoy, subset=yoy_cols)
+                except AttributeError:
+                    styled = _sty.applymap(_color_yoy, subset=yoy_cols)
+                st.dataframe(styled, use_container_width=True, hide_index=True)
 
         st.subheader("业务画像")
         if st.session_state.profile_error:
@@ -516,12 +690,25 @@ if st.session_state.queried:
 
             st.subheader("管理层对行业的判断")
             st.caption("仅收录管理层在披露中的明确表述；非模型对行业的独立判断。")
-            _sourced_block(
-                prof.get("industry_view") or "—",
-                fpid.get("industry_view") or [],
-                srcp,
-                unique_key=f"{prof.get('ticker')}_iv",
-            )
+            _iv_md = str(prof.get("industry_view") or "").strip() or "—"
+            _iv_src = str(prof.get("industry_view_source") or "").strip()
+            _iv_pids = fpid.get("industry_view") or []
+            _iv_show_trace = bool(_iv_src) or bool(_iv_pids)
+            ic1, ic2 = st.columns([12, 1])
+            with ic1:
+                st.markdown(_iv_md)
+            with ic2:
+                if _iv_show_trace:
+                    if st.button(
+                        "📖",
+                        key=f"cite_btn_{prof.get('ticker')}_iv",
+                        help="查看原文摘录与 10-K 段落",
+                    ):
+                        _open_industry_trace_dialog(
+                            _iv_src or None,
+                            _iv_pids,
+                            srcp,
+                        )
 
             st.subheader("关键管理层原话（Key Quotes）")
             st.caption(
@@ -536,24 +723,56 @@ if st.session_state.queried:
                             f"**{item.get('speaker') or 'UNKNOWN'}** · "
                             f"`{item.get('topic') or ''}`"
                         )
+                        if item.get("data_source") == "earnings_call":
+                            st.caption("来源：电话会议")
                         st.markdown(f"> {item.get('quote') or '—'}")
                     with c_b:
                         pids = item.get("source_paragraph_ids") or []
-                        if pids and st.button(
+                        kq_url = str(item.get("source_url") or "").strip()
+                        is_ec = item.get("data_source") == "earnings_call"
+                        has_bodies = _paragraph_ids_have_bodies(pids, srcp)
+                        # 电话会：逐字稿段落可在 dialog 展示；否则直接打开深度分析原文链接（新标签页）
+                        if is_ec and kq_url and not has_bodies:
+                            lb_kq = getattr(st, "link_button", None)
+                            if callable(lb_kq):
+                                lb_kq(
+                                    "📖",
+                                    kq_url,
+                                    key=f"kq_url_{prof.get('ticker')}_{qi}",
+                                    help="打开电话会原文（深度分析）",
+                                )
+                            else:
+                                safe_u = html.escape(kq_url, quote=True)
+                                st.markdown(
+                                    f'<a href="{safe_u}" target="_blank" '
+                                    'rel="noopener noreferrer">📖</a>',
+                                    unsafe_allow_html=True,
+                                )
+                        elif (pids or (is_ec and kq_url)) and st.button(
                             "📖",
                             key=f"kq_{prof.get('ticker')}_{qi}",
-                            help="查看原文段落",
+                            help="查看原文段落或电话会溯源",
                         ):
-                            _open_paragraph_viewer(
-                                pids,
-                                srcp,
-                                unique_key=f"kq_d_{prof.get('ticker')}_{qi}",
-                            )
+                            if is_ec:
+                                _open_key_quote_source_viewer(
+                                    pids,
+                                    srcp,
+                                    source_url=kq_url or None,
+                                    unique_key=f"kq_ec_{prof.get('ticker')}_{qi}",
+                                )
+                            else:
+                                _open_paragraph_viewer(
+                                    pids,
+                                    srcp,
+                                    unique_key=f"kq_d_{prof.get('ticker')}_{qi}",
+                                )
             else:
                 st.caption("暂无（节选内无合格逐字原话或模型未返回）。")
 
             st.subheader("近期动态")
-            st.caption("按类型分组；每条须含「原文引用」（披露节选逐字摘录）。")
+            st.caption(
+                "按类型分组。10-K 条目点 📖 打开段落弹窗；新闻条目点 📖 在新标签页打开原文链接。"
+            )
             actions = prof.get("corporate_actions") or []
             by_type: dict[str, list] = {}
             for a in actions:
@@ -582,10 +801,27 @@ if st.session_state.queried:
                                 st.caption(f"原文引用：{sq}")
                         with cx2:
                             ap = item.get("source_paragraph_ids") or []
+                            ca_url = str(item.get("source_url") or "").strip()
+                            if ca_url:
+                                lb_ca = getattr(st, "link_button", None)
+                                if callable(lb_ca):
+                                    lb_ca(
+                                        "📖",
+                                        ca_url,
+                                        key=f"ca_url_{prof.get('ticker')}_{at_key}_{ai}",
+                                        help="在新标签页打开新闻原文",
+                                    )
+                                else:
+                                    safe = html.escape(ca_url, quote=True)
+                                    st.markdown(
+                                        f'<a href="{safe}" target="_blank" '
+                                        'rel="noopener noreferrer">📖</a>',
+                                        unsafe_allow_html=True,
+                                    )
                             if ap and st.button(
                                 "📖",
-                                key=f"ca_{prof.get('ticker')}_{at_key}_{ai}",
-                                help="查看原文段落",
+                                key=f"ca_p_{prof.get('ticker')}_{at_key}_{ai}",
+                                help="查看 10-K 原文段落",
                             ):
                                 _open_paragraph_viewer(
                                     ap,

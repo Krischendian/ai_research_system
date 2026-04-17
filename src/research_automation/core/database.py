@@ -28,6 +28,14 @@ def get_connection() -> sqlite3.Connection:
     return conn
 
 
+def _ensure_companies_columns(conn: sqlite3.Connection) -> None:
+    """为既有库补齐 ``companies`` 列（如 ``bloomberg_ticker``）。"""
+    cur = conn.execute("PRAGMA table_info(companies)")
+    cols = {str(r[1]) for r in cur.fetchall()}
+    if "bloomberg_ticker" not in cols:
+        conn.execute("ALTER TABLE companies ADD COLUMN bloomberg_ticker TEXT")
+
+
 def init_db(conn: sqlite3.Connection) -> None:
     """创建 financials、companies、document_paragraphs 等表。"""
     conn.execute(
@@ -51,10 +59,12 @@ def init_db(conn: sqlite3.Connection) -> None:
             company_name TEXT NOT NULL,
             sector TEXT NOT NULL,
             country TEXT NOT NULL,
-            is_active INTEGER NOT NULL DEFAULT 1
+            is_active INTEGER NOT NULL DEFAULT 1,
+            bloomberg_ticker TEXT
         )
         """
     )
+    _ensure_companies_columns(conn)
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS document_paragraphs (

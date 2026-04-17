@@ -362,9 +362,10 @@ st.caption(
     "，失败时用 6 小时内磁盘缓存，仍空再合并站内 RSS_FEEDS。"
 )
 
-dsl = (data.get("data_source_label") or "").strip()
-if dsl:
-    st.caption(f"**整体来源**：{dsl}")
+# 后端 ``data_source_label`` 含 Benzinga/Finnhub API 配置说明，易在宏观/公司新闻区底部形成冗长提示，故不展示。
+# dsl = (data.get("data_source_label") or "").strip()
+# if dsl:
+#     st.caption(f"**整体来源**：{dsl}")
 pn = (data.get("provenance_note") or "").strip()
 if pn:
     st.info(pn)

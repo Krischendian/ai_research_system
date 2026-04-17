@@ -21,6 +21,16 @@ pg = st.navigation(
             title="自动化晨报",
             icon="🌅",
         ),
+        st.Page(
+            str(_ROOT / "frontend" / "pages" / "04_SectorReport.py"),
+            title="行业监控报告",
+            icon="📋",
+        ),
+        st.Page(
+            str(_ROOT / "frontend" / "pages" / "03_Search.py"),
+            title="全局搜索",
+            icon="🔎",
+        ),
     ],
     position="sidebar",
 )

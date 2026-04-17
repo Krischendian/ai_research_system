@@ -6,6 +6,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from research_automation.models.earnings import (
+    EarningsCallAnalysis,
+    EarningsQuotation,
+)
+from research_automation.services.earnings_service import EarningsAnalysisError
 from research_automation.services.profile_service import get_profile
 
 _PROFILE_EXCERPT_FIXTURE = (
@@ -28,10 +33,16 @@ def _non_placeholder(s: str) -> bool:
 
 
 class TestBusinessProfileFields(unittest.TestCase):
+    @patch("research_automation.services.profile_service.get_company_news")
+    @patch("research_automation.services.profile_service.analyze_earnings_call")
     @patch("research_automation.services.profile_service.chat")
     @patch("research_automation.services.profile_service.get_10k_sections")
-    def test_future_and_industry_fields_populated(self, mock_sections, mock_chat) -> None:
+    def test_future_and_industry_fields_populated(
+        self, mock_sections, mock_chat, mock_earn, mock_news
+    ) -> None:
         """Mock LLM：新字段须为可展示的抽取内容（非占位）。"""
+        mock_news.return_value = []
+        mock_earn.side_effect = EarningsAnalysisError("skip merge in test")
         mock_sections.return_value = _mock_10k_sections()
         mock_chat.return_value = json.dumps(
             {
@@ -44,7 +55,11 @@ class TestBusinessProfileFields(unittest.TestCase):
                     {"segment_name": "美洲", "percentage": "42%"},
                 ],
                 "future_guidance": "公司预计下一财季总收入介于 1180 亿至 1210 亿美元；服务收入同比中段两位数增长。",
-                "industry_view": "管理层认为高端智能手机全球需求较往年放缓，换机周期拉长；主要产品类别竞争加剧。",
+                "industry_view_text": "管理层认为高端智能手机全球需求较往年放缓，换机周期拉长；主要产品类别竞争加剧。",
+                "industry_view_source": (
+                    "Item 7 MD&A: 'Regarding our Services segment, we expect year-over-year revenue growth "
+                    "in the mid-teens, consistent with our recent trends.'"
+                ),
                 "key_quotes": [
                     {
                         "speaker": "CEO",
@@ -105,18 +120,26 @@ class TestBusinessProfileFields(unittest.TestCase):
         self.assertTrue(_non_placeholder(profile.industry_view))
         self.assertIn("1180", profile.future_guidance)
         self.assertTrue("竞争" in profile.industry_view or "需求" in profile.industry_view)
+        self.assertIsNotNone(profile.industry_view_source)
+        self.assertIn("Services segment", profile.industry_view_source or "")
         self.assertGreaterEqual(len(profile.key_quotes), 1)
         self.assertTrue(all(kq.quote for kq in profile.key_quotes))
-        types_found = {a.action_type for a in profile.corporate_actions}
+        types_found = {a.action_type for a in profile.corporate_actions if not a.source_url}
         self.assertEqual(types_found, {"new_business", "acquisition", "partnership"})
         self.assertTrue(all(a.source_quote for a in profile.corporate_actions))
         mock_sections.assert_called_once()
         mock_chat.assert_called_once()
 
+    @patch("research_automation.services.profile_service.get_company_news")
+    @patch("research_automation.services.profile_service.analyze_earnings_call")
     @patch("research_automation.services.profile_service.chat")
     @patch("research_automation.services.profile_service.get_10k_sections")
-    def test_missing_guidance_fields_get_placeholder(self, mock_sections, mock_chat) -> None:
+    def test_missing_guidance_fields_get_placeholder(
+        self, mock_sections, mock_chat, mock_earn, mock_news
+    ) -> None:
         """Mock LLM 省略新字段时，服务端应回落到占位文案。"""
+        mock_news.return_value = []
+        mock_earn.side_effect = EarningsAnalysisError("skip")
         mock_sections.return_value = _mock_10k_sections()
         mock_chat.return_value = json.dumps(
             {
@@ -133,10 +156,16 @@ class TestBusinessProfileFields(unittest.TestCase):
         self.assertEqual(profile.key_quotes, [])
         self.assertEqual(profile.corporate_actions, [])
 
+    @patch("research_automation.services.profile_service.get_company_news")
+    @patch("research_automation.services.profile_service.analyze_earnings_call")
     @patch("research_automation.services.profile_service.chat")
     @patch("research_automation.services.profile_service.get_10k_sections")
-    def test_item1_rule_fallback_fills_revenue_mix(self, mock_sections, mock_chat) -> None:
+    def test_item1_rule_fallback_fills_revenue_mix(
+        self, mock_sections, mock_chat, mock_earn, mock_news
+    ) -> None:
         """模型未返回分部/地区时，从 Item 1 原文规则解析补全。"""
+        mock_news.return_value = []
+        mock_earn.side_effect = EarningsAnalysisError("skip")
         mock_sections.return_value = _mock_10k_sections()
         mock_chat.return_value = json.dumps(
             {
@@ -164,10 +193,16 @@ class TestBusinessProfileFields(unittest.TestCase):
         self.assertIn("Greater China", geos)
         self.assertIn("规则解析补全", profile.data_source_label)
 
+    @patch("research_automation.services.profile_service.get_company_news")
+    @patch("research_automation.services.profile_service.analyze_earnings_call")
     @patch("research_automation.services.profile_service.chat")
     @patch("research_automation.services.profile_service.get_10k_sections")
-    def test_item8_dollar_table_fallback(self, mock_sections, mock_chat) -> None:
+    def test_item8_dollar_table_fallback(
+        self, mock_sections, mock_chat, mock_earn, mock_news
+    ) -> None:
         """Item 7 内「dollars in millions」表：按金额推算占比。"""
+        mock_news.return_value = []
+        mock_earn.side_effect = EarningsAnalysisError("skip")
         tbl = (
             "The following table shows net sales by category for 2025, 2024 and 2023 "
             "(dollars in millions): iPhone $ 209,586 Mac 33,708 iPad 28,023 "
@@ -212,10 +247,16 @@ class TestBusinessProfileFields(unittest.TestCase):
         )
         self.assertIn("Net sales", profile.data_source_label)
 
+    @patch("research_automation.services.profile_service.get_company_news")
+    @patch("research_automation.services.profile_service.analyze_earnings_call")
     @patch("research_automation.services.profile_service.chat")
     @patch("research_automation.services.profile_service.get_10k_sections")
-    def test_key_quotes_non_verbatim_dropped(self, mock_sections, mock_chat) -> None:
+    def test_key_quotes_non_verbatim_dropped(
+        self, mock_sections, mock_chat, mock_earn, mock_news
+    ) -> None:
         """节选内不存在的 quote 须在服务端丢弃，不得入库。"""
+        mock_news.return_value = []
+        mock_earn.side_effect = EarningsAnalysisError("skip")
         mock_sections.return_value = _mock_10k_sections()
         mock_chat.return_value = json.dumps(
             {
@@ -238,10 +279,16 @@ class TestBusinessProfileFields(unittest.TestCase):
         profile = get_profile("BADQUOTE")
         self.assertEqual(profile.key_quotes, [])
 
+    @patch("research_automation.services.profile_service.get_company_news")
+    @patch("research_automation.services.profile_service.analyze_earnings_call")
     @patch("research_automation.services.profile_service.chat")
     @patch("research_automation.services.profile_service.get_10k_sections")
-    def test_corporate_actions_non_verbatim_dropped(self, mock_sections, mock_chat) -> None:
+    def test_corporate_actions_non_verbatim_dropped(
+        self, mock_sections, mock_chat, mock_earn, mock_news
+    ) -> None:
         """source_quote 不在节选内则整条动态丢弃。"""
+        mock_news.return_value = []
+        mock_earn.side_effect = EarningsAnalysisError("skip")
         mock_sections.return_value = _mock_10k_sections()
         mock_chat.return_value = json.dumps(
             {
@@ -266,13 +313,17 @@ class TestBusinessProfileFields(unittest.TestCase):
         profile = get_profile("BADACTION")
         self.assertEqual(profile.corporate_actions, [])
 
+    @patch("research_automation.services.profile_service.get_company_news")
+    @patch("research_automation.services.profile_service.analyze_earnings_call")
     @patch("research_automation.services.profile_service.get_segment_revenue")
     @patch("research_automation.services.profile_service.chat")
     @patch("research_automation.services.profile_service.get_10k_sections")
     def test_fmp_segment_override_when_empty(
-        self, mock_sections, mock_chat, mock_fmp_seg
+        self, mock_sections, mock_chat, mock_fmp_seg, mock_earn, mock_news
     ) -> None:
         """无业务线占比时以 FMP 分部数据覆盖。"""
+        mock_news.return_value = []
+        mock_earn.side_effect = EarningsAnalysisError("skip")
         mock_sections.return_value = {
             "item1": "No segment percents here.\n",
             "item1a": "",
@@ -307,13 +358,17 @@ class TestBusinessProfileFields(unittest.TestCase):
         self.assertIn("FMP Revenue Product Segmentation", profile.data_source_label)
         self.assertIsNone(profile.validation_warning)
 
+    @patch("research_automation.services.profile_service.get_company_news")
+    @patch("research_automation.services.profile_service.analyze_earnings_call")
     @patch("research_automation.services.profile_service.get_segment_revenue")
     @patch("research_automation.services.profile_service.chat")
     @patch("research_automation.services.profile_service.get_10k_sections")
     def test_fmp_segment_validation_warning_large_gap(
-        self, mock_sections, mock_chat, mock_fmp_seg
+        self, mock_sections, mock_chat, mock_fmp_seg, mock_earn, mock_news
     ) -> None:
         """与 FMP 能对齐的分部占比差超过 10% 时写入 validation_warning。"""
+        mock_news.return_value = []
+        mock_earn.side_effect = EarningsAnalysisError("skip")
         mock_sections.return_value = {
             "item1": "Plain.\n",
             "item1a": "",
@@ -345,6 +400,115 @@ class TestBusinessProfileFields(unittest.TestCase):
         self.assertEqual(profile.validation_warning, "业务线占比与财报披露偏差较大，请人工复核")
         self.assertEqual(profile.revenue_by_segment[0].segment_name, "iPhone")
         self.assertEqual(profile.revenue_by_segment[0].percentage, "15%")
+
+    @patch("research_automation.services.profile_service.get_company_news")
+    @patch("research_automation.services.profile_service.analyze_earnings_call")
+    @patch("research_automation.services.profile_service.chat")
+    @patch("research_automation.services.profile_service.get_10k_sections")
+    def test_earnings_quotations_merged_into_profile(
+        self, mock_sections, mock_chat, mock_earn, mock_news
+    ) -> None:
+        """电话会 ``quotations`` 应并入 key_quotes，并保留段落与深度分析链接。"""
+        mock_news.return_value = []
+        mock_sections.return_value = _mock_10k_sections()
+        mock_chat.return_value = json.dumps(
+            {
+                "core_business": "测试业务",
+                "revenue_by_segment": [{"segment_name": "A", "percentage": "1%"}],
+                "revenue_by_geography": [],
+                "future_guidance": None,
+                "industry_view": None,
+                "key_quotes": [],
+                "corporate_actions": [],
+                "field_sources": {
+                    "core_business": [],
+                    "future_guidance": [],
+                    "industry_view": [],
+                },
+            },
+            ensure_ascii=False,
+        )
+        eq_quote = (
+            "Regarding our Services segment, we expect year-over-year revenue growth "
+            "in the mid-teens, consistent with our recent trends."
+        )
+        pid = "EARNINGS_DOC_TEST:p7"
+        mock_earn.return_value = EarningsCallAnalysis(
+            ticker="ECMERGE",
+            quarter="2024Q4",
+            quotations=[
+                EarningsQuotation(
+                    speaker="IR",
+                    quote=eq_quote,
+                    topic="Guidance",
+                    source_paragraph_ids=[pid],
+                )
+            ],
+            source_paragraphs={pid: f"Paragraph body containing {eq_quote} verbatim."},
+        )
+        profile = get_profile("ECMERGE")
+        ec_kq = [x for x in profile.key_quotes if x.data_source == "earnings_call"]
+        self.assertEqual(len(ec_kq), 1)
+        self.assertEqual(ec_kq[0].quote, eq_quote)
+        self.assertEqual(ec_kq[0].speaker, "IR")
+        self.assertEqual(ec_kq[0].topic, "Guidance")
+        self.assertEqual(ec_kq[0].source_paragraph_ids, [pid])
+        self.assertIsNotNone(ec_kq[0].source_url)
+        self.assertIn("DeepDive", ec_kq[0].source_url or "")
+        self.assertIn("2024Q4", ec_kq[0].source_url or "")
+        self.assertIn(pid, profile.source_paragraphs)
+        self.assertIn("电话会", profile.data_source_label)
+        mock_earn.assert_called()
+
+    @patch("research_automation.services.profile_service.get_company_news")
+    @patch("research_automation.services.profile_service.analyze_earnings_call")
+    @patch("research_automation.services.profile_service.chat")
+    @patch("research_automation.services.profile_service.get_10k_sections")
+    def test_news_corporate_actions_require_source_url(
+        self, mock_sections, mock_chat, mock_earn, mock_news
+    ) -> None:
+        """公司新闻须含外链才写入 CorporateAction，并保留 source_url / source_quote。"""
+        mock_earn.side_effect = EarningsAnalysisError("skip")
+        mock_news.return_value = [
+            {
+                "title": "ACME announces acquisition of Beta LLC",
+                "link": "https://news.test/acme-beta",
+                "description": "The cash deal is expected to close next quarter.",
+                "source": "TestWire",
+                "published_at_utc": "2026-02-01T10:00:00Z",
+            },
+            {
+                "title": "No link story about merger",
+                "link": "",
+                "description": "Should be skipped.",
+                "source": "TestWire",
+            },
+        ]
+        mock_sections.return_value = _mock_10k_sections()
+        mock_chat.return_value = json.dumps(
+            {
+                "core_business": "测试",
+                "revenue_by_segment": [{"segment_name": "A", "percentage": "1%"}],
+                "revenue_by_geography": [],
+                "future_guidance": None,
+                "industry_view": None,
+                "key_quotes": [],
+                "corporate_actions": [],
+                "field_sources": {
+                    "core_business": [],
+                    "future_guidance": [],
+                    "industry_view": [],
+                },
+            },
+            ensure_ascii=False,
+        )
+        profile = get_profile("NEWSCA")
+        with_url = [a for a in profile.corporate_actions if a.source_url]
+        self.assertEqual(len(with_url), 1)
+        self.assertEqual(with_url[0].action_type, "acquisition")
+        self.assertEqual(with_url[0].source_url, "https://news.test/acme-beta")
+        self.assertIn("cash deal", (with_url[0].source_quote or "").lower())
+        self.assertIn("公司新闻", profile.data_source_label)
 
 
 if __name__ == "__main__":

@@ -15,6 +15,17 @@ class CorporateAction(BaseModel):
         default_factory=list,
         description="对应 document_paragraphs 段落 ID",
     )
+    source_url: Optional[str] = Field(
+        None,
+        description="新闻类动态的外链原文；10-K 抽取条目通常为空",
+    )
+
+    @field_validator("source_url", mode="before")
+    @classmethod
+    def _empty_source_url_to_none(cls, v: object) -> object:
+        if v == "":
+            return None
+        return v
 
 
 class KeyManagementQuote(BaseModel):
@@ -27,6 +38,31 @@ class KeyManagementQuote(BaseModel):
         default_factory=list,
         description="溯源段落 ID",
     )
+    modality: str = Field(
+        "fact",
+        description=(
+            "'fact' | 'forward_looking' | 'uncertain'。"
+            "'forward_looking' 表示原文含 expect/plan/may/consider/intend/target 等情态词；"
+            "'uncertain' 表示原文含 may/might/could 等不确定词；"
+            "'fact' 表示已发生的确定性陈述。"
+            "由 hallucination_guard 校验，禁止将 forward_looking 原文归类为 fact。"
+        ),
+    )
+    data_source: Optional[str] = Field(
+        None,
+        description='来源：`earnings_call` 为电话会分析复用；缺省为 10-K 画像抽取',
+    )
+    source_url: Optional[str] = Field(
+        None,
+        description="电话会条目跳转深度分析页的 URL（含 ticker、quarter）",
+    )
+
+    @field_validator("data_source", "source_url", mode="before")
+    @classmethod
+    def _empty_str_to_none(cls, v: object) -> object:
+        if v == "":
+            return None
+        return v
 
 
 class SegmentMix(BaseModel):
@@ -57,6 +93,10 @@ class BusinessProfile(BaseModel):
     # 均须来自披露原文的可验证摘录语义；无明确表述时用占位，禁止模型臆测（见 profile_service Prompt）
     future_guidance: str = "原文未明确提及"  # 公司对未来展望（如指引、下季度表述）
     industry_view: str = "原文未明确提及"  # 管理层对行业状态的看法（须为原文明确表述）
+    industry_view_source: Optional[str] = Field(
+        None,
+        description="行业判断对应的原文摘录或段落引用（供前端弹窗核对；无则 None）",
+    )
     key_quotes: list[KeyManagementQuote] = Field(
         default_factory=list,
         description="关键管理层原话（逐字摘录，无则空列表）",

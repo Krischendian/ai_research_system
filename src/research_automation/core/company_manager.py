@@ -15,6 +15,7 @@ class CompanyRecord:
     sector: str
     country: str
     is_active: int
+    bloomberg_ticker: str | None = None
 
 
 def add_company(
@@ -24,17 +25,17 @@ def add_company(
     country: str,
     *,
     is_active: int = 1,
+    bloomberg_ticker: str | None = None,
 ) -> None:
     """
     添加或更新公司（按 ticker upsert）。
     ``is_active`` 非 0 视为监控中。
+    ``company_name`` 可为空串（占位，后续可由 API 补全）。
     """
     sym = (ticker or "").strip().upper()
     if not sym:
         raise ValueError("ticker 不能为空")
     name = (company_name or "").strip()
-    if not name:
-        raise ValueError("company_name 不能为空")
     sec = (sector or "").strip()
     if not sec:
         raise ValueError("sector 不能为空")
@@ -42,21 +43,25 @@ def add_company(
     if not ctry:
         raise ValueError("country 不能为空")
     active = 1 if int(is_active) else 0
+    bb = (bloomberg_ticker or "").strip() or None
 
     conn = get_connection()
     try:
         init_db(conn)
         conn.execute(
             """
-            INSERT INTO companies (ticker, company_name, sector, country, is_active)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO companies (
+                ticker, company_name, sector, country, is_active, bloomberg_ticker
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT(ticker) DO UPDATE SET
                 company_name = excluded.company_name,
                 sector = excluded.sector,
                 country = excluded.country,
-                is_active = excluded.is_active
+                is_active = excluded.is_active,
+                bloomberg_ticker = COALESCE(excluded.bloomberg_ticker, companies.bloomberg_ticker)
             """,
-            (sym, name, sec, ctry, active),
+            (sym, name, sec, ctry, active, bb),
         )
         conn.commit()
     finally:
@@ -83,7 +88,7 @@ def list_companies(
         if active_only:
             where.append("is_active = 1")
         sql = f"""
-            SELECT ticker, company_name, sector, country, is_active
+            SELECT ticker, company_name, sector, country, is_active, bloomberg_ticker
             FROM companies
             WHERE {' AND '.join(where)}
             ORDER BY ticker
@@ -96,6 +101,11 @@ def list_companies(
                 sector=str(r["sector"]),
                 country=str(r["country"]),
                 is_active=int(r["is_active"]),
+                bloomberg_ticker=(
+                    None
+                    if r["bloomberg_ticker"] is None
+                    else str(r["bloomberg_ticker"])
+                ),
             )
             for r in cur.fetchall()
         ]
