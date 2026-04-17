@@ -337,3 +337,541 @@ def generate_sector_report(
     )
 
     return "\n".join(lines).rstrip() + "\n"
+
+
+# ---------------------------------------------------------------------------
+# 六步结构行业报告（新）
+# ---------------------------------------------------------------------------
+
+
+def _resolve_sector_news_days_back(days_back: int | None) -> int:
+    if days_back is not None:
+        return max(1, min(30, int(days_back)))
+    raw = (os.getenv("SECTOR_REPORT_NEWS_DAYS_BACK") or "7").strip()
+    try:
+        return max(1, min(30, int(raw)))
+    except ValueError:
+        return 7
+
+
+def _load_per_company_signals_and_insiders(
+    sector: str,
+    days_back: int,
+    thr: int,
+    report_stats: dict[str, Any] | None,
+) -> (
+    tuple[
+        list[CompanyRecord],
+        list[
+            tuple[
+                CompanyRecord,
+                list[dict[str, Any]],
+                dict[str, Any],
+                int,
+                bool,
+            ]
+        ],
+        dict[str, Any],
+        SignalFetchStats,
+    ]
+    | None
+):
+    sec = (sector or "").strip()
+    thr = max(0, min(3, thr))
+    fetch_tot = SignalFetchStats()
+    stats: dict[str, Any] = {
+        "relevance_threshold": thr,
+        "raw_signal_count": 0,
+        "filtered_signal_count": 0,
+        "below_relevance_dropped": 0,
+        "cross_ticker_duplicate_urls": 0,
+        "fetch_aggregate": fetch_tot,
+    }
+    if report_stats is not None:
+        report_stats.clear()
+    if not sec:
+        return None
+    companies = list_companies(sector=sec, active_only=True)
+    if not companies:
+        if report_stats is not None:
+            report_stats.update(stats)
+        return None
+
+    per_company: list[
+        tuple[
+            CompanyRecord,
+            list[dict[str, Any]],
+            dict[str, Any],
+            int,
+            bool,
+        ]
+    ] = []
+    seen_urls_global: set[str] = set()
+    raw_total = filtered_total = below_thr_total = dup_cross = 0
+
+    for rec in companies:
+        t = rec.ticker
+        sym_stats = SignalFetchStats()
+        try:
+            signals = fetch_signals_for_ticker(
+                t,
+                days_back=days_back,
+                company_name=(rec.company_name or "").strip() or None,
+                stats_out=sym_stats,
+            )
+        except Exception:
+            logger.exception("信号拉取失败 ticker=%s", t)
+            signals = []
+            sym_stats = SignalFetchStats()
+
+        fetch_tot.merge_from(sym_stats)
+        had_fetch_signals = len(signals) > 0
+        raw_total += len(signals)
+
+        filtered_signals = [
+            s for s in signals if int(s.get("relevance_score") or 0) >= thr
+        ]
+        below_n = len(signals) - len(filtered_signals)
+        below_thr_total += below_n
+
+        deduped: list[dict[str, Any]] = []
+        for s in filtered_signals:
+            u = str(s.get("url") or "").strip().lower()
+            if u:
+                if u in seen_urls_global:
+                    dup_cross += 1
+                    continue
+                seen_urls_global.add(u)
+            deduped.append(s)
+        filtered_total += len(deduped)
+
+        try:
+            insider = get_insider_summary(t, days_back=days_back)
+        except Exception:
+            logger.exception("内部交易汇总失败 ticker=%s", t)
+            insider = get_insider_summary("", days_back=days_back)
+
+        per_company.append((rec, deduped, insider, below_n, had_fetch_signals))
+
+    stats["raw_signal_count"] = raw_total
+    stats["filtered_signal_count"] = filtered_total
+    stats["below_relevance_dropped"] = below_thr_total
+    stats["cross_ticker_duplicate_urls"] = dup_cross
+    if report_stats is not None:
+        report_stats.update(stats)
+    return companies, per_company, stats, fetch_tot
+
+
+def _fmt_pct(v: float | None) -> str:
+    if v is None:
+        return "—"
+    return f"{v * 100:.1f}%"
+
+
+def _fmt_roc(v: float | None) -> str:
+    if v is None:
+        return "—"
+    sign = "+" if v >= 0 else ""
+    return f"{sign}{v * 100:.1f}%"
+
+
+def _confidence_zh(c: str) -> str:
+    return {"high": "高", "medium": "中", "low": "低"}.get(
+        str(c or "").strip().lower(), "低"
+    )
+
+
+def _step1_sector_business_overview(
+    per_company: list[
+        tuple[
+            CompanyRecord,
+            list[dict[str, Any]],
+            dict[str, Any],
+            int,
+            bool,
+        ]
+    ],
+) -> list[str]:
+    lines: list[str] = ["## Step 1｜Sector 业务全景", ""]
+    lines.append("*（待实现：汇总各公司 revenue breakdown，直引原文数字）*")
+    lines.append("")
+    return lines
+
+
+def _step2_per_company_revenue_breakdown(
+    per_company: list[
+        tuple[
+            CompanyRecord,
+            list[dict[str, Any]],
+            dict[str, Any],
+            int,
+            bool,
+        ]
+    ],
+) -> list[str]:
+    lines: list[str] = ["## Step 2｜每家公司业务占比", ""]
+    for rec, _signals, _insider, _below, _had in per_company:
+        t = rec.ticker
+        disp = company_display_name(t, rec.company_name)
+        lines.append(f"### {t} — {disp}")
+        lines.append("")
+        lines.append("*（待实现：revenue by segment / by geography，标注段落ID）*")
+        lines.append("")
+    return lines
+
+
+def _step3_per_company_outlook(
+    per_company: list[
+        tuple[
+            CompanyRecord,
+            list[dict[str, Any]],
+            dict[str, Any],
+            int,
+            bool,
+        ]
+    ],
+) -> list[str]:
+    from research_automation.services.profile_service import (
+        ProfileGenerationError,
+        get_profile,
+    )
+
+    lines: list[str] = ["## Step 3｜展望与战略重心", ""]
+    for rec, _signals, _insider, _below, _had in per_company:
+        t = rec.ticker
+        disp = company_display_name(t, rec.company_name)
+        lines.append(f"### {t} — {disp}")
+        lines.append("")
+        try:
+            profile = get_profile(t)
+            fg = (profile.future_guidance or "").strip()
+            if fg and fg not in ("原文未明确提及", "NOT_FOUND"):
+                lines.append("**未来展望与指引：**")
+                lines.append("")
+                lines.append(fg)
+                lines.append("")
+            else:
+                lines.append("**未来展望与指引：** *原文未明确提及*")
+                lines.append("")
+            iv = (profile.industry_view or "").strip()
+            if iv and iv not in ("原文未明确提及", "NOT_FOUND"):
+                lines.append("**行业判断（管理层视角）：**")
+                lines.append("")
+                lines.append(iv)
+                if profile.industry_view_source:
+                    lines.append(f"*原文依据：{profile.industry_view_source}*")
+                lines.append("")
+            else:
+                lines.append("**行业判断（管理层视角）：** *原文未明确提及*")
+                lines.append("")
+            fwd_quotes = [
+                q
+                for q in (profile.key_quotes or [])
+                if getattr(q, "modality", "") == "forward_looking"
+            ]
+            if fwd_quotes:
+                lines.append("**前瞻性原话：**")
+                lines.append("")
+                for q in fwd_quotes[:3]:
+                    lines.append(f"> **{q.speaker or 'UNKNOWN'}**：\"{q.quote}\"")
+                    lines.append(f"> *主题：{q.topic}*")
+                    lines.append("")
+        except ProfileGenerationError as e:
+            lines.append(f"*（画像生成失败：{e.message}）*")
+            lines.append("")
+        except Exception:
+            logger.exception("Step3 get_profile 失败 ticker=%s", t)
+            lines.append("*（画像拉取失败，详见日志）*")
+            lines.append("")
+    return lines
+
+
+def _step4_earning_call_section(
+    _sector: str,
+    _earnings_cross_review: dict[str, Any] | None,
+    _quarters: list[str] | None,
+    sector_watch_items: list[str] | None = None,
+    per_company: list[
+        tuple[
+            CompanyRecord,
+            list[dict[str, Any]],
+            dict[str, Any],
+            int,
+            bool,
+        ]
+    ]
+    | None = None,
+    current_year: int | None = None,
+    current_quarter: int | None = None,
+) -> list[str]:
+    from research_automation.services.earnings_service import (
+        EarningsAnalysisError,
+        analyze_earnings_call,
+    )
+
+    lines: list[str] = ["## Step 4｜Earning Call 内容", ""]
+    if sector_watch_items:
+        lines.append(f"**本sector关注项**：{', '.join(sector_watch_items)}")
+        lines.append("")
+    now = datetime.now(timezone.utc)
+    year = current_year or now.year
+    quarter = current_quarter or ((now.month - 1) // 3 + 1)
+    if per_company:
+        has_any = False
+        for rec, _signals, _insider, _below, _had in per_company:
+            t = rec.ticker
+            disp = company_display_name(t, rec.company_name)
+            lines.append(f"### {t} — {disp}")
+            lines.append("")
+            try:
+                analysis = analyze_earnings_call(
+                    t,
+                    year,
+                    quarter,
+                    sector_watch_items=sector_watch_items,
+                )
+                has_any = True
+                lines.append("**概括：**")
+                lines.append("")
+                lines.append(analysis.summary or "*（无概括）*")
+                lines.append("")
+                if analysis.management_viewpoints:
+                    lines.append("**管理层核心观点：**")
+                    lines.append("")
+                    for vp in analysis.management_viewpoints:
+                        lines.append(f"- {vp.text}")
+                    lines.append("")
+                if analysis.quotations:
+                    lines.append("**关键原话：**")
+                    lines.append("")
+                    for q in analysis.quotations:
+                        lines.append(
+                            f"> **{q.speaker or 'Unknown'}**：\"{q.quote}\""
+                        )
+                        lines.append(f"> *主题：{q.topic}*")
+                        lines.append("")
+                if analysis.new_business_highlights:
+                    lines.append("**新业务 / 战略动向：**")
+                    lines.append("")
+                    for nb in analysis.new_business_highlights:
+                        lines.append(f"- {nb.text}")
+                    lines.append("")
+            except EarningsAnalysisError as e:
+                lines.append(f"*（逐字稿不可用：{e.message}）*")
+                lines.append("")
+            except Exception:
+                logger.exception("Step4 earnings 失败 ticker=%s", t)
+                lines.append("*（分析失败，详见日志）*")
+                lines.append("")
+        if not has_any:
+            lines.append("*（本sector所有公司均无可用逐字稿）*")
+            lines.append("")
+        return lines
+    lines.append("*（未传入 earnings_cross_review，或无电话会数据）*")
+    lines.append("")
+    return lines
+
+
+def _step5_new_biz_acquisitions_insider(
+    per_company: list[
+        tuple[
+            CompanyRecord,
+            list[dict[str, Any]],
+            dict[str, Any],
+            int,
+            bool,
+        ]
+    ],
+) -> list[str]:
+    lines: list[str] = ["## Step 5｜新业务 / 收购 / Insider 异动", ""]
+    for rec, signals, insider, _below, _had in per_company:
+        t = rec.ticker
+        disp = company_display_name(t, rec.company_name)
+        biz_signals = [
+            s
+            for s in signals
+            if str(s.get("signal_type") or "")
+            in ("business_change", "insider_trade")
+        ]
+        if not biz_signals and int(insider.get("trade_count") or 0) == 0:
+            continue
+        lines.append(f"### {t} — {disp}")
+        lines.append("")
+        if biz_signals:
+            lines.append("**新业务 / 收购信号：**")
+            for s in biz_signals:
+                title = _md_escape_title(str(s.get("title") or "(no title)"))
+                url = str(s.get("url") or "").strip()
+                lines.append(
+                    f"- {title}" + (f" [📎 原文]({url})" if url else "")
+                )
+            lines.append("")
+        bc = int(insider.get("buy_count") or 0)
+        sc = int(insider.get("sell_count") or 0)
+        tbv = insider.get("total_buy_value")
+        tsv = insider.get("total_sell_value")
+        lines.append("#### 💼 内部交易（FMP）")
+        lines.append("")
+        if int(insider.get("trade_count") or 0) == 0:
+            lines.append("*暂无*")
+        else:
+            lines.append(
+                f"- 买入：**{bc}** 笔，总价值 **{_fmt_trade_side_value(float(tbv) if isinstance(tbv, (int, float)) and tbv == tbv else None, bc)}**"
+            )
+            lines.append(
+                f"- 卖出：**{sc}** 笔，总价值 **{_fmt_trade_side_value(float(tsv) if isinstance(tsv, (int, float)) and tsv == tsv else None, sc)}**"
+            )
+        lines.append("")
+    return lines
+
+
+def _step6_financial_table(
+    per_company: list[
+        tuple[
+            CompanyRecord,
+            list[dict[str, Any]],
+            dict[str, Any],
+            int,
+            bool,
+        ]
+    ],
+    quarters: int = 6,
+) -> list[str]:
+    from research_automation.extractors.fmp_client import get_quarterly_financials
+
+    lines: list[str] = ["## Step 6｜财务数据（季度）", ""]
+    company_data: list[tuple[str, str, list[dict[str, Any]]]] = []
+    for rec, _signals, _insider, _below, _had in per_company:
+        t = rec.ticker
+        disp = company_display_name(t, rec.company_name)
+        try:
+            rows = get_quarterly_financials(t, quarters=quarters)
+        except Exception:
+            logger.exception("Step6 季度财务拉取失败 ticker=%s", t)
+            rows = []
+        company_data.append((t, disp, rows))
+
+    if not any(rows for _, _, rows in company_data):
+        lines.append("*（FMP 季度数据不可用，请检查 FMP_API_KEY 或网络。）*")
+        lines.append("")
+        return lines
+
+    all_quarters: list[str] = []
+    seen: set[str] = set()
+    for _, _, rows in company_data:
+        for r in rows:
+            q = r["quarter"]
+            if q not in seen:
+                seen.add(q)
+                all_quarters.append(q)
+    all_quarters.sort(reverse=True)
+    display_quarters = all_quarters[:quarters]
+    header = "| Ticker | " + " | ".join(display_quarters) + " |"
+    sep = "|--------|" + "|".join(["--------"] * len(display_quarters)) + "|"
+
+    for title, metric_key, fmt_fn in [
+        ("Revenue（USD）", "revenue", _fmt_usd),
+        ("Gross Margin（%）", "gross_margin", _fmt_pct),
+        ("EBITDA（USD）", "ebitda", _fmt_usd),
+        ("CAPEX（USD）", "capex", _fmt_usd),
+        ("CAPEX 2P ROC", "capex_2p_roc", _fmt_roc),
+    ]:
+        lines.append(f"### {title}")
+        lines.append("")
+        lines.append(header)
+        lines.append(sep)
+        for t, _disp, rows in company_data:
+            by_q = {r["quarter"]: r for r in rows}
+            vals = [
+                fmt_fn(by_q[q][metric_key]) if q in by_q else "—"
+                for q in display_quarters
+            ]
+            lines.append(f"| {t} | " + " | ".join(vals) + " |")
+        lines.append("")
+
+    lines.append("### Sector 汇总")
+    lines.append("")
+    lines.append(header)
+    lines.append(sep)
+    for label, metric_key in [
+        ("Total Revenue", "revenue"),
+        ("Total CAPEX", "capex"),
+    ]:
+        totals = []
+        for q in display_quarters:
+            total, has = 0.0, False
+            for _, _, rows in company_data:
+                by_q = {r["quarter"]: r for r in rows}
+                v = by_q[q][metric_key] if q in by_q else None
+                if v is not None:
+                    total += v
+                    has = True
+            totals.append(_fmt_usd(total) if has else "—")
+        lines.append(f"| **{label}** | " + " | ".join(totals) + " |")
+    lines.append("")
+    lines.append(
+        "*数据来源：FMP Ultimate 季度报表。CAPEX 已取绝对值。2P ROC = (t − t−2) / |t−2|。*"
+    )
+    lines.append("")
+    return lines
+
+
+def generate_six_step_sector_report(
+    sector: str,
+    days_back: int | None = None,
+    *,
+    relevance_threshold: int | None = None,
+    report_stats: dict[str, Any] | None = None,
+    earnings_cross_review: dict[str, Any] | None = None,
+    quarters: list[str] | None = None,
+    sector_watch_items: list[str] | None = None,
+) -> str:
+    """六步结构行业报告。每次LLM调用只处理单家公司。"""
+    from research_automation.core.sector_config import get_sector_watch_items
+
+    sec = (sector or "").strip()
+    db = _resolve_sector_news_days_back(days_back)
+    thr = (
+        int(relevance_threshold)
+        if relevance_threshold is not None
+        else _relevance_threshold_from_env()
+    )
+    thr = max(0, min(3, thr))
+
+    if sector_watch_items is None:
+        sector_watch_items = get_sector_watch_items(sec)
+
+    if not sec:
+        return "# 行业报告（六步结构）\n\n（sector 为空）\n"
+
+    loaded = _load_per_company_signals_and_insiders(sec, db, thr, report_stats)
+    if loaded is None:
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
+        return (
+            f"# 行业报告（六步结构）：{sec}\n\n"
+            f"**生成时间**：{now} UTC\n\n未找到该 sector 的活跃公司。\n"
+        )
+
+    _companies, per_company, _stats, _fetch_tot = loaded
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
+    lines: list[str] = [
+        f"# 行业报告（六步结构）：{sec}",
+        f"**生成时间**：{now} UTC",
+        f"**新闻窗口**：最近 {int(db)} 个 UTC 日历日",
+        "",
+    ]
+    lines.extend(_step1_sector_business_overview(per_company))
+    lines.extend(_step2_per_company_revenue_breakdown(per_company))
+    lines.extend(_step3_per_company_outlook(per_company))
+    lines.extend(
+        _step4_earning_call_section(
+            sec,
+            earnings_cross_review,
+            quarters,
+            sector_watch_items=sector_watch_items,
+            per_company=per_company,
+        )
+    )
+    lines.extend(_step5_new_biz_acquisitions_insider(per_company))
+    lines.extend(_step6_financial_table(per_company, quarters=6))
+    return "\n".join(lines).rstrip() + "\n"

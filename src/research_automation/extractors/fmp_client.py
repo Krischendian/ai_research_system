@@ -752,3 +752,121 @@ def get_insider_trades(ticker: str, limit: int = 50) -> list[dict[str, Any]]:
             }
         )
     return out
+
+
+# ---------------------------------------------------------------------------
+# 季度财务数据（供 Step 6 图表使用）
+# ---------------------------------------------------------------------------
+
+
+def _fetch_statement_quarterly(
+    endpoint: str, ticker: str, limit: int
+) -> list[dict[str, Any]]:
+    key = _api_key()
+    if not key:
+        return []
+    sym = (ticker or "").strip().upper()
+    params: dict[str, str | int] = {
+        "symbol": sym,
+        "apikey": key,
+        "limit": int(limit),
+        "period": "quarter",
+    }
+    url = f"{BASE_URL}/{endpoint}"
+    try:
+        r = requests.get(
+            url, params=params, headers=_REQUEST_HEADERS, timeout=_DEFAULT_TIMEOUT_SEC
+        )
+        r.raise_for_status()
+        data = r.json()
+    except (requests.RequestException, ValueError) as e:
+        logger.warning(
+            "FMP quarterly 请求失败 endpoint=%s ticker=%s: %s", endpoint, sym, e
+        )
+        return []
+    if isinstance(data, dict):
+        if data.get("Error Message"):
+            logger.warning(
+                "FMP quarterly 错误 ticker=%s: %s", sym, data.get("Error Message")
+            )
+            return []
+        return []
+    if not isinstance(data, list):
+        return []
+    return [x for x in data if isinstance(x, dict)]
+
+
+def _quarter_label(date_str: str, period: str | None = None) -> str:
+    if period and "Q" in str(period).upper():
+        p = str(period).strip().upper()
+        if date_str and len(date_str) >= 4:
+            return f"{date_str[:4]}{p}"
+    if not date_str or len(date_str) < 7:
+        return date_str or ""
+    try:
+        from datetime import datetime as _dt
+
+        dt = _dt.strptime(date_str[:10], "%Y-%m-%d")
+        q = (dt.month - 1) // 3 + 1
+        return f"{dt.year}Q{q}"
+    except ValueError:
+        return date_str[:7]
+
+
+def get_quarterly_financials(ticker: str, quarters: int = 6) -> list[dict[str, Any]]:
+    """
+    获取最近 quarters 个季度的财务指标。
+    返回列表按季度降序，每条含：quarter, date, revenue, gross_margin, ebitda, capex, capex_2p_roc。
+    ANTI-HALLUCINATION: 字段缺失为 None，禁止估算。
+    """
+    sym = (ticker or "").strip().upper()
+    if not sym or quarters < 1 or not _api_key():
+        return []
+
+    lim = max(quarters + 2, 8)
+    income_rows = _fetch_statement_quarterly("income-statement", sym, lim)
+    if not income_rows:
+        return []
+
+    cash_rows = _fetch_statement_quarterly("cash-flow-statement", sym, lim)
+    cf_by_date: dict[str, dict[str, Any]] = {}
+    for row in cash_rows:
+        d = str(row.get("date") or "").strip()[:10]
+        if d:
+            cf_by_date[d] = row
+
+    raw_records: list[dict[str, Any]] = []
+    for inc in income_rows:
+        d = str(inc.get("date") or "").strip()[:10]
+        if not d:
+            continue
+        period = str(inc.get("period") or "").strip()
+        label = _quarter_label(d, period)
+        cf = cf_by_date.get(d)
+        revenue = _num(inc.get("revenue"))
+        gp = _num(inc.get("grossProfit"))
+        gross_margin = (gp / revenue) if (revenue and gp is not None) else None
+        ebitda = _ebitda(inc, cf)
+        capex = _capex(cf)
+        raw_records.append(
+            {
+                "quarter": label,
+                "date": d,
+                "revenue": revenue,
+                "gross_margin": gross_margin,
+                "ebitda": ebitda,
+                "capex": capex,
+                "capex_2p_roc": None,
+            }
+        )
+
+    raw_records.sort(key=lambda x: x["date"], reverse=True)
+
+    for i, rec in enumerate(raw_records):
+        if i + 2 < len(raw_records):
+            c_now = rec["capex"]
+            c_t2 = raw_records[i + 2]["capex"]
+            if c_now is not None and c_t2 is not None and c_t2 != 0:
+                rec["capex_2p_roc"] = (c_now - c_t2) / abs(c_t2)
+
+    return raw_records[:quarters]

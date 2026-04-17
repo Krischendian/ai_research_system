@@ -69,10 +69,25 @@ def _extract_json_object(raw: str) -> dict[str, Any]:
     return data
 
 
-def _build_prompt(symbol: str, quarter: str, numbered_transcript: str) -> str:
+def _build_prompt(
+    symbol: str,
+    quarter: str,
+    numbered_transcript: str,
+    sector_watch_items: list[str] | None = None,
+) -> str:
     """拼装 LLM 提示词（含段落溯源要求）。"""
+    watch_block = ""
+    if sector_watch_items:
+        items = "；".join(
+            str(x).strip() for x in sector_watch_items if str(x).strip()
+        )
+        if items:
+            watch_block = f"""
+**本 sector 关注项**（请在概括、管理层观点、原话与新业务要点中尽量覆盖；仍须严格基于逐字稿段落 ID 溯源，禁止臆造）：
+{items}
+"""
     return f"""你是投研助理，根据下面**带段落 ID** 的【财报电话会逐字稿】撰写结构化分析。逐字稿可能为英文，分析输出以中文为主。
-
+{watch_block}
 **溯源要求**：
 - 须使用 JSON 键 **summary_source_paragraph_ids**：字符串数组，每项为 p<序号> 或完整 PARAGRAPH_ID，且须在下文列出的 ID 中存在。
 - **management_viewpoints**、**new_business_highlights** 为对象数组，每项含 **text**（中文要点）与 **source_paragraph_ids**（同上）。
@@ -147,7 +162,13 @@ def _collect_earnings_cited_ids(
     return s
 
 
-def analyze_earnings_call(ticker: str, year: int, quarter: int) -> EarningsCallAnalysis:
+def analyze_earnings_call(
+    ticker: str,
+    year: int,
+    quarter: int,
+    *,
+    sector_watch_items: list[str] | None = None,
+) -> EarningsCallAnalysis:
     """
     优先 FMP，其次 EDGAR ``search_8k_transcript``，再 ``earningscall``，最后
     ``fetch_transcript_from_8k``（sec-api.io，需 ``SEC_API_KEY``）；
@@ -253,7 +274,7 @@ def analyze_earnings_call(ticker: str, year: int, quarter: int) -> EarningsCallA
     allowed = all_paragraph_id_set(records)
     id_to_text = {r["paragraph_id"]: r["content"] for r in records}
 
-    prompt = _build_prompt(symbol, qlabel, numbered)
+    prompt = _build_prompt(symbol, qlabel, numbered, sector_watch_items)
     try:
         reply = chat(
             prompt,
