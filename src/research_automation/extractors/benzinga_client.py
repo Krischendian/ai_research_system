@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import time
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
@@ -23,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 load_dotenv(Path(__file__).resolve().parents[3] / ".env", override=False)
 
-BASE_URL = "https://api.benzinga.com/api/v2"
+BASE_URL = "https://api.massive.com/benzinga/v2"
 _CACHE_TTL_SEC = 24 * 3600
 _MAX_PAGES = 25
 _PAGE_SIZE = 100
@@ -137,6 +138,33 @@ def _row_to_item(row: dict[str, Any]) -> BenzingaNewsDict | None:
     )
 
 
+def _row_to_massive_item(row: dict[str, Any]) -> BenzingaNewsDict | None:
+    """解析 Massive API 格式的 Benzinga 新闻条目。"""
+    title = (row.get("title") or "").strip()
+    if not title:
+        return None
+    pub_raw = row.get("published") or row.get("last_updated") or ""
+    pub = str(pub_raw).strip()
+    if not pub:
+        return None
+    teaser = (row.get("teaser") or "").strip()
+    body_raw = (row.get("body") or "").strip()
+    # 去掉 HTML 标签
+    body_plain = re.sub(r"<[^>]+>", " ", body_raw).strip()
+    body_plain = re.sub(r"\s+", " ", body_plain).strip()
+    summary = teaser or body_plain[:500]
+    url = (row.get("url") or "").strip()
+    author = (row.get("author") or "").strip()
+    source = f"Benzinga-{author}" if author else "Benzinga"
+    return BenzingaNewsDict(
+        title=title,
+        summary=summary,
+        url=url,
+        source=source,
+        published_at=pub,
+    )
+
+
 def get_company_news(ticker: str, from_date: str, to_date: str) -> list[BenzingaNewsDict]:
     """
     获取指定 ticker 在日期范围内的新闻。
@@ -163,50 +191,61 @@ def get_company_news(ticker: str, from_date: str, to_date: str) -> list[Benzinga
     if cached is not None:
         return cached
 
-    url = f"{BASE_URL}/news"
+    list_url = f"{BASE_URL}/news"
     headers = {"Accept": "application/json"}
     collected: list[BenzingaNewsDict] = []
     page = 0
+    follow_url: str | None = None
     while page < _MAX_PAGES:
-        params: dict[str, str | int] = {
-            "token": key,
-            "tickers": sym,
-            "dateFrom": fd,
-            "dateTo": td,
-            "pageSize": _PAGE_SIZE,
-            "page": page,
-            "displayOutput": "abstract",
-        }
+        if follow_url:
+            req_url = follow_url
+            req_params: dict[str, str | int] | None = (
+                None
+                if "apiKey=" in follow_url or "apikey=" in follow_url.lower()
+                else {"apiKey": key}
+            )
+        else:
+            req_url = list_url
+            req_params = {
+                "apiKey": key,
+                "tickers": sym,
+                "published.gte": fd,
+                "published.lte": td,
+                "limit": _PAGE_SIZE,
+                "sort": "published.desc",
+            }
         try:
-            resp = requests.get(url, params=params, headers=headers, timeout=45)
+            resp = requests.get(
+                req_url, params=req_params, headers=headers, timeout=45
+            )
             resp.raise_for_status()
             data = resp.json()
         except (requests.RequestException, ValueError) as e:
             logger.warning("Benzinga news 请求失败 symbol=%s page=%s: %s", sym, page, e)
             break
 
-        if isinstance(data, dict) and data.get("ok") is False:
-            logger.warning("Benzinga news 返回错误 symbol=%s: %s", sym, data.get("errors"))
+        if not isinstance(data, dict) or data.get("status") != "OK":
+            logger.warning("Massive Benzinga news 返回错误 symbol=%s: %s", sym, data)
             break
 
-        if not isinstance(data, list):
-            logger.warning("Benzinga news 返回非列表 symbol=%s", sym)
+        results = data.get("results") or []
+        if not isinstance(results, list):
             break
 
         batch = 0
-        for row in data:
+        for row in results:
             if not isinstance(row, dict):
                 continue
-            it = _row_to_item(row)
+            it = _row_to_massive_item(row)
             if it is not None:
                 collected.append(it)
                 batch += 1
 
-        if len(data) < _PAGE_SIZE:
-            break
-        if batch == 0:
+        next_url = data.get("next_url")
+        if not next_url or batch == 0 or len(results) < _PAGE_SIZE:
             break
         page += 1
+        follow_url = str(next_url).strip() if next_url else None
 
     _write_cache(cpath, collected)
     return collected
