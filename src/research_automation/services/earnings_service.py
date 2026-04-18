@@ -51,11 +51,18 @@ class EarningsAnalysisError(Exception):
 
 
 def _extract_json_object(raw: str) -> dict[str, Any]:
-    """从模型原始字符串中提取 JSON 对象。"""
+    """从模型原始字符串中提取 JSON 对象，并处理弯引号等非法字符。"""
     text = raw.strip()
+
+    # 去掉 markdown 代码块
     m = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", text)
     if m:
         text = m.group(1).strip()
+
+    # 替换 Unicode 弯引号为直引号（Claude 有时在 quote 字段内用弯引号）
+    text = text.replace("\u201c", '\\"').replace("\u201d", '\\"')
+    text = text.replace("\u2018", "'").replace("\u2019", "'")
+
     try:
         data = json.loads(text)
     except json.JSONDecodeError:
@@ -63,7 +70,21 @@ def _extract_json_object(raw: str) -> dict[str, Any]:
         end = text.rfind("}")
         if start == -1 or end <= start:
             raise
-        data = json.loads(text[start : end + 1])
+        chunk = text[start : end + 1]
+        # 再次尝试替换后解析
+        try:
+            data = json.loads(chunk)
+        except json.JSONDecodeError:
+            # 最后尝试：用 ast.literal_eval 作为兜底（仅对简单结构有效）
+            import ast
+
+            try:
+                data = ast.literal_eval(chunk)
+            except Exception:
+                raise json.JSONDecodeError(
+                    "无法解析 JSON", chunk, 0
+                )
+
     if not isinstance(data, dict):
         raise ValueError("JSON 根节点须为对象")
     return data
@@ -93,11 +114,24 @@ def _build_prompt(
 - **management_viewpoints**、**new_business_highlights** 为对象数组，每项含 **text**（中文要点）与 **source_paragraph_ids**（同上）。
 - **quotations** 每项除 speaker、quote、topic 外增加 **source_paragraph_ids**（与 quote 相关的段落）。
 
-要求：
-1. summary：3～6 句中文概括本季度要点。
-2. management_viewpoints：5～8 条管理层核心观点；须能在逐字稿中找到依据。
-3. quotations：5～8 条重要原话，quote 须从逐字稿**原样复制**英文子串（勿改标点与弯引号），勿翻译；**speaker** 须与逐字稿中发言人一致（若正文含「姓名:」或「姓名 (职务):」前缀请对应填写）。
-4. new_business_highlights：与新产品线、AI、服务、战略动向相关的要点（中文），无则空数组。
+要求（严格执行，每条都必须满足数量要求）：
+1. summary：3～6 句中文概括，必须包含具体数字（收入、增长率、订单额等）。
+
+2. management_viewpoints：**必须返回至少6条**，每条须：
+   - 包含具体数字或可验证事实（如"$18B revenue"、"4% growth"）
+   - 标注 source_paragraph_ids
+   - 不得重复相同主题
+
+3. quotations：**必须返回至少5条**，每条须：
+   - quote 字段：从逐字稿**一字不差**复制连续英文原文（至少15个词），禁止缩写或改写
+   - speaker 字段：与逐字稿发言人完全一致（如"Julie T. Sweet"、"Angie Park"）
+   - topic 字段：1-3个英文词的主题标签
+   - 优先选取含具体数字、指引、或与 sector_watch_items 相关的原话
+   - 不同发言人的原话都要覆盖（CEO、CFO、分析师问答均要有）
+
+4. new_business_highlights：与新产品线、AI、收购、战略投资相关的要点（中文），**至少3条**，无则空数组。
+
+⚠️ 如果 quotations 少于5条，你的回答将被视为不合格。请仔细阅读逐字稿找出足够的原话。
 
 仅输出一个 JSON 对象，键名必须为：
 summary, summary_source_paragraph_ids, management_viewpoints, quotations, new_business_highlights。
@@ -279,7 +313,7 @@ def analyze_earnings_call(
         reply = chat(
             prompt,
             response_format={"type": "json_object"},
-            timeout=120.0,
+            timeout=180.0,
         )
     except ValueError as e:
         raise EarningsAnalysisError(f"语言模型未就绪：{e}") from e
