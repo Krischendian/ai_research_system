@@ -386,6 +386,101 @@ def get_segment_revenue(ticker: str, year: int) -> list[dict[str, Any]] | None:
     return out
 
 
+def get_geographic_revenue(ticker: str, year: int) -> list[dict[str, Any]] | None:
+    """
+    获取公司指定财年的地理收入拆分（FMP stable revenue-geographic-segmentation）。
+    返回 [{"region": "North America", "percentage": 52.3, "absolute": 2e10}, ...]
+    无数据时返回 None。
+    """
+    key = _api_key()
+    if not key:
+        return None
+    sym = (ticker or "").strip().upper()
+    if not sym:
+        return None
+    try:
+        y = int(year)
+    except (TypeError, ValueError):
+        return None
+
+    url = f"{BASE_URL}/revenue-geographic-segmentation"
+    params: dict[str, str] = {"symbol": sym, "apikey": key}
+    try:
+        r = requests.get(
+            url,
+            params=params,
+            headers=_REQUEST_HEADERS,
+            timeout=_DEFAULT_TIMEOUT_SEC,
+        )
+        if r.status_code != 200:
+            return None
+        data = r.json()
+    except (requests.RequestException, ValueError):
+        return None
+
+    if isinstance(data, dict):
+        if data.get("Error Message"):
+            return None
+        if isinstance(data.get("data"), dict) and data.get("fiscalYear") is not None:
+            data = [data]
+        else:
+            return None
+
+    if not isinstance(data, list):
+        return None
+
+    target = None
+    for row in data:
+        if not isinstance(row, dict):
+            continue
+        try:
+            if int(row.get("fiscalYear", 0)) == y:
+                target = row
+                break
+        except (TypeError, ValueError):
+            continue
+
+    if not target:
+        # 找最近一年
+        candidates = []
+        for row in data:
+            if isinstance(row, dict):
+                try:
+                    candidates.append((int(row.get("fiscalYear", 0)), row))
+                except (TypeError, ValueError):
+                    pass
+        if candidates:
+            target = sorted(candidates, reverse=True)[0][1]
+        else:
+            return None
+
+    raw_data = target.get("data")
+    if not isinstance(raw_data, dict) or not raw_data:
+        return None
+
+    absolutes = []
+    for region_name, val in raw_data.items():
+        name = str(region_name).strip()
+        if not name:
+            continue
+        amt = _num(val)
+        if amt is None or amt <= 0:
+            continue
+        absolutes.append((name, float(amt)))
+
+    if not absolutes:
+        return None
+
+    total = sum(a for _, a in absolutes)
+    if total <= 0:
+        return None
+
+    return [
+        {"region": name, "percentage": round(amt / total * 100.0, 2), "absolute": amt}
+        for name, amt in sorted(absolutes, key=lambda x: -x[1])
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Earnings call transcript (stable)
 # ---------------------------------------------------------------------------

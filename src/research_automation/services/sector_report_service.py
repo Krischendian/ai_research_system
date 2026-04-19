@@ -549,7 +549,10 @@ def _step2_per_company_revenue_breakdown(
         ]
     ],
 ) -> list[str]:
-    from research_automation.extractors.fmp_client import get_segment_revenue
+    from research_automation.extractors.fmp_client import (
+        get_geographic_revenue,
+        get_segment_revenue,
+    )
     lines: list[str] = ["## Step 2｜每家公司业务占比", ""]
     for rec, _signals, _insider, _below, _had in per_company:
         t = rec.ticker
@@ -573,6 +576,20 @@ def _step2_per_company_revenue_breakdown(
         for seg in data:
             lines.append(f"| {seg['segment']} | {seg['percentage']:.1f}% | ${seg['absolute']/1e9:.2f}B |")
         lines.append("")
+
+        # 地理收入拆分
+        geo_data = get_geographic_revenue(t, year_used)
+        if geo_data:
+            lines.append(f"**地理收入拆分（FY{year_used}）：**")
+            lines.append("")
+            lines.append("| 地区 | 占比 | 收入 |")
+            lines.append("|------|------|------|")
+            for g in geo_data:
+                lines.append(
+                    f"| {g['region']} | {g['percentage']:.1f}% | "
+                    f"${g['absolute']/1e9:.2f}B |"
+                )
+            lines.append("")
     return lines
 
 
