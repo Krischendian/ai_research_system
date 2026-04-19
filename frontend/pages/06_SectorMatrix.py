@@ -198,7 +198,6 @@ if not df.empty:
         mime="text/csv",
     )
 
-    # 迷你图：Revenue 横向柱状图
     if "_rev_raw" in df.columns and df["_rev_raw"].sum() > 0:
         st.divider()
         st.markdown("#### Revenue 规模对比（$B）")
