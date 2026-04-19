@@ -10,7 +10,7 @@ import logging
 import os
 import re
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any, TypedDict
@@ -250,6 +250,38 @@ def get_company_news(ticker: str, from_date: str, to_date: str) -> list[Benzinga
 
     _write_cache(cpath, collected)
     return collected
+
+
+def fetch_news_for_ticker(
+    ticker: str,
+    *,
+    days_back: int = 7,
+    max_results: int = 10,
+) -> list[dict[str, Any]]:
+    """
+    供 ``signal_fetcher`` 使用：按 UTC 日历日窗口拉取 Benzinga 新闻，
+    返回与 Tavily 兼容的 ``title`` / ``url`` / ``content`` / ``published_date`` 字典列表。
+    """
+    sym = (ticker or "").strip().upper()
+    if not sym:
+        return []
+    to_d = datetime.now(timezone.utc).date()
+    from_d = to_d - timedelta(days=max(1, int(days_back)))
+    fd = from_d.isoformat()[:10]
+    td = to_d.isoformat()[:10]
+    items = get_company_news(sym, fd, td)
+    n = max(1, int(max_results))
+    out: list[dict[str, Any]] = []
+    for it in items[:n]:
+        out.append(
+            {
+                "title": it["title"],
+                "url": it["url"],
+                "content": it["summary"],
+                "published_date": it["published_at"],
+            }
+        )
+    return out
 
 
 def benzinga_news_dict_to_raw_article(item: BenzingaNewsDict, symbol: str) -> RawArticle:

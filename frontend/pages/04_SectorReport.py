@@ -1,6 +1,8 @@
 """行业监控报告：六步结构版本。"""
 from __future__ import annotations
 
+import json
+import re as _re
 import sys
 from pathlib import Path
 
@@ -52,6 +54,66 @@ def _split_md_sections(md: str) -> list[tuple[str, str]]:
         body = md[start:end].strip()
         parts.append((heading, body))
     return parts
+
+
+def _parse_step1_data(body: str) -> dict[str, list[dict]]:
+    """从Step1 markdown body解析出各公司的业务线数据，用于图表。"""
+    result = {}
+    current_company = None
+    current_ticker = None
+    segments = []
+
+    for line in body.splitlines():
+        # 匹配公司行：**Accenture (ACN)**　总收入 $64.9B
+        m = _re.match(r"\*\*(.+?)\s*\((\w[\w/\s]*)\)\*\*", line)
+        if m:
+            if current_ticker and segments:
+                result[current_ticker] = segments
+            current_company = m.group(1).strip()
+            current_ticker = m.group(2).strip()
+            segments = []
+            continue
+        # 匹配业务线行：- Products: 30.1%　███　($19.55B)
+        m2 = _re.match(r"-\s+(.+?):\s+([\d.]+)%", line)
+        if m2 and current_ticker:
+            segments.append({
+                "segment": m2.group(1).strip(),
+                "percentage": float(m2.group(2)),
+            })
+
+    if current_ticker and segments:
+        result[current_ticker] = segments
+
+    return result
+
+
+def _render_step1_charts(body: str) -> None:
+    """用st.bar_chart渲染Step1各公司业务占比图表。"""
+    data = _parse_step1_data(body)
+    if not data:
+        st.markdown(body)
+        return
+
+    st.markdown(body)
+    st.divider()
+    st.markdown("#### 📊 业务线占比图表")
+
+    cols = st.columns(min(len(data), 3))
+    for i, (ticker, segs) in enumerate(data.items()):
+        col = cols[i % len(cols)]
+        with col:
+            st.markdown(f"**{ticker}**")
+            chart_data = {s["segment"]: s["percentage"] for s in segs}
+            import pandas as pd
+            df = pd.DataFrame.from_dict(
+                chart_data, orient="index", columns=["占比%"]
+            )
+            st.bar_chart(df, height=200)
+
+
+def _render_step2_tables(body: str) -> None:
+    """Step2直接渲染markdown表格，Streamlit原生支持。"""
+    st.markdown(body)
 
 
 st.title("行业监控报告（六步结构）")
@@ -132,4 +194,9 @@ if md:
             continue
         expanded = heading in DEFAULT_EXPANDED
         with st.expander(heading.lstrip("#").strip(), expanded=expanded):
-            st.markdown(body)
+            if "Step 1" in heading:
+                _render_step1_charts(body)
+            elif "Step 2" in heading:
+                _render_step2_tables(body)
+            else:
+                st.markdown(body)

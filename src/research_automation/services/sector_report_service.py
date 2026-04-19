@@ -653,6 +653,14 @@ def _step4_earning_call_section(
     now = datetime.now(timezone.utc)
     year = current_year or now.year
     quarter = current_quarter or ((now.month - 1) // 3 + 1)
+    # 当前季度财报尚未发布，自动退回上一季度
+    if current_quarter is None:
+        if quarter == 1:
+            quarter = 4
+            year -= 1
+        else:
+            quarter -= 1
+
     if per_company:
         has_any = False
         for rec, _signals, _insider, _below, _had in per_company:

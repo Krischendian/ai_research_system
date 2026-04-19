@@ -8,7 +8,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import urlparse
 
-from research_automation.extractors import tavily_client
+from research_automation.extractors import benzinga_client as _benzinga_news_client
+from research_automation.extractors import bloomberg_rss_client
 
 logger = logging.getLogger(__name__)
 
@@ -503,12 +504,15 @@ def fetch_signals_for_ticker(
     raw_row_count = 0
 
     for axis, qtext in _queries_for_ticker(sym, company_label or None):
-        rows = tavily_client.search_news(
-            qtext,
-            days_back=days_back,
-            max_results=max_results_per_query,
-            topic="finance",
+        # 主力：Benzinga API（每个axis都拉，URL去重在外层处理）
+        bz_rows = _benzinga_news_client.fetch_news_for_ticker(
+            sym, days_back=days_back, max_results=max_results_per_query
         )
+        # 补充：Bloomberg RSS按查询词过滤
+        rss_rows = bloomberg_rss_client.search_news(
+            qtext, days_back=days_back, max_results=max_results_per_query
+        )
+        rows = bz_rows + rss_rows
         for row in rows:
             raw_row_count += 1
             url = (row.get("url") or "").strip()
