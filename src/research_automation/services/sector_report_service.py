@@ -492,9 +492,30 @@ def _step1_sector_business_overview(
         ]
     ],
 ) -> list[str]:
+    from research_automation.extractors.fmp_client import get_segment_revenue
     lines: list[str] = ["## Step 1｜Sector 业务全景", ""]
-    lines.append("*（待实现：汇总各公司 revenue breakdown，直引原文数字）*")
+    lines.append("各公司最新财年业务线收入拆分（FMP revenue-product-segmentation）：")
     lines.append("")
+    found_any = False
+    for rec, _signals, _insider, _below, _had in per_company:
+        t = rec.ticker
+        disp = company_display_name(t, rec.company_name)
+        data = get_segment_revenue(t, 2024)
+        if data is None:
+            data = get_segment_revenue(t, 2023)
+        if not data:
+            continue
+        found_any = True
+        total = sum(d["absolute"] for d in data)
+        total_b = total / 1e9
+        lines.append(f"**{disp} ({t})**　总收入 ${total_b:.1f}B")
+        for seg in data:
+            bar = "█" * int(seg["percentage"] / 5)
+            lines.append(f"- {seg['segment']}: {seg['percentage']:.1f}%　{bar}　(${seg['absolute']/1e9:.2f}B)")
+        lines.append("")
+    if not found_any:
+        lines.append("*暂无可用的revenue breakdown数据（FMP未收录或非美股）*")
+        lines.append("")
     return lines
 
 
@@ -509,13 +530,29 @@ def _step2_per_company_revenue_breakdown(
         ]
     ],
 ) -> list[str]:
+    from research_automation.extractors.fmp_client import get_segment_revenue
     lines: list[str] = ["## Step 2｜每家公司业务占比", ""]
     for rec, _signals, _insider, _below, _had in per_company:
         t = rec.ticker
         disp = company_display_name(t, rec.company_name)
         lines.append(f"### {t} — {disp}")
         lines.append("")
-        lines.append("*（待实现：revenue by segment / by geography，标注段落ID）*")
+        data = get_segment_revenue(t, 2024)
+        year_used = 2024
+        if data is None:
+            data = get_segment_revenue(t, 2023)
+            year_used = 2023
+        if not data:
+            lines.append("*暂无revenue breakdown数据（FMP未收录或非美股）*")
+            lines.append("")
+            continue
+        total = sum(d["absolute"] for d in data)
+        lines.append(f"**财年{year_used} revenue breakdown**（总计 ${total/1e9:.2f}B）：")
+        lines.append("")
+        lines.append("| 业务线 | 占比 | 收入 |")
+        lines.append("|--------|------|------|")
+        for seg in data:
+            lines.append(f"| {seg['segment']} | {seg['percentage']:.1f}% | ${seg['absolute']/1e9:.2f}B |")
         lines.append("")
     return lines
 
