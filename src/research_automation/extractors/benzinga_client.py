@@ -56,7 +56,8 @@ def _api_key() -> str | None:
 
 
 def _cache_path(symbol: str, from_d: str, to_d: str) -> Path:
-    sym = (symbol or "").strip().upper()
+    from research_automation.core.ticker_normalize import ticker_to_cache_key
+    sym = ticker_to_cache_key(symbol)
     return _cache_dir() / f"company_{sym}_{from_d}_{to_d}.json"
 
 
