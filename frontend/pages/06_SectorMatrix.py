@@ -201,9 +201,9 @@ if not df.empty:
     # 迷你图：Revenue 横向柱状图
     if "_rev_raw" in df.columns and df["_rev_raw"].sum() > 0:
         st.divider()
-        st.markdown("#### Revenue 规模对比")
+        st.markdown("#### Revenue 规模对比（$B）")
         chart_df = df[df["_rev_raw"] > 0][["Ticker", "_rev_raw"]].copy()
-        chart_df = chart_df.rename(columns={"_rev_raw": "Revenue (USD)"})
-        chart_df = chart_df.sort_values("Revenue (USD)", ascending=True)
+        chart_df["Revenue ($B)"] = (chart_df["_rev_raw"] / 1e9).round(1)
+        chart_df = chart_df[["Ticker", "Revenue ($B)"]].sort_values("Revenue ($B)", ascending=True)
         chart_df = chart_df.set_index("Ticker")
         st.bar_chart(chart_df, height=max(200, len(chart_df) * 25))
