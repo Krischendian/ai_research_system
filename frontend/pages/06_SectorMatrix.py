@@ -189,7 +189,44 @@ if not df.empty:
         height=min(60 + len(df) * 35, 700),
     )
 
-    # 下载
+    if "_rev_raw" in df.columns and df["_rev_raw"].sum() > 0:
+        st.divider()
+        st.markdown("#### 财务指标对比图")
+
+        col_rev, col_gm, col_ebitda = st.columns(3)
+
+        with col_rev:
+            st.markdown("**Revenue（$B）**")
+            chart_df = df[df["_rev_raw"] > 0][["Ticker", "_rev_raw"]].copy()
+            chart_df["Revenue ($B)"] = (chart_df["_rev_raw"] / 1e9).round(2)
+            chart_df = chart_df[["Ticker", "Revenue ($B)"]].sort_values("Revenue ($B)", ascending=True)
+            chart_df = chart_df.set_index("Ticker")
+            st.bar_chart(chart_df, height=max(200, len(chart_df) * 28))
+
+        with col_gm:
+            st.markdown("**Gross Margin（%）**")
+            if "_gm_raw" in df.columns and df["_gm_raw"].sum() != 0:
+                gm_df = df[df["_gm_raw"] != 0][["Ticker", "_gm_raw"]].copy()
+                gm_df["Gross Margin (%)"] = gm_df["_gm_raw"].round(1)
+                gm_df = gm_df[["Ticker", "Gross Margin (%)"]].sort_values("Gross Margin (%)", ascending=True)
+                gm_df = gm_df.set_index("Ticker")
+                st.bar_chart(gm_df, height=max(200, len(gm_df) * 28))
+            else:
+                st.caption("暂无数据")
+
+        with col_ebitda:
+            st.markdown("**EBITDA（$B）**")
+            if "_ebitda_raw" in df.columns and df["_ebitda_raw"].sum() != 0:
+                eb_df = df[df["_ebitda_raw"] != 0][["Ticker", "_ebitda_raw"]].copy()
+                eb_df["EBITDA ($B)"] = (eb_df["_ebitda_raw"] / 1e9).round(2)
+                eb_df = eb_df[["Ticker", "EBITDA ($B)"]].sort_values("EBITDA ($B)", ascending=True)
+                eb_df = eb_df.set_index("Ticker")
+                st.bar_chart(eb_df, height=max(200, len(eb_df) * 28))
+            else:
+                st.caption("暂无数据")
+
+    # 下载按钮移到图表下方
+    st.divider()
     csv = df[display_cols].to_csv(index=False).encode("utf-8-sig")
     st.download_button(
         "⬇️ 下载 CSV",
@@ -197,12 +234,3 @@ if not df.empty:
         file_name=f"sector_matrix_{sector}.csv",
         mime="text/csv",
     )
-
-    if "_rev_raw" in df.columns and df["_rev_raw"].sum() > 0:
-        st.divider()
-        st.markdown("#### Revenue 规模对比（$B）")
-        chart_df = df[df["_rev_raw"] > 0][["Ticker", "_rev_raw"]].copy()
-        chart_df["Revenue ($B)"] = (chart_df["_rev_raw"] / 1e9).round(1)
-        chart_df = chart_df[["Ticker", "Revenue ($B)"]].sort_values("Revenue ($B)", ascending=True)
-        chart_df = chart_df.set_index("Ticker")
-        st.bar_chart(chart_df, height=max(200, len(chart_df) * 25))
