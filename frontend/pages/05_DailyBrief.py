@@ -21,6 +21,9 @@ load_dotenv(_fe_root / ".env", override=False)
 st.title("每日新闻简报")
 st.caption("宏观：Bloomberg RSS（sector相关过滤）｜公司：Benzinga API｜摘要：Claude")
 
+force_refresh = st.sidebar.checkbox("强制刷新简报（忽略缓存）", value=False)
+
+
 def _get_sectors() -> list[str]:
     conn = get_connection()
     try:
@@ -54,7 +57,9 @@ cache_key = f"daily_brief_{sector}"
 if gen:
     with st.spinner("正在拉取新闻并生成摘要（约30-60秒）..."):
         try:
-            brief = generate_daily_brief(sector=sector, tickers=tickers)
+            brief = generate_daily_brief(
+                sector, tickers, force_refresh=force_refresh
+            )
             st.session_state[cache_key] = brief
         except Exception as e:
             st.error(f"生成失败：{e}")

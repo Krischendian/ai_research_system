@@ -18,4 +18,4 @@ data/raw/
 data/cache/
 
 # vscode
-.vscode/
+.vscode/daily_brief_cache.db

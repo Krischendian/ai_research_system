@@ -7,8 +7,10 @@
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
+import sqlite3
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -22,6 +24,76 @@ from research_automation.extractors.llm_client import chat
 
 load_dotenv(Path(__file__).resolve().parents[3] / ".env", override=False)
 logger = logging.getLogger(__name__)
+
+# ── 每日简报缓存（SQLite） ─────────────────────────────────────────
+_CACHE_DB_PATH = Path(__file__).resolve().parents[3] / "daily_brief_cache.db"
+
+
+def _get_cache_conn() -> sqlite3.Connection:
+    conn = sqlite3.connect(str(_CACHE_DB_PATH))
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS daily_brief_cache (
+            cache_key  TEXT PRIMARY KEY,
+            sector     TEXT NOT NULL,
+            date_str   TEXT NOT NULL,
+            content    TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+    """)
+    conn.commit()
+    return conn
+
+
+def _cache_key(sector: str, date_str: str) -> str:
+    raw = f"{sector}::{date_str}"
+    return hashlib.md5(raw.encode()).hexdigest()
+
+
+def _get_brief_cache(sector: str, date_str: str) -> str | None:
+    try:
+        conn = _get_cache_conn()
+        key = _cache_key(sector, date_str)
+        row = conn.execute(
+            "SELECT content FROM daily_brief_cache WHERE cache_key=?", (key,)
+        ).fetchone()
+        conn.close()
+        return row[0] if row else None
+    except Exception as e:
+        logger.warning("读取每日简报缓存失败: %s", e)
+        return None
+
+
+def _save_brief_cache(sector: str, date_str: str, content: str) -> None:
+    try:
+        conn = _get_cache_conn()
+        key = _cache_key(sector, date_str)
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO daily_brief_cache
+                (cache_key, sector, date_str, content, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (key, sector, date_str, content, now),
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.warning("写入每日简报缓存失败: %s", e)
+
+
+def _delete_brief_cache(sector: str, date_str: str) -> None:
+    try:
+        conn = _get_cache_conn()
+        key = _cache_key(sector, date_str)
+        conn.execute("DELETE FROM daily_brief_cache WHERE cache_key=?", (key,))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.warning("删除每日简报缓存失败: %s", e)
+
+
+# ── 缓存工具 END ──────────────────────────────────────────────────
 
 BENZINGA_BASE = "https://api.massive.com/benzinga/v2"
 BLOOMBERG_FEEDS = [
@@ -213,11 +285,22 @@ def _llm_summarize_company(
 def generate_daily_brief(
     sector: str,
     tickers: list[str],
+    *,
+    force_refresh: bool = False,
 ) -> str:
     """
     生成单个sector的每日新闻简报。
     返回Markdown字符串。
     """
+    # ── 缓存读取 ──────────────────────────────────────────────────
+    ny_today = datetime.now(timezone(timedelta(hours=-4))).strftime("%Y-%m-%d")
+    if not force_refresh:
+        cached = _get_brief_cache(sector, ny_today)
+        if cached:
+            logger.info("每日简报命中缓存 sector=%s date=%s", sector, ny_today)
+            return cached
+    # ── 缓存读取 END ──────────────────────────────────────────────
+
     overnight_window, yesterday_window = _ny_windows()
     ov_start, ov_end = overnight_window
     yd_start, yd_end = yesterday_window
@@ -284,4 +367,8 @@ def generate_daily_brief(
             lines.append("</details>")
             lines.append("")
 
-    return "\n".join(lines).rstrip() + "\n"
+    # ── 缓存写入 ──────────────────────────────────────────────────
+    result = "\n".join(lines).rstrip() + "\n"
+    _save_brief_cache(sector, ny_today, result)
+    # ── 缓存写入 END ──────────────────────────────────────────────
+    return result
