@@ -157,7 +157,6 @@ _LOW_CREDIBILITY_DOMAINS: frozenset[str] = frozenset(
         "barchart.com",
         "marketbeat.com",
         "tipranks.com",
-        "benzinga.com",        # 直接Benzinga聚合页（非API内容）
         "investing.com",
         "seekingalpha.com",
         "fool.com",
@@ -501,23 +500,14 @@ def fetch_signals_for_ticker(
 
     by_url: dict[str, dict[str, Any]] = {}
     url_axes: dict[str, set[str]] = {}
-    raw_row_count = 0
 
-    for axis, qtext in _queries_for_ticker(sym, company_label or None):
-        # 主力：Benzinga API（每个axis都拉，URL去重在外层处理）
-        bz_rows = _benzinga_news_client.fetch_news_for_ticker(
-            sym, days_back=days_back, max_results=max_results_per_query
-        )
-        # 补充：Bloomberg RSS按查询词过滤
-        rss_rows = bloomberg_rss_client.search_news(
-            qtext, days_back=days_back, max_results=max_results_per_query
-        )
-        rows = bz_rows + rss_rows
-        for row in rows:
-            raw_row_count += 1
-            url = (row.get("url") or "").strip()
-            if not url:
-                continue
+    # Benzinga：按ticker拉一次，不需要重复查询
+    bz_rows = _benzinga_news_client.fetch_news_for_ticker(
+        sym, days_back=days_back, max_results=max_results_per_query * 3
+    )
+    for row in bz_rows:
+        url = (row.get("url") or "").strip()
+        if url:
             key = url.lower()
             if key not in by_url:
                 by_url[key] = {
@@ -526,12 +516,33 @@ def fetch_signals_for_ticker(
                     "content": row.get("content") or "",
                     "published_date": row.get("published_date"),
                 }
-                url_axes[key] = set()
-            url_axes[key].add(axis)
+                url_axes[key] = {"benzinga"}
 
-    acc.raw_row_count += raw_row_count
+    # Bloomberg RSS：用公司名搜索补充
+    rss_query = company_label or sym
+    rss_rows = bloomberg_rss_client.search_news(
+        rss_query, days_back=days_back, max_results=max_results_per_query
+    )
+    for row in rss_rows:
+        url = (row.get("url") or "").strip()
+        if url:
+            key = url.lower()
+            if key not in by_url:
+                by_url[key] = {
+                    "title": row.get("title") or "",
+                    "url": url,
+                    "content": row.get("content") or "",
+                    "published_date": row.get("published_date"),
+                }
+                url_axes[key] = {"bloomberg_rss"}
+
+    # 保留_queries_for_ticker的循环变量供下面统计用（空循环）
+    for _axis, _qtext in _queries_for_ticker(sym, company_label or None):
+        pass
+
+    acc.raw_row_count += len(bz_rows) + len(rss_rows)
     acc.unique_url_count += len(by_url)
-    acc.dropped_duplicate_rows += max(0, raw_row_count - len(by_url))
+    acc.dropped_duplicate_rows += max(0, len(bz_rows) + len(rss_rows) - len(by_url))
 
     merged: list[dict[str, Any]] = []
     for key, row in by_url.items():

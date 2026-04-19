@@ -4,10 +4,11 @@ from __future__ import annotations
 import logging
 import os
 import re
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from research_automation.core.company_manager import CompanyRecord, list_companies
+from research_automation.extractors.fmp_client import get_insider_trades
 from research_automation.services.insider_service import get_insider_summary
 from research_automation.services.signal_fetcher import (
     SignalFetchStats,
@@ -446,10 +447,28 @@ def _load_per_company_signals_and_insiders(
         filtered_total += len(deduped)
 
         try:
-            insider = get_insider_summary(t, days_back=days_back)
+            rows_all = get_insider_trades(t, limit=max(50, days_back * 3))
+            cutoff = date.today() - timedelta(days=max(1, int(days_back)))
+            filtered_trades: list[dict[str, Any]] = []
+            for r in rows_all:
+                if not isinstance(r, dict):
+                    continue
+                raw_d = str(r.get("transactionDate") or "").strip()[:10]
+                if len(raw_d) < 10:
+                    raw_d = str(r.get("filingDate") or "").strip()[:10]
+                if len(raw_d) < 10:
+                    continue
+                try:
+                    td = datetime.strptime(raw_d, "%Y-%m-%d").date()
+                except ValueError:
+                    continue
+                if td < cutoff:
+                    continue
+                filtered_trades.append(r)
+            insider = _summarize_insider_trades(filtered_trades)
         except Exception:
             logger.exception("内部交易汇总失败 ticker=%s", t)
-            insider = get_insider_summary("", days_back=days_back)
+            insider = {}
 
         per_company.append((rec, deduped, insider, below_n, had_fetch_signals))
 
@@ -717,6 +736,50 @@ def _step4_earning_call_section(
     return lines
 
 
+def _summarize_insider_trades(trades: list[Any]) -> dict[str, Any]:
+    """把 get_insider_trades 返回的 list 汇总为 _step5 需要的 dict 格式。"""
+    if not trades:
+        return {}
+
+    def _ttu(tr: Any) -> str:
+        return str(tr.get("transactionType") or "").strip().upper()
+
+    buys = [
+        t
+        for t in trades
+        if _ttu(t) in ("P", "BUY", "PURCHASE")
+    ]
+    sells = [
+        t
+        for t in trades
+        if _ttu(t) in ("S", "SELL", "SALE")
+    ]
+
+    def _row_money(tr: dict[str, Any]) -> float:
+        for k in ("value", "totalValue"):
+            v = tr.get(k)
+            if v is None:
+                continue
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                continue
+        return 0.0
+
+    buy_val = sum(_row_money(t) for t in buys)
+    sell_val = sum(_row_money(t) for t in sells)
+    bc, sc = len(buys), len(sells)
+    return {
+        "buy_count": bc,
+        "sell_count": sc,
+        "buy_value": buy_val,
+        "sell_value": sell_val,
+        "total_buy_value": buy_val if bc else None,
+        "total_sell_value": sell_val if sc else None,
+        "trade_count": len(trades),
+    }
+
+
 def _step5_new_biz_acquisitions_insider(
     per_company: list[
         tuple[
@@ -870,9 +933,11 @@ def generate_six_step_sector_report(
     earnings_cross_review: dict[str, Any] | None = None,
     quarters: list[str] | None = None,
     sector_watch_items: list[str] | None = None,
+    force_refresh: bool = False,
 ) -> str:
     """六步结构行业报告。每次LLM调用只处理单家公司。"""
     from research_automation.core.sector_config import get_sector_watch_items
+    from research_automation.services.report_cache import get_cached_report, save_report_cache
 
     sec = (sector or "").strip()
     db = _resolve_sector_news_days_back(days_back)
@@ -888,6 +953,21 @@ def generate_six_step_sector_report(
 
     if not sec:
         return "# 行业报告（六步结构）\n\n（sector 为空）\n"
+
+    # ── 缓存读取 ──────────────────────────────────────────────
+    now_utc = datetime.now(timezone.utc)
+    cache_year = now_utc.year
+    cache_quarter = (now_utc.month - 1) // 3 + 1
+    if cache_quarter == 1:
+        cache_quarter = 4
+        cache_year -= 1
+    else:
+        cache_quarter -= 1
+    if not force_refresh:
+        cached = get_cached_report(sec, cache_year, cache_quarter)
+        if cached:
+            return cached
+    # ── 缓存读取 END ──────────────────────────────────────────
 
     loaded = _load_per_company_signals_and_insiders(sec, db, thr, report_stats)
     if loaded is None:
@@ -919,4 +999,7 @@ def generate_six_step_sector_report(
     )
     lines.extend(_step5_new_biz_acquisitions_insider(per_company))
     lines.extend(_step6_financial_table(per_company, quarters=6))
-    return "\n".join(lines).rstrip() + "\n"
+    # ── 缓存写入 ──────────────────────────────────────────────
+    report_md = "\n".join(lines).rstrip() + "\n"
+    save_report_cache(sec, cache_year, cache_quarter, report_md)
+    return report_md

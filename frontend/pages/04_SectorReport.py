@@ -13,9 +13,15 @@ for p in (_fe_root, _src):
         sys.path.insert(0, str(p))
 
 import streamlit as st
+from datetime import datetime, timezone
 from dotenv import load_dotenv
 
 from research_automation.core.database import get_connection, init_db
+from research_automation.services.report_cache import (
+    delete_report_cache,
+    get_cached_report,
+    list_cached_reports,
+)
 from research_automation.services.sector_report_service import generate_six_step_sector_report
 
 load_dotenv(_fe_root / ".env", override=False)
@@ -135,7 +141,29 @@ with c2:
         min_value=0, max_value=3, value=1,
     )
 with c3:
+    force_refresh = st.checkbox("强制刷新", value=False)
     gen = st.button("生成报告", type="primary")
+
+
+def _current_cache_quarter() -> tuple[int, int]:
+    now = datetime.now(timezone.utc)
+    q = (now.month - 1) // 3 + 1
+    y = now.year
+    if q == 1:
+        return y - 1, 4
+    return y, q - 1
+
+
+if sector:
+    cy, cq = _current_cache_quarter()
+    cached = get_cached_report(sector, cy, cq)
+    if cached:
+        st.info(
+            f"✅ 已有 {cy}Q{cq} 缓存报告，点击「生成报告」直接读取缓存（秒级返回）。"
+            "如需重新生成请勾选「强制刷新」。"
+        )
+    else:
+        st.warning(f"⚠️ 暂无 {cy}Q{cq} 缓存，首次生成需要约5-10分钟。")
 
 if gen:
     st.session_state.pop("_sector_report_error", None)
@@ -144,6 +172,7 @@ if gen:
             st.session_state["_sector_report_md"] = generate_six_step_sector_report(
                 sector,
                 relevance_threshold=int(thr),
+                force_refresh=force_refresh,
             )
             st.session_state["_sector_report_name"] = sector
         except Exception as e:
