@@ -1,4 +1,4 @@
-"""财报电话会：FMP → EDGAR 8-K → earningscall → sec-api.io；再经 LLM 分析（段落级溯源）。"""
+"""财报电话会：FMP → EDGAR 8-K → sec-api.io；再经 LLM 分析（段落级溯源）。"""
 from __future__ import annotations
 
 import json
@@ -19,9 +19,9 @@ from research_automation.core.paragraph_text import (
     split_into_paragraphs,
 )
 from research_automation.extractors import fmp_client
-from research_automation.extractors.earningscall_lib import (
-    get_transcript_from_earningscall,
-)
+# from research_automation.extractors.earningscall_lib import (
+#     get_transcript_from_earningscall,
+# )
 from research_automation.extractors.sec_8k_client import (
     fetch_transcript_from_8k,
     search_8k_transcript,
@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 
 # 无逐字稿时 API 返回的说明（与 HTTP detail 一致，便于前端展示）
 EARNINGS_NO_TRANSCRIPT_MESSAGE = (
-    "No earnings call transcript available：FMP、EDGAR 8-K、earningscall 与 sec-api.io（"
+    "No earnings call transcript available：FMP、EDGAR 8-K 与 sec-api.io（"
     "SEC_API_KEY）均未返回该季度可用逐字稿；请换季度或检查网络与密钥配置。"
 )
 
@@ -204,7 +204,7 @@ def analyze_earnings_call(
     sector_watch_items: list[str] | None = None,
 ) -> EarningsCallAnalysis:
     """
-    优先 FMP，其次 EDGAR ``search_8k_transcript``，再 ``earningscall``，最后
+    优先 FMP，其次 EDGAR ``search_8k_transcript``，再
     ``fetch_transcript_from_8k``（sec-api.io，需 ``SEC_API_KEY``）；
     将逐字稿分段入库后经 LLM 生成 ``EarningsCallAnalysis``。
 
@@ -225,7 +225,7 @@ def analyze_earnings_call(
         logger.exception("FMP 逐字稿拉取异常 ticker=%s %s", symbol, qlabel)
         fmp_tr = None
 
-    transcript_origin: Literal["fmp", "sec_8k", "earningscall", "sec_api"]
+    transcript_origin: Literal["fmp", "sec_8k", "sec_api"]
     transcript = ""
 
     if fmp_tr and fmp_tr.get("content"):
@@ -250,41 +250,32 @@ def analyze_earnings_call(
             transcript_origin = "sec_8k"
             logger.info("电话会逐字稿来源=SEC_8K_EDGAR ticker=%s %s", symbol, qlabel)
         else:
-            transcript = (
-                get_transcript_from_earningscall(symbol, year, quarter) or ""
-            ).strip()
-            if transcript:
-                transcript_origin = "earningscall"
+            api_text: str | None = None
+            try:
+                api_text = fetch_transcript_from_8k(
+                    symbol,
+                    lookback_days=14,
+                    fiscal_year=year,
+                    fiscal_quarter=quarter,
+                )
+            except Exception:
+                logger.exception(
+                    "sec-api.io 8-K 逐字稿拉取异常 ticker=%s %s", symbol, qlabel
+                )
+                api_text = None
+            if api_text and api_text.strip():
+                transcript = api_text.strip()
+                transcript_origin = "sec_api"
                 logger.info(
-                    "电话会逐字稿来源=earningscall ticker=%s %s", symbol, qlabel
+                    "电话会逐字稿来源=SEC_API ticker=%s %s", symbol, qlabel
                 )
             else:
-                api_text: str | None = None
-                try:
-                    api_text = fetch_transcript_from_8k(
-                        symbol,
-                        lookback_days=14,
-                        fiscal_year=year,
-                        fiscal_quarter=quarter,
-                    )
-                except Exception:
-                    logger.exception(
-                        "sec-api.io 8-K 逐字稿拉取异常 ticker=%s %s", symbol, qlabel
-                    )
-                    api_text = None
-                if api_text and api_text.strip():
-                    transcript = api_text.strip()
-                    transcript_origin = "sec_api"
-                    logger.info(
-                        "电话会逐字稿来源=SEC_API ticker=%s %s", symbol, qlabel
-                    )
-                else:
-                    transcript_origin = "earningscall"
-                    logger.info(
-                        "电话会无逐字稿 ticker=%s %s（已尝试全部来源）",
-                        symbol,
-                        qlabel,
-                    )
+                transcript_origin = "sec_api"
+                logger.info(
+                    "电话会无逐字稿 ticker=%s %s（已尝试全部来源）",
+                    symbol,
+                    qlabel,
+                )
 
     if not transcript:
         logger.warning("无逐字稿 ticker=%s %s", symbol, qlabel)
@@ -391,7 +382,7 @@ def analyze_earnings_call(
         )
     else:
         ds_label = (
-            "逐字稿来源：earningscall 库（公开财报电话会文本）；"
+            "逐字稿来源：本地已解析文本；"
             "分析由本地 LLM 基于该文本生成。"
         )
 

@@ -796,7 +796,20 @@ def _fetch_statement_quarterly(
     return [x for x in data if isinstance(x, dict)]
 
 
-def _quarter_label(date_str: str, period: str | None = None) -> str:
+def _quarter_label(
+    date_str: str,
+    period: str | None = None,
+    fiscal_year: str | None = None,
+) -> str:
+    """
+    生成季度标签，优先用 fiscalYear + period（最准确），
+    其次用 date 推算，避免财年跨年导致标签错误。
+    """
+    if fiscal_year and period and "Q" in str(period).upper():
+        p = str(period).strip().upper()
+        fy = str(fiscal_year).strip()[:4]
+        if fy.isdigit():
+            return f"{fy}{p}"
     if period and "Q" in str(period).upper():
         p = str(period).strip().upper()
         if date_str and len(date_str) >= 4:
@@ -841,7 +854,7 @@ def get_quarterly_financials(ticker: str, quarters: int = 6) -> list[dict[str, A
         if not d:
             continue
         period = str(inc.get("period") or "").strip()
-        label = _quarter_label(d, period)
+        label = _quarter_label(d, period, fiscal_year=inc.get("fiscalYear"))
         cf = cf_by_date.get(d)
         revenue = _num(inc.get("revenue"))
         gp = _num(inc.get("grossProfit"))

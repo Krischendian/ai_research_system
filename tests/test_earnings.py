@@ -36,9 +36,6 @@ class TestEarningsMock(unittest.TestCase):
 
     @patch("research_automation.services.earnings_service.chat")
     @patch(
-        "research_automation.services.earnings_service.get_transcript_from_earningscall",
-    )
-    @patch(
         "research_automation.services.earnings_service.fmp_client.get_earnings_transcript",
         return_value=None,
     )
@@ -48,18 +45,16 @@ class TestEarningsMock(unittest.TestCase):
     )
     @patch(
         "research_automation.services.earnings_service.fetch_transcript_from_8k",
-        return_value=None,
     )
     def test_analyze_parses_llm_json(
         self,
-        _mock_fetch,
+        mock_fetch,
         _mock_sec,
         _mock_fmp,
-        mock_ec,
         mock_chat,
     ) -> None:
-        # 固定一段含 LLM mock 原话的「伪逐字稿」，避免依赖外网 earningscall。
-        mock_ec.return_value = (
+        # 固定一段含 LLM mock 原话的「伪逐字稿」，走 sec-api 回退链。
+        mock_fetch.return_value = (
             "Tim Cook — CEO: We are pleased with record revenue for the quarter, with strength\n"
             "across iPhone and Services.\n"
         )
@@ -81,7 +76,7 @@ class TestEarningsMock(unittest.TestCase):
         out = analyze_earnings_call("MSFT", 2024, 4)
         self.assertEqual(out.ticker, "MSFT")
         self.assertEqual(out.quarter, "2024Q4")
-        self.assertEqual(out.data_source, "earningscall")
+        self.assertEqual(out.data_source, "sec_api")
         self.assertIn("营收", out.summary)
         self.assertGreaterEqual(len(out.management_viewpoints), 1)
         self.assertTrue(out.management_viewpoints[0].text)
@@ -90,9 +85,6 @@ class TestEarningsMock(unittest.TestCase):
         mock_chat.assert_called_once()
 
     @patch("research_automation.services.earnings_service.chat")
-    @patch(
-        "research_automation.services.earnings_service.get_transcript_from_earningscall",
-    )
     @patch(
         "research_automation.services.earnings_service.fmp_client.get_earnings_transcript",
     )
@@ -109,7 +101,6 @@ class TestEarningsMock(unittest.TestCase):
         _mock_fetch,
         _mock_sec,
         mock_fmp,
-        mock_ec,
         mock_chat,
     ) -> None:
         mock_fmp.return_value = {
@@ -123,7 +114,6 @@ class TestEarningsMock(unittest.TestCase):
                 },
             ],
         }
-        mock_ec.return_value = "SHOULD NOT USE EC"
         mock_chat.return_value = json.dumps(
             {
                 "summary": "本季度营收稳健。",
@@ -143,13 +133,9 @@ class TestEarningsMock(unittest.TestCase):
         )
         out = analyze_earnings_call("MSFT", 2024, 4)
         self.assertEqual(out.data_source, "fmp")
-        mock_ec.assert_not_called()
         mock_chat.assert_called_once()
 
     @patch("research_automation.services.earnings_service.chat")
-    @patch(
-        "research_automation.services.earnings_service.get_transcript_from_earningscall",
-    )
     @patch(
         "research_automation.services.earnings_service.search_8k_transcript",
     )
@@ -166,7 +152,6 @@ class TestEarningsMock(unittest.TestCase):
         _mock_fetch,
         _mock_fmp,
         mock_sec,
-        mock_ec,
         mock_chat,
     ) -> None:
         mock_sec.return_value = (
@@ -174,7 +159,6 @@ class TestEarningsMock(unittest.TestCase):
             "Forward-looking statements and safe harbor apply.\n\n"
             "Tim Cook: We are pleased with record revenue for the quarter."
         )
-        mock_ec.return_value = "DO NOT USE EC"
         mock_chat.return_value = json.dumps(
             {
                 "summary": "本季度营收稳健。",
@@ -194,14 +178,9 @@ class TestEarningsMock(unittest.TestCase):
         )
         out = analyze_earnings_call("MSFT", 2024, 4)
         self.assertEqual(out.data_source, "sec_8k")
-        mock_ec.assert_not_called()
         mock_chat.assert_called_once()
 
     @patch("research_automation.services.earnings_service.chat")
-    @patch(
-        "research_automation.services.earnings_service.get_transcript_from_earningscall",
-        return_value="",
-    )
     @patch(
         "research_automation.services.earnings_service.search_8k_transcript",
         return_value=None,
@@ -218,7 +197,6 @@ class TestEarningsMock(unittest.TestCase):
         mock_fetch,
         _mock_fmp,
         _mock_sec,
-        _mock_ec,
         mock_chat,
     ) -> None:
         mock_fetch.return_value = (
@@ -257,17 +235,12 @@ class TestEarningsMock(unittest.TestCase):
         return_value=None,
     )
     @patch(
-        "research_automation.services.earnings_service.get_transcript_from_earningscall",
-        return_value="",
-    )
-    @patch(
         "research_automation.services.earnings_service.fmp_client.get_earnings_transcript",
         return_value=None,
     )
     def test_analyze_raises_when_no_transcript(
         self,
         _mock_fmp,
-        _mock_ec,
         _mock_sec,
         _mock_fetch,
     ) -> None:

@@ -58,7 +58,7 @@ class TestMixedSourceE2E(unittest.TestCase):
             body = r.json()
             self.assertIn(
                 body.get("data_source"),
-                ("fmp", "sec_8k", "earningscall", "sec_api"),
+                ("fmp", "sec_8k", "sec_api"),
             )
         else:
             payload = r.json()

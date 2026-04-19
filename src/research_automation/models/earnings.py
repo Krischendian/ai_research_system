@@ -43,8 +43,8 @@ class EarningsCallAnalysis(BaseModel):
         description="新业务 / 产品线 / 战略动向要点",
     )
     last_updated: str = ""
-    # 逐字稿来源：FMP → EDGAR 8-K → earningscall → sec-api.io
-    data_source: Literal["fmp", "sec_8k", "earningscall", "sec_api"] | None = None
+    # 逐字稿来源：FMP → EDGAR 8-K → sec-api.io
+    data_source: Literal["fmp", "sec_8k", "sec_api"] | None = None
     data_source_label: str = ""
     document_uid: str = Field(
         "",
