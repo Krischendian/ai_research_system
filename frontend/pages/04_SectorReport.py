@@ -22,6 +22,8 @@ from research_automation.services.report_cache import (
     get_cached_report,
     list_cached_reports,
 )
+from research_automation.services.chart_service import build_financial_trend_chart
+from research_automation.extractors.fmp_client import FMPClient
 from research_automation.services.sector_report_service import generate_six_step_sector_report
 
 load_dotenv(_fe_root / ".env", override=False)
@@ -120,6 +122,73 @@ def _render_step1_charts(body: str) -> None:
 def _render_step2_tables(body: str) -> None:
     """Step2直接渲染markdown表格，Streamlit原生支持。"""
     st.markdown(body)
+
+
+def _render_step6_charts(sector_name: str) -> None:
+    """从FMP拉取各公司年度财务，渲染Plotly趋势图。"""
+    conn = get_connection()
+    try:
+        init_db(conn)
+        cur = conn.execute(
+            "SELECT ticker FROM companies WHERE is_active=1 AND TRIM(sector)=? ORDER BY ticker",
+            (sector_name,),
+        )
+        tickers = [r[0] for r in cur.fetchall()]
+    finally:
+        conn.close()
+
+    if not tickers:
+        return
+
+    fmp = FMPClient()
+    financials_by_company: dict[str, list[dict]] = {}
+
+    def _g(obj: object, *keys: str) -> object | None:
+        for k in keys:
+            try:
+                v = getattr(obj, k, None)
+                if v is None and hasattr(obj, "__getitem__"):
+                    v = obj[k]  # type: ignore[index]
+                if v is not None:
+                    return v
+            except Exception:
+                pass
+        return None
+
+    with st.spinner("加载财务趋势数据…"):
+        for ticker in tickers:
+            try:
+                rows = fmp.get_financials(ticker, years=3)
+                if not rows:
+                    continue
+                parsed = []
+                for r in rows:
+                    gm = _g(r, "gross_margin_pct", "gross_margin")
+                    if gm is not None and isinstance(gm, (int, float)) and gm < 2:
+                        gm = float(gm) * 100
+
+                    parsed.append({
+                        "year": _g(r, "year", "fiscal_year"),
+                        "revenue": _g(r, "revenue"),
+                        "gross_margin_pct": gm,
+                        "capex": _g(r, "capex"),
+                        "ebitda": _g(r, "ebitda"),
+                    })
+
+                parsed.sort(key=lambda x: x.get("year") or 0)
+                financials_by_company[ticker] = parsed
+            except Exception:
+                continue
+
+    if not financials_by_company:
+        st.info("暂无财务趋势数据。")
+        return
+
+    fig = build_financial_trend_chart(financials_by_company, sector_name=sector_name)
+    if fig:
+        st.divider()
+        st.markdown("#### 📈 财务趋势图（近3年）")
+        st.plotly_chart(fig, use_container_width=True)
 
 
 st.title("行业监控报告（六步结构）")
@@ -227,5 +296,10 @@ if md:
                 _render_step1_charts(body)
             elif "Step 2" in heading:
                 _render_step2_tables(body)
+            elif "Step 6" in heading:
+                st.markdown(body)
+                _render_step6_charts(
+                    st.session_state.get("_sector_report_name", sector)
+                )
             else:
                 st.markdown(body)

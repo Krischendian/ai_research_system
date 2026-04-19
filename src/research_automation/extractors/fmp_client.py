@@ -271,6 +271,13 @@ def get_financials(ticker: str, years: int = 3) -> list[AnnualFinancials]:
     return result
 
 
+class FMPClient:
+    """面向调用方的薄封装（如 Streamlit 页面）。"""
+
+    def get_financials(self, ticker: str, years: int = 3) -> list[AnnualFinancials]:
+        return get_financials(ticker, years=years)
+
+
 def get_segment_revenue(ticker: str, year: int) -> list[dict[str, Any]] | None:
     """
     获取公司指定财年的产品/业务线营收拆分（FMP stable ``revenue-product-segmentation``）。
