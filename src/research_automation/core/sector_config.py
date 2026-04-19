@@ -32,3 +32,53 @@ def get_sector_watch_items(sector: str) -> list[str]:
     sec = (sector or "").strip()
     specific = SECTOR_WATCH_ITEMS.get(sec, [])
     return specific + UNIVERSAL_WATCH_ITEMS
+
+
+# 每个sector关注的宏观关键词（用于过滤Bloomberg RSS宏观新闻）
+SECTOR_MACRO_KEYWORDS: dict[str, list[str]] = {
+    "AI_Job_Replacement": [
+        "federal reserve", "interest rate", "fed ",
+        "employment", "payroll", "unemployment", "labor market",
+        "tariff", "trade", "outsourcing",
+        "ai regulation", "artificial intelligence policy",
+        "india it", "tech layoff", "workforce",
+        "automation", "white collar",
+    ],
+    "Natural_Gas": [
+        "natural gas", "lng", "opec", "energy price",
+        "oil price", "pipeline", "henry hub",
+        "federal reserve", "interest rate",
+        "russia", "europe energy", "winter demand",
+        "epa", "carbon", "climate policy",
+    ],
+    "Technology": [
+        "federal reserve", "interest rate",
+        "ai regulation", "antitrust", "chip", "semiconductor",
+        "china tech", "export control", "tariff",
+        "cloud", "cybersecurity", "data privacy",
+        "nvidia", "microsoft", "alphabet",
+    ],
+}
+
+# 通用宏观关键词（所有sector都关注）
+UNIVERSAL_MACRO_KEYWORDS: list[str] = [
+    "federal reserve", "fed rate", "interest rate",
+    "inflation", "cpi", "gdp",
+    "recession", "central bank",
+    "geopolit", "sanctions", "war",
+    "tariff", "trade war",
+]
+
+
+def get_sector_macro_keywords(sector: str) -> list[str]:
+    """获取sector专属宏观关键词 + 通用关键词，去重。"""
+    sec = (sector or "").strip()
+    specific = SECTOR_MACRO_KEYWORDS.get(sec, [])
+    all_kw = specific + UNIVERSAL_MACRO_KEYWORDS
+    seen = set()
+    result = []
+    for kw in all_kw:
+        if kw not in seen:
+            seen.add(kw)
+            result.append(kw)
+    return result

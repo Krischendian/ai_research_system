@@ -19,11 +19,13 @@ def chat(
     *,
     model: str | None = None,
     timeout: float = 60.0,
+    max_tokens: int | None = None,
     response_format: dict[str, str] | None = None,
 ) -> str:
     """
     调用 LLM，返回助手回复文本。优先使用 Claude（Anthropic），回退 OpenAI。
 
+    ``max_tokens`` 可选，用于限制输出长度（Claude 默认 8096；OpenAI 未传则不设）。
     ``response_format`` 传 ``{"type": "json_object"}`` 时强制返回 JSON。
     - 未配置有效密钥：抛出 ``ValueError``
     - API 错误：抛出 ``RuntimeError``
@@ -37,6 +39,7 @@ def chat(
             api_key=anthropic_key,
             model=model or os.getenv("ANTHROPIC_MODEL") or "claude-sonnet-4-6",
             timeout=timeout,
+            max_tokens=max_tokens,
             response_format=response_format,
         )
 
@@ -47,6 +50,7 @@ def chat(
             api_key=openai_key,
             model=model or "gpt-4o-mini",
             timeout=timeout,
+            max_tokens=max_tokens,
             response_format=response_format,
         )
 
@@ -61,6 +65,7 @@ def _chat_claude(
     api_key: str,
     model: str,
     timeout: float,
+    max_tokens: int | None,
     response_format: dict[str, str] | None,
 ) -> str:
     """调用 Anthropic Claude API。"""
@@ -83,7 +88,7 @@ def _chat_claude(
         client = anthropic.Anthropic(api_key=api_key)
         resp = client.messages.create(
             model=model,
-            max_tokens=8096,
+            max_tokens=max_tokens if max_tokens is not None else 8096,
             messages=[{"role": "user", "content": text}],
             timeout=max(timeout, 180.0),
         )
@@ -103,6 +108,7 @@ def _chat_openai(
     api_key: str,
     model: str,
     timeout: float,
+    max_tokens: int | None,
     response_format: dict[str, str] | None,
 ) -> str:
     """调用 OpenAI API（回退）。"""
@@ -121,6 +127,8 @@ def _chat_openai(
             "model": model,
             "messages": [{"role": "user", "content": text}],
         }
+        if max_tokens is not None:
+            kwargs["max_tokens"] = max_tokens
         if response_format is not None:
             kwargs["response_format"] = response_format
         resp = client.chat.completions.create(**kwargs)
