@@ -1,9 +1,11 @@
 """按 ``sector`` 汇总 Tavily 新闻信号与 FMP 内部交易，生成 Markdown 行业报告。"""
 from __future__ import annotations
 
+import concurrent.futures
 import logging
 import os
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
@@ -360,6 +362,7 @@ def _load_per_company_signals_and_insiders(
     days_back: int,
     thr: int,
     report_stats: dict[str, Any] | None,
+    max_workers: int = 8,
 ) -> (
     tuple[
         list[CompanyRecord],
@@ -377,6 +380,7 @@ def _load_per_company_signals_and_insiders(
     ]
     | None
 ):
+    """并行拉取所有公司的信号与内部交易数据。"""
     sec = (sector or "").strip()
     thr = max(0, min(3, thr))
     fetch_tot = SignalFetchStats()
@@ -392,25 +396,30 @@ def _load_per_company_signals_and_insiders(
         report_stats.clear()
     if not sec:
         return None
+
     companies = list_companies(sector=sec, active_only=True)
     if not companies:
         if report_stats is not None:
             report_stats.update(stats)
         return None
 
-    per_company: list[
-        tuple[
-            CompanyRecord,
-            list[dict[str, Any]],
-            dict[str, Any],
-            int,
-            bool,
-        ]
-    ] = []
     seen_urls_global: set[str] = set()
-    raw_total = filtered_total = below_thr_total = dup_cross = 0
+    raw_total = 0
+    filtered_total = 0
+    below_thr_total = 0
+    dup_cross = 0
 
-    for rec in companies:
+    def _fetch_one(
+        rec: CompanyRecord,
+    ) -> tuple[
+        CompanyRecord,
+        list[dict[str, Any]],
+        dict[str, Any],
+        int,
+        bool,
+        SignalFetchStats,
+    ]:
+        """单家公司：拉信号 + insider，返回 (rec, relevance_filtered, insider, below_n, had_signals, sym_stats)。"""
         t = rec.ticker
         sym_stats = SignalFetchStats()
         try:
@@ -425,26 +434,8 @@ def _load_per_company_signals_and_insiders(
             signals = []
             sym_stats = SignalFetchStats()
 
-        fetch_tot.merge_from(sym_stats)
-        had_fetch_signals = len(signals) > 0
-        raw_total += len(signals)
-
-        filtered_signals = [
-            s for s in signals if int(s.get("relevance_score") or 0) >= thr
-        ]
-        below_n = len(signals) - len(filtered_signals)
-        below_thr_total += below_n
-
-        deduped: list[dict[str, Any]] = []
-        for s in filtered_signals:
-            u = str(s.get("url") or "").strip().lower()
-            if u:
-                if u in seen_urls_global:
-                    dup_cross += 1
-                    continue
-                seen_urls_global.add(u)
-            deduped.append(s)
-        filtered_total += len(deduped)
+        had_signals = len(signals) > 0
+        filtered, below_n = _filter_sort_signals(signals, thr)
 
         try:
             rows_all = get_insider_trades(t, limit=max(50, days_back * 3))
@@ -470,14 +461,77 @@ def _load_per_company_signals_and_insiders(
             logger.exception("内部交易汇总失败 ticker=%s", t)
             insider = {}
 
-        per_company.append((rec, deduped, insider, below_n, had_fetch_signals))
+        return rec, filtered, insider, below_n, had_signals, sym_stats
 
-    stats["raw_signal_count"] = raw_total
-    stats["filtered_signal_count"] = filtered_total
-    stats["below_relevance_dropped"] = below_thr_total
-    stats["cross_ticker_duplicate_urls"] = dup_cross
+    results_map: dict[
+        str,
+        tuple[
+            CompanyRecord,
+            list[dict[str, Any]],
+            dict[str, Any],
+            int,
+            bool,
+            SignalFetchStats,
+        ],
+    ] = {}
+    workers = max(1, min(int(max_workers), 32))
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        future_to_ticker = {
+            executor.submit(_fetch_one, rec): rec.ticker for rec in companies
+        }
+        for future in as_completed(future_to_ticker):
+            ticker = future_to_ticker[future]
+            try:
+                results_map[ticker] = future.result()
+            except Exception:
+                logger.exception("并行拉取异常 ticker=%s", ticker)
+
+    per_company: list[
+        tuple[
+            CompanyRecord,
+            list[dict[str, Any]],
+            dict[str, Any],
+            int,
+            bool,
+        ]
+    ] = []
+    for rec in companies:
+        if rec.ticker not in results_map:
+            continue
+        rec_out, filtered, insider, below_n, had_signals, sym_stats = results_map[
+            rec.ticker
+        ]
+
+        fetch_tot.merge_from(sym_stats)
+        raw_total += len(filtered) + below_n
+        below_thr_total += below_n
+
+        deduped: list[dict[str, Any]] = []
+        for s in filtered:
+            u = (str(s.get("url") or "")).strip().lower()
+            if u:
+                if u in seen_urls_global:
+                    dup_cross += 1
+                    continue
+                seen_urls_global.add(u)
+            deduped.append(s)
+
+        filtered_total += len(deduped)
+        per_company.append((rec_out, deduped, insider, below_n, had_signals))
+
+    stats.update(
+        {
+            "relevance_threshold": thr,
+            "raw_signal_count": raw_total,
+            "filtered_signal_count": filtered_total,
+            "below_relevance_dropped": below_thr_total,
+            "cross_ticker_duplicate_urls": dup_cross,
+            "fetch_aggregate": fetch_tot,
+        }
+    )
     if report_stats is not None:
         report_stats.update(stats)
+
     return companies, per_company, stats, fetch_tot
 
 
@@ -603,59 +657,114 @@ def _step3_per_company_outlook(
             bool,
         ]
     ],
+    *,
+    max_workers: int = 8,
 ) -> list[str]:
     from research_automation.services.profile_service import (
         ProfileGenerationError,
         get_profile,
     )
 
-    lines: list[str] = ["## Step 3｜展望与战略重心", ""]
-    for rec, _signals, _insider, _below, _had in per_company:
+    def _one_company_block(
+        row: tuple[
+            CompanyRecord,
+            list[dict[str, Any]],
+            dict[str, Any],
+            int,
+            bool,
+        ],
+    ) -> tuple[str, list[str]]:
+        rec, _signals, _insider, _below, _had = row
         t = rec.ticker
         disp = company_display_name(t, rec.company_name)
-        lines.append(f"### {t} — {disp}")
-        lines.append("")
+        chunk: list[str] = [
+            f"### {t} — {disp}",
+            "",
+        ]
         try:
             profile = get_profile(t)
             fg = (profile.future_guidance or "").strip()
             if fg and fg not in ("原文未明确提及", "NOT_FOUND"):
-                lines.append("**未来展望与指引：**")
-                lines.append("")
-                lines.append(fg)
-                lines.append("")
+                chunk.extend(
+                    [
+                        "**未来展望与指引：**",
+                        "",
+                        fg,
+                        "",
+                    ]
+                )
             else:
-                lines.append("**未来展望与指引：** *原文未明确提及*")
-                lines.append("")
+                chunk.extend(["**未来展望与指引：** *原文未明确提及*", ""])
             iv = (profile.industry_view or "").strip()
             if iv and iv not in ("原文未明确提及", "NOT_FOUND"):
-                lines.append("**行业判断（管理层视角）：**")
-                lines.append("")
-                lines.append(iv)
+                chunk.extend(
+                    [
+                        "**行业判断（管理层视角）：**",
+                        "",
+                        iv,
+                    ]
+                )
                 if profile.industry_view_source:
-                    lines.append(f"*原文依据：{profile.industry_view_source}*")
-                lines.append("")
+                    chunk.append(f"*原文依据：{profile.industry_view_source}*")
+                chunk.append("")
             else:
-                lines.append("**行业判断（管理层视角）：** *原文未明确提及*")
-                lines.append("")
+                chunk.extend(
+                    ["**行业判断（管理层视角）：** *原文未明确提及*", ""]
+                )
             fwd_quotes = [
                 q
                 for q in (profile.key_quotes or [])
                 if getattr(q, "modality", "") == "forward_looking"
             ]
             if fwd_quotes:
-                lines.append("**前瞻性原话：**")
-                lines.append("")
+                chunk.extend(["**前瞻性原话：**", ""])
                 for q in fwd_quotes[:3]:
-                    lines.append(f"> **{q.speaker or 'UNKNOWN'}**：\"{q.quote}\"")
-                    lines.append(f"> *主题：{q.topic}*")
-                    lines.append("")
+                    chunk.append(f"> **{q.speaker or 'UNKNOWN'}**：\"{q.quote}\"")
+                    chunk.append(f"> *主题：{q.topic}*")
+                    chunk.append("")
         except ProfileGenerationError as e:
-            lines.append(f"*（画像生成失败：{e.message}）*")
-            lines.append("")
+            chunk.append(f"*（画像生成失败：{e.message}）*")
+            chunk.append("")
         except Exception:
             logger.exception("Step3 get_profile 失败 ticker=%s", t)
-            lines.append("*（画像拉取失败，详见日志）*")
-            lines.append("")
+            chunk.append("*（画像拉取失败，详见日志）*")
+            chunk.append("")
+        return t, chunk
+
+    lines: list[str] = ["## Step 3｜展望与战略重心", ""]
+    if not per_company:
+        return lines
+
+    results_map: dict[str, list[str]] = {}
+    workers = max(1, min(int(max_workers), 32))
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        future_to_ticker = {
+            executor.submit(_one_company_block, row): row[0].ticker
+            for row in per_company
+        }
+        for future in as_completed(future_to_ticker):
+            tk = future_to_ticker[future]
+            try:
+                ticker, chunk = future.result()
+                results_map[ticker] = chunk
+            except Exception:
+                logger.exception("Step3 并行任务异常 ticker=%s", tk)
+
+    for rec, *_rest in per_company:
+        blk = results_map.get(rec.ticker)
+        if blk:
+            lines.extend(blk)
+        else:
+            t = rec.ticker
+            disp = company_display_name(t, rec.company_name)
+            lines.extend(
+                [
+                    f"### {t} — {disp}",
+                    "",
+                    "*（画像段落未生成：并行任务无结果）*",
+                    "",
+                ]
+            )
     return lines
 
 
@@ -1111,18 +1220,26 @@ def generate_six_step_sector_report(
         f"**新闻窗口**：最近 {int(db)} 个 UTC 日历日",
         "",
     ]
+    # Step1/2/5/6 无 LLM 调用，直接串行
     lines.extend(_step1_sector_business_overview(per_company))
     lines.extend(_step2_per_company_revenue_breakdown(per_company))
-    lines.extend(_step3_per_company_outlook(per_company))
-    lines.extend(
-        _step4_earning_call_section(
+
+    # Step3/4 有 LLM 调用，并行执行
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        f3 = executor.submit(_step3_per_company_outlook, per_company)
+        f4 = executor.submit(
+            _step4_earning_call_section,
             sec,
             earnings_cross_review,
             quarters,
-            sector_watch_items=sector_watch_items,
-            per_company=per_company,
+            sector_watch_items,
+            per_company,
         )
-    )
+        step3_lines = f3.result()
+        step4_lines = f4.result()
+
+    lines.extend(step3_lines)
+    lines.extend(step4_lines)
     lines.extend(_step5_new_biz_acquisitions_insider(per_company))
     lines.extend(_step6_annual_financial_table(per_company, years=3))
     # ── 缓存写入 ──────────────────────────────────────────────
