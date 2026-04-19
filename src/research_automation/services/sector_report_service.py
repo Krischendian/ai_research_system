@@ -833,6 +833,115 @@ def _step5_new_biz_acquisitions_insider(
     return lines
 
 
+def _step6_annual_financial_table(
+    per_company: list[
+        tuple[
+            CompanyRecord,
+            list[dict[str, Any]],
+            dict[str, Any],
+            int,
+            bool,
+        ]
+    ],
+    years: int = 3,
+) -> list[str]:
+    """Step6: 年度财务数据表格（最近3年），含Net Debt/Equity"""
+    from research_automation.extractors.fmp_client import get_financials
+
+    lines: list[str] = ["## Step 6｜财务数据（年度）", ""]
+
+    company_data: list[tuple[str, str, list[Any]]] = []
+    all_years: list[int] = []
+    for rec, _signals, _insider, _below, _had in per_company:
+        t = rec.ticker
+        disp = company_display_name(t, rec.company_name)
+        try:
+            rows = get_financials(t, years=years)
+        except Exception:
+            logger.exception("Step6 年度财务拉取失败 ticker=%s", t)
+            rows = []
+        company_data.append((t, disp, rows))
+        for r in rows:
+            if r.year not in all_years:
+                all_years.append(r.year)
+
+    all_years = sorted(set(all_years), reverse=True)[:years]
+
+    if not all_years:
+        lines.append("*（FMP 年度数据不可用，请检查 FMP_API_KEY 或网络。）*")
+        lines.append("")
+        return lines
+
+    def fmt_b(v: float | None) -> str:
+        if v is None:
+            return "—"
+        return f"${v / 1e9:.2f}B"
+
+    def fmt_pct(v: float | None) -> str:
+        if v is None:
+            return "—"
+        return f"{v * 100:.1f}%"
+
+    def fmt_nd(v: float | None) -> str:
+        if v is None:
+            return "—"
+        return f"{v:.2f}x"
+
+    year_headers = " | ".join(f"FY{y}" for y in all_years)
+    sep_line = "|--------|" + "|".join(["--------"] * len(all_years)) + "|"
+
+    for metric_name, metric_fn in [
+        ("Revenue", lambda r: fmt_b(r.revenue)),
+        ("Gross Margin", lambda r: fmt_pct(r.gross_margin)),
+        ("EBITDA", lambda r: fmt_b(r.ebitda)),
+        (
+            "CAPEX",
+            lambda r: fmt_b(abs(r.capex)) if r.capex is not None else "—",
+        ),
+        ("Net Debt/Equity", lambda r: fmt_nd(r.net_debt_to_equity)),
+    ]:
+        lines.append(f"### {metric_name}")
+        lines.append("")
+        lines.append(f"| Ticker | {year_headers} |")
+        lines.append(sep_line)
+        for t, _disp, rows in company_data:
+            row_by_year = {r.year: r for r in rows}
+            vals = " | ".join(
+                metric_fn(row_by_year[y]) if y in row_by_year else "—"
+                for y in all_years
+            )
+            lines.append(f"| {t} | {vals} |")
+        lines.append("")
+
+    lines.append("### Sector 汇总")
+    lines.append("")
+    lines.append(f"| 指标 | {year_headers} |")
+    lines.append(sep_line)
+    for metric_name, attr in [("Total Revenue", "revenue"), ("Total CAPEX", "capex")]:
+        vals_out: list[str] = []
+        for y in all_years:
+            total = 0.0
+            has = False
+            for _, _, rows in company_data:
+                row_by_year = {r.year: r for r in rows}
+                if y in row_by_year:
+                    v = getattr(row_by_year[y], attr)
+                    if v is not None:
+                        if attr == "capex":
+                            total += abs(float(v))
+                        else:
+                            total += float(v)
+                        has = True
+            vals_out.append(fmt_b(total) if has else "—")
+        lines.append(f"| **{metric_name}** | {' | '.join(vals_out)} |")
+    lines.append("")
+    lines.append(
+        "*数据来源：FMP Annual Financials。Net Debt/Equity = (总债务-现金)/股东权益。*"
+    )
+    lines.append("")
+    return lines
+
+
 def _step6_financial_table(
     per_company: list[
         tuple[
@@ -998,7 +1107,7 @@ def generate_six_step_sector_report(
         )
     )
     lines.extend(_step5_new_biz_acquisitions_insider(per_company))
-    lines.extend(_step6_financial_table(per_company, quarters=6))
+    lines.extend(_step6_annual_financial_table(per_company, years=3))
     # ── 缓存写入 ──────────────────────────────────────────────
     report_md = "\n".join(lines).rstrip() + "\n"
     save_report_cache(sec, cache_year, cache_quarter, report_md)
