@@ -807,19 +807,63 @@ def _step4_earning_call_section(
             quarter -= 1
 
     if per_company:
-        has_any = False
-        for rec, _signals, _insider, _below, _had in per_company:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        from research_automation.models.earnings import EarningsCallAnalysis
+
+        # LLM 限流保护：最多同时 4 个并发
+        MAX_WORKERS = 4
+
+        def _fetch_one(
+            rec: CompanyRecord,
+        ) -> tuple[str, Any]:
+            """返回 (ticker, analysis_or_exception)"""
             t = rec.ticker
-            disp = company_display_name(t, rec.company_name)
-            lines.append(f"### {t} — {disp}")
-            lines.append("")
             try:
-                analysis = analyze_earnings_call(
+                result = analyze_earnings_call(
                     t,
                     year,
                     quarter,
                     sector_watch_items=sector_watch_items,
                 )
+                return t, result
+            except EarningsAnalysisError as e:
+                return t, e
+            except Exception as exc:
+                logger.exception("Step4 earnings 失败 ticker=%s", t)
+                return t, exc
+
+        # 并行拉取，保留原始顺序
+        tickers_in_order = [rec.ticker for rec, *_ in per_company]
+        rec_map = {rec.ticker: rec for rec, *_ in per_company}
+
+        results: dict[str, Any] = {}
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+            future_to_ticker = {
+                pool.submit(_fetch_one, rec_map[t]): t for t in tickers_in_order
+            }
+            for future in as_completed(future_to_ticker):
+                ticker, outcome = future.result()
+                results[ticker] = outcome
+
+        has_any = False
+        for t in tickers_in_order:
+            rec = rec_map[t]
+            disp = company_display_name(t, rec.company_name)
+            lines.append(f"### {t} — {disp}")
+            lines.append("")
+            outcome = results.get(t)
+            if outcome is None:
+                lines.append("*（无分析结果）*")
+                lines.append("")
+            elif isinstance(outcome, EarningsAnalysisError):
+                lines.append(f"*（逐字稿不可用：{outcome.message}）*")
+                lines.append("")
+            elif isinstance(outcome, Exception):
+                lines.append("*（分析失败，详见日志）*")
+                lines.append("")
+            elif isinstance(outcome, EarningsCallAnalysis):
+                analysis = outcome
                 has_any = True
                 lines.append("**概括：**")
                 lines.append("")
@@ -846,13 +890,7 @@ def _step4_earning_call_section(
                     for nb in analysis.new_business_highlights:
                         lines.append(f"- {nb.text}")
                     lines.append("")
-            except EarningsAnalysisError as e:
-                lines.append(f"*（逐字稿不可用：{e.message}）*")
-                lines.append("")
-            except Exception:
-                logger.exception("Step4 earnings 失败 ticker=%s", t)
-                lines.append("*（分析失败，详见日志）*")
-                lines.append("")
+
         if not has_any:
             lines.append("*（本sector所有公司均无可用逐字稿）*")
             lines.append("")
