@@ -142,6 +142,103 @@ _NOISE_LITERAL_SUBSTRINGS: tuple[str, ...] = (
     "share price",
 )
 
+# ── C-3 假新闻过滤 ──────────────────────────────────────────────────────────
+# 低可信度域名（内容农场、无编辑团队的聚合站）
+_LOW_CREDIBILITY_DOMAINS: frozenset[str] = frozenset(
+    {
+        "gurufocus.com",
+        "macroaxis.com",
+        "wisesheets.io",
+        "stockanalysis.com",
+        "simplywall.st",
+        "finviz.com",
+        "stockcharts.com",
+        "barchart.com",
+        "marketbeat.com",
+        "tipranks.com",
+        "benzinga.com",        # 直接Benzinga聚合页（非API内容）
+        "investing.com",
+        "seekingalpha.com",
+        "fool.com",
+        "zacks.com",
+        "thestreet.com",
+        "businesswire.com",    # 公司自发PR，非独立报道
+        "prnewswire.com",
+        "globenewswire.com",
+        "accessnewswire.com",
+    }
+)
+
+# 标题党模式（夸张、情绪化、无来源）
+_CLICKBAIT_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
+    re.compile(p, re.IGNORECASE)
+    for p in (
+        r"\byou\s+won['']t\s+believe\b",
+        r"\bshocking\b",
+        r"\bexplodes?\b",
+        r"\bskyrockets?\b",
+        r"\bcrashes?\b",
+        r"\bmust.?read\b",
+        r"\bbreaking[\s:!]+",
+        r"\burgent[\s:!]+",
+        r"^\s*\d+\s+(?:reasons?|things?|ways?|stocks?)\b",  # "5 stocks you..."
+        r"\bwall\s*st(?:reet)?\s+(?:is\s+)?(?:stunned|shocked|surprised)\b",
+    )
+)
+
+# AI生成农场特征（过度重复公司名+数字堆砌）
+_AI_FARM_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
+    re.compile(p, re.IGNORECASE)
+    for p in (
+        r"(?:eps|earnings\s+per\s+share).{0,30}(?:eps|earnings\s+per\s+share)",  # EPS重复
+        r"\b(?:buy|sell|hold)\b.{0,20}\b(?:buy|sell|hold)\b.{0,20}\b(?:buy|sell|hold)\b",  # 评级堆砌
+        r"(?:price\s+target.{0,30}){2,}",  # price target重复
+    )
+)
+
+
+def _is_low_credibility_source(url: str) -> bool:
+    """域名在低可信度列表中返回True。"""
+    try:
+        host = urlparse(url).netloc.lower().lstrip("www.")
+        for domain in _LOW_CREDIBILITY_DOMAINS:
+            if host == domain or host.endswith("." + domain):
+                return True
+    except Exception:
+        pass
+    return False
+
+
+def _is_clickbait(row: dict[str, Any]) -> bool:
+    """标题命中标题党模式返回True。"""
+    title = str(row.get("title") or "")
+    return any(p.search(title) for p in _CLICKBAIT_PATTERNS)
+
+
+def _is_ai_farm_content(row: dict[str, Any]) -> bool:
+    """内容命中AI生成农场特征返回True。"""
+    b = _blob(row)
+    return any(p.search(b) for p in _AI_FARM_PATTERNS)
+
+
+def _is_fake_news(row: dict[str, Any]) -> bool:
+    """
+    综合假新闻判断：低可信度来源 OR 标题党 OR AI农场内容。
+    返回True表示应过滤。
+    """
+    url = str(row.get("url") or "")
+    if _is_low_credibility_source(url):
+        logger.debug("假新闻过滤[低可信度域名]: %s", url)
+        return True
+    if _is_clickbait(row):
+        logger.debug("假新闻过滤[标题党]: %s", row.get("title", ""))
+        return True
+    if _is_ai_farm_content(row):
+        logger.debug("假新闻过滤[AI农场]: %s", url)
+        return True
+    return False
+# ── C-3 假新闻过滤 END ──────────────────────────────────────────────────────
+
 
 def _blob(row: dict[str, Any]) -> str:
     return f"{row.get('title') or ''} {row.get('content') or ''}"
@@ -445,6 +542,9 @@ def fetch_signals_for_ticker(
             continue
         if _is_analyst_noise(row):
             acc.dropped_other += 1
+            continue
+        if _is_fake_news(row):
+            acc.dropped_noise += 1
             continue
         if _is_noise(content, title):
             acc.dropped_noise += 1
