@@ -73,4 +73,4 @@ if brief:
         file_name=f"daily_brief_{sector}.md",
         mime="text/markdown",
     )
-    st.markdown(brief)
+    st.markdown(brief, unsafe_allow_html=True)
