@@ -780,7 +780,7 @@ def _step2_per_company_revenue_breakdown(
         get_geographic_revenue,
         get_segment_revenue,
     )
-    lines: list[str] = ["## Step 1｜业务占比（产品线 + 地理收入）", ""]
+    lines: list[str] = ["## Step 2｜业务占比（产品线 + 地理收入）", ""]
     for rec, _signals, _insider, _below, _had in per_company:
         t = rec.ticker
         disp = company_display_name(t, rec.company_name)
