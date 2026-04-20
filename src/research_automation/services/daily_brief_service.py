@@ -216,6 +216,15 @@ def _fetch_benzinga_macro_news(
             title_lower = title.lower()
             if any(kw in title_lower for kw in _NOISE_KEYWORDS):
                 continue
+            # 客户端时间过滤
+            pub_str = (item.get("published") or "").strip()
+            if pub_str:
+                try:
+                    pub_dt = datetime.fromisoformat(pub_str.replace("Z", "+00:00"))
+                    if pub_dt < from_dt or pub_dt > to_dt:
+                        continue
+                except Exception:
+                    pass
             seen_titles.add(title)
             macro.append({
                 "title": title,
@@ -264,6 +273,15 @@ def _fetch_benzinga_company_news(
             data = r.json()
             items = data.get("results", []) if isinstance(data, dict) else []
             for item in items:
+                # 客户端时间过滤（API不支持服务端时间过滤）
+                pub_str = (item.get("published") or "").strip()
+                if pub_str:
+                    try:
+                        pub_dt = datetime.fromisoformat(pub_str.replace("Z", "+00:00"))
+                        if pub_dt < from_dt or pub_dt > to_dt:
+                            continue
+                    except Exception:
+                        pass
                 item_id = str(item.get("benzinga_id") or item.get("id") or "")
                 if item_id and item_id in seen_ids:
                     continue
