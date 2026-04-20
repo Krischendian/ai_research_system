@@ -3,10 +3,16 @@ from __future__ import annotations
 
 SECTOR_WATCH_ITEMS: dict[str, list[str]] = {
     "AI_Job_Replacement": [
+        "layoffs and headcount reduction",
+        "workforce restructuring",
+        "employees affected",
+        "AI replacing workers",
+        "automation replacing jobs",
+        "AI deployment and adoption",
+        "AI monetization progress",
+        "digital transformation investment",
         "AI裁员态度与人员规划",
         "AI替代方向与落地进展",
-        "数字化转型投入",
-        "与上季度管理层指引变化",
     ],
     "Natural_Gas": [
         "产量指引与完井计划",
