@@ -318,14 +318,28 @@ if md:
         file_name=f"sector_report_{st.session_state.get('_sector_report_name', 'report')}.md",
         mime="text/markdown",
     )
+    # 目录
+    st.markdown("""
+---
+### 📑 目录
+1. [执行摘要](#执行摘要) — 财务快照、本季核心主题、重要事件、管理层信号
+2. [业务占比](#step-2业务占比产品线地理收入) — 产品线 + 地理收入（FMP）
+3. [展望与战略重心](#step-3展望与战略重心) — 10-K + Earning Call
+4. [Earning Call 内容](#step-4-earning-call内容) — 逐字稿分析 + Quotations
+5. [新业务 / 收购 / Insider](#step-5新业务收购insider异动) — Benzinga + FMP
+6. [财务数据](#step-6财务数据年度) — FMP Annual Financials（3年）
+7. [个股快速扫描](#个股快速扫描最新财年) — 最新财年横向对比
+
+---
+""")
     sections = _split_md_sections(md)
 
     ALWAYS_SHOW = {
         "__header__",
         "## 📋 执行摘要",
-        "## 个股快速扫描（最新财年）",
-        "## 个股快速扫描",
     }
+    # 个股快速扫描移到最后，暂存内容
+    snapshot_sections: list[tuple[str, str]] = []
 
     SKIP_SECTIONS = {"## Sector 总览"}
 
@@ -353,11 +367,16 @@ if md:
             st.markdown(body)
             continue
 
-        # 执行摘要和个股快速扫描：直接展示，不折叠
+        # 执行摘要：直接展示，不折叠
         if heading in ALWAYS_SHOW:
             clean = heading.lstrip("#").strip()
             st.markdown(f"## {clean}")
             st.markdown(body)
+            continue
+
+        # 个股快速扫描：暂存，移到最后
+        if "个股快速扫描" in heading:
+            snapshot_sections.append((heading, body))
             continue
 
         # Step 2/3/4/5：Sector总结直接展示 + 公司详情折叠
@@ -385,3 +404,9 @@ if md:
         label = heading.lstrip("#").strip()
         with st.expander(label, expanded=False):
             st.markdown(body)
+
+    # 在 Step6 之后显示个股快速扫描
+    for heading, body in snapshot_sections:
+        clean = heading.lstrip("#").strip()
+        st.markdown(f"## {clean}")
+        st.markdown(body)
