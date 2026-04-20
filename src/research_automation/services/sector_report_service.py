@@ -1376,6 +1376,7 @@ def _executive_summary(
     step5_lines: list[str],
     step6_lines: list[str],
     sector_watch_items: list[str] | None = None,
+    per_company: list | None = None,
 ) -> list[str]:
     """执行摘要：汇总Earning Call、新业务、财务数据，生成sector级别的执行摘要。"""
     from research_automation.extractors.llm_client import chat
@@ -1395,7 +1396,53 @@ def _executive_summary(
 
     watch_str = "、".join(sector_watch_items) if sector_watch_items else "无"
 
-    prompt = f"""你是资深行业研究分析师，为对冲基金撰写sector执行摘要。以下是{sector}板块本季度各公司的Earning Call、新业务及财务数据摘录：
+    # 收集财务快照
+    financial_snapshot = ""
+    if per_company:
+        from research_automation.extractors.fmp_client import get_financials
+        import statistics as _stats
+
+        yoy_list, gm_list = [], []
+        company_snaps = []
+        for rec, *_ in per_company:
+            try:
+                rows = get_financials(rec.ticker, years=2)
+                if not rows or len(rows) < 2:
+                    continue
+                latest = max(rows, key=lambda r: getattr(r, "year", 0) or 0)
+                prev_list = [r for r in rows if (getattr(r, "year", 0) or 0) < (getattr(latest, "year", 0) or 0)]
+                prev = max(prev_list, key=lambda r: getattr(r, "year", 0) or 0) if prev_list else None
+                rev = getattr(latest, "revenue", None)
+                prev_rev = getattr(prev, "revenue", None) if prev else None
+                if rev and prev_rev and prev_rev != 0:
+                    yoy = (float(rev) - float(prev_rev)) / abs(float(prev_rev)) * 100
+                    yoy_list.append(yoy)
+                    company_snaps.append(f"{rec.ticker}: YoY {yoy:+.1f}%")
+                gm = getattr(latest, "gross_margin", None)
+                if gm is not None:
+                    gm_val = float(gm) * 100 if float(gm) < 2 else float(gm)
+                    if 0 < gm_val < 95:
+                        gm_list.append(gm_val)
+            except Exception:
+                continue
+        if yoy_list:
+            median_yoy = _stats.median(yoy_list)
+            median_gm = _stats.median(gm_list) if gm_list else None
+            top3 = sorted(company_snaps, reverse=True)[:3]
+            bot3 = sorted(company_snaps)[:3]
+            gm_disp = f"{median_gm:.1f}%" if median_gm is not None else "—"
+            financial_snapshot = f"""
+Sector财务快照：
+- 中位Revenue YoY：{median_yoy:+.1f}%
+- 中位Gross Margin：{gm_disp}
+- 增速前三：{", ".join(top3)}
+- 增速后三：{", ".join(bot3)}
+"""
+
+    prompt = f"""你是资深行业研究分析师。以下是{sector}板块本季度完整数据：
+
+【财务快照】
+{financial_snapshot}
 
 【Earning Call 摘录】
 {step4_text}
@@ -1410,11 +1457,11 @@ def _executive_summary(
 
 请生成一份执行摘要，严格按以下格式输出：
 
-### 📊 财务表现
-（跨公司财务对比：点出超预期/不及预期的公司，附具体收入/利润率数字，2-4句）
+### 📊 财务快照
+（基于财务快照数据：sector整体增速、头部/尾部公司对比、Gross Margin水平，2-3句，必须有具体数字）
 
 ### 🔑 本季核心主题
-（sector级别最重要的1-3个共同趋势，每个趋势必须附2个以上公司名称和具体数据，不得泛泛而谈）
+（基于Earning Call：sector级别最重要的1-3个共同趋势，每个趋势必须附2个以上公司名称和具体数据）
 
 ### ⚡ 重要事件
 （本季最值得关注的3-5个具体事件，格式：[公司] 事件描述，按重要性排序）
@@ -1426,10 +1473,11 @@ def _executive_summary(
 （管理层普遍提及的前瞻性风险，附具体公司和表述，2-3条）
 
 要求：
-1. 每个板块必须有具体公司名称、数字、事件，禁止空洞概括
-2. 只基于提供的原文，不捏造信息
-3. 中文输出，公司名/指标/人名保留英文
-4. 总长度控制在300-400字"""
+1. 财务快照和本季核心主题不得重复相同内容
+2. 每个板块必须有具体公司名称、数字、事件
+3. 只基于提供的原文，不捏造信息
+4. 中文输出，公司名/指标/人名保留英文
+5. 总长度控制在350-450字"""
 
     try:
         summary = chat(prompt, max_tokens=800)
@@ -1532,7 +1580,7 @@ def generate_six_step_sector_report(
 
     # 生成执行摘要（需要step4/5/6内容）
     exec_summary_lines = _executive_summary(
-        sec, step4_lines, step5_lines, step6_lines, sector_watch_items
+        sec, step4_lines, step5_lines, step6_lines, sector_watch_items, per_company
     )
 
     # 执行摘要插入报告最前面（header之后）
