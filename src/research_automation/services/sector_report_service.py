@@ -633,7 +633,7 @@ def _step0_sector_summary(
 6. 中文输出，公司名/指标保留英文，长度控制在150-250字"""
 
     try:
-        summary = chat(prompt, max_tokens=400)
+        summary = chat(prompt, max_tokens=600)
         lines.append(summary)
         lines.append("")
     except Exception:
@@ -696,6 +696,8 @@ def _step0b_company_snapshot_table(
             def fmt_pct(v):
                 if v is None: return "—"
                 val = float(v) * 100 if float(v) < 2 else float(v)
+                if val > 95 or val < -50:
+                    return "—"
                 return f"{val:.1f}%"
 
             def fmt_nd(v):
@@ -1428,7 +1430,7 @@ def _executive_summary(
 4. 总长度控制在300-400字"""
 
     try:
-        summary = chat(prompt, max_tokens=600)
+        summary = chat(prompt, max_tokens=800)
     except Exception:
         logger.exception("执行摘要LLM调用失败")
         return []
