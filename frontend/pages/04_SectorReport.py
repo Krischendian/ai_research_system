@@ -124,6 +124,44 @@ def _render_step2_tables(body: str) -> None:
     st.markdown(body)
 
 
+def _render_step4_with_company_expanders(body: str) -> None:
+    """
+    渲染 Step4 Earning Call：
+    - Sector 总结段直接展示
+    - 每家公司详情折叠显示
+    """
+    import re
+
+    # 按 ### ticker 分割
+    company_pattern = re.compile(r"^###\s+(\S+)\s+—\s+(.+)$", re.MULTILINE)
+    matches = list(company_pattern.finditer(body))
+
+    if not matches:
+        st.markdown(body)
+        return
+
+    # Sector 总结段（第一个 ### 之前的内容）
+    sector_summary = body[:matches[0].start()].strip()
+    if sector_summary:
+        st.markdown(sector_summary)
+        st.divider()
+
+    # 每家公司折叠
+    for i, m in enumerate(matches):
+        ticker = m.group(1).strip()
+        company_name = m.group(2).strip()
+        start = m.end()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(body)
+        company_body = body[start:end].strip()
+
+        # 判断是否有实质内容（不只是"逐字稿不可用"）
+        has_content = "概括" in company_body or "管理层" in company_body or "关键原话" in company_body
+        label = f"{'✅' if has_content else '⚠️'} {ticker} — {company_name}"
+
+        with st.expander(label, expanded=False):
+            st.markdown(company_body)
+
+
 def _render_step6_charts(sector_name: str) -> None:
     """从FMP拉取各公司年度财务，渲染Plotly趋势图。"""
     conn = get_connection()
@@ -303,6 +341,8 @@ if md:
         with st.expander(label, expanded=False):
             if "Step 2" in heading or "Step 1" in heading:
                 _render_step2_tables(body)
+            elif "Step 4" in heading:
+                _render_step4_with_company_expanders(body)
             elif "Step 6" in heading:
                 st.markdown(body)
                 _render_step6_charts(

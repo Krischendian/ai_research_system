@@ -1019,6 +1019,65 @@ def _step4_earning_call_section(
                 ticker, outcome = future.result()
                 results[ticker] = outcome
 
+        # ── Sector 级别 Earning Call 总结 ──────────────────────────
+        # 收集所有成功分析的结果，生成跨公司总结
+        successful_analyses: list[tuple[str, Any]] = [
+            (t, results[t]) for t in tickers_in_order
+            if isinstance(results.get(t), EarningsCallAnalysis)
+        ]
+
+        if successful_analyses:
+            from research_automation.extractors.llm_client import chat as _chat
+
+            # 抽取每家公司的概括和关键观点（控制token）
+            company_briefs: list[str] = []
+            for t, analysis in successful_analyses:
+                brief_parts = [f"【{t}】"]
+                if analysis.summary:
+                    brief_parts.append(f"概括：{analysis.summary[:200]}")
+                if analysis.management_viewpoints:
+                    vp_texts = [vp.text for vp in analysis.management_viewpoints[:3]]
+                    brief_parts.append(f"核心观点：{'；'.join(vp_texts)}")
+                if analysis.quotations:
+                    q = analysis.quotations[0]
+                    brief_parts.append(f"关键原话：{q.speaker}：\"{q.quote[:100]}\"")
+                company_briefs.append('\n'.join(brief_parts))
+
+            watch_str = '、'.join(sector_watch_items) if sector_watch_items else '无'
+            briefs_text = '\n\n'.join(company_briefs)
+
+            sector_summary_prompt = f"""你是资深行业研究分析师。以下是{_sector}板块本季度各公司Earning Call的关键内容：
+
+{briefs_text}
+
+本sector重点关注项：{watch_str}
+
+请生成一份{_sector}板块本季度Earning Call总结。
+
+要求：
+1. 每一条结论必须有具体公司名称和具体数字支撑，禁止泛泛而谈
+2. 只提炼在多家公司中同时出现的共同趋势，单家公司独有的信息放到个股详情里
+3. 重点关注：sector_watch_items中列出的关注项在各公司的实际表现
+4. 如果某个趋势只有1家公司提到，不要单独列出，归入个股详情
+5. 格式：分点列出，每点以【趋势名称】开头，后跟具体公司数据
+6. 长度不限，但每句必须有实质信息，禁止车轱辘话
+7. 数据来源：各公司Earning Call逐字稿（FMP/SEC EDGAR）
+8. 中文输出，公司名/数字/人名保留英文"""
+
+            try:
+                sector_summary = _chat(sector_summary_prompt, max_tokens=800)
+                lines.append("> **数据来源**：各公司 Earning Call 逐字稿（FMP / SEC EDGAR）｜**评判标准**：跨3家以上公司出现的共同表述，每条结论附具体数字")
+                lines.append("")
+                lines.append(sector_summary)
+                lines.append("")
+                lines.append("---")
+                lines.append("")
+                lines.append("**以下为各公司详情（点击展开）：**")
+                lines.append("")
+            except Exception:
+                logger.exception("Step4 sector总结失败")
+        # ── Sector 级别总结 END ──────────────────────────────────────
+
         has_any = False
         for t in tickers_in_order:
             rec = rec_map[t]
@@ -1458,19 +1517,24 @@ Sector财务快照：
 请生成一份执行摘要，严格按以下格式输出：
 
 ### 📊 财务快照
-（基于财务快照数据：sector整体增速、头部/尾部公司对比、Gross Margin水平，2-3句，必须有具体数字）
+> 数据来源：FMP Annual Financials | 评判标准：最新财年Revenue YoY增速中位数及分布
+（sector整体增速中位数、头尾公司对比、Gross Margin水平，2-3句，必须有具体数字）
 
 ### 🔑 本季核心主题
-（基于Earning Call：sector级别最重要的1-3个共同趋势，每个趋势必须附2个以上公司名称和具体数据）
+> 数据来源：Earning Call 逐字稿（FMP/SEC EDGAR）| 评判标准：跨3家以上公司出现的共同表述
+（sector级别最重要的1-3个共同趋势，每个趋势必须附2个以上公司名称和具体数据）
 
 ### ⚡ 重要事件
+> 数据来源：Earning Call 逐字稿 + Benzinga 公司新闻 | 评判标准：涉及资本配置/人员/产品的实质性变化
 （本季最值得关注的3-5个具体事件，格式：[公司] 事件描述，按重要性排序）
 
 ### 💬 管理层关键信号
-（从Earning Call提炼的跨公司共同表态或分歧，附具体发言人和原话关键词，2-3条）
+> 数据来源：Earning Call 逐字稿原话 | 评判标准：CEO/CFO对业务趋势的直接表态
+（跨公司共同表态或分歧，附具体发言人姓名和原话关键词，2-3条）
 
 ### ⚠️ 主要风险
-（管理层普遍提及的前瞻性风险，附具体公司和表述，2-3条）
+> 数据来源：Earning Call 前瞻性表述（含 expect/may/consider 等情态动词）| 评判标准：管理层主动披露的不确定因素
+（管理层普遍提及的风险，附具体公司和表述，2-3条）
 
 要求：
 1. 财务快照和本季核心主题不得重复相同内容
