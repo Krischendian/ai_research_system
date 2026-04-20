@@ -1013,6 +1013,7 @@ def _step3_per_company_outlook(
         try:
             sector_outlook = _chat3(prompt, max_tokens=600)
             lines.append("> **数据来源**：各公司 10-K 及 Earning Call（SEC EDGAR / FMP）｜**评判标准**：至少2家公司共同提及的战略方向或行业判断")
+            lines.append("> ⚠️ **以下为系统辅助总结，非原文直接提取，仅供参考。详细原文请展开各公司详情查看。**")
             lines.append("")
             lines.append(sector_outlook)
             lines.append("")
@@ -1165,8 +1166,9 @@ def _step4_earning_call_section(
 9. 禁止输出任何以#开头的标题行，直接输出正文段落"""
 
             try:
-                sector_summary = _chat(sector_summary_prompt, max_tokens=800)
+                sector_summary = _chat(sector_summary_prompt, max_tokens=1200)
                 lines.append("> **数据来源**：各公司 Earning Call 逐字稿（FMP / SEC EDGAR）｜**评判标准**：跨3家以上公司出现的共同表述，每条结论附具体数字")
+                lines.append("> ⚠️ **以下为系统辅助总结，非原文直接提取，仅供参考。原文 quotations 请展开各公司详情查看。**")
                 lines.append("")
                 lines.append(sector_summary)
                 lines.append("")
@@ -1338,6 +1340,7 @@ def _step5_new_biz_acquisitions_insider(
         try:
             sector_signal = _chat5(prompt, max_tokens=400)
             lines.append("> **数据来源**：Benzinga 公司新闻 + FMP Insider 交易申报（Form 4）｜**评判标准**：收购/战略合作/异常 Insider 交易（买入>$1M 或卖出>$5M）")
+            lines.append("> ⚠️ **以下为系统辅助总结，非原文直接提取，仅供参考。原文链接请展开各公司详情查看。**")
             lines.append("")
             lines.append(sector_signal)
             lines.append("")
@@ -1703,13 +1706,15 @@ Sector财务快照：
 5. 总长度控制在350-450字"""
 
     try:
-        summary = chat(prompt, max_tokens=800)
+        summary = chat(prompt, max_tokens=1200)
     except Exception:
         logger.exception("执行摘要LLM调用失败")
         return []
 
     lines_out: list[str] = [
         "## 📋 执行摘要",
+        "",
+        "> ⚠️ **以下执行摘要为系统基于财务数据及Earning Call逐字稿的辅助总结，非原文直接提取，仅供参考。各项结论的原始依据请查阅各Step详情中的quotations及数据来源。**",
         "",
         summary,
         "",
