@@ -22,7 +22,7 @@ from research_automation.services.report_cache import (
     get_cached_report,
     list_cached_reports,
 )
-from research_automation.services.chart_service import build_financial_trend_chart
+from research_automation.services.chart_service import build_financial_trend_chart, build_yoy_ranking_chart
 from research_automation.extractors.fmp_client import FMPClient
 from research_automation.services.sector_report_service import generate_six_step_sector_report
 
@@ -184,10 +184,17 @@ def _render_step6_charts(sector_name: str) -> None:
         st.info("暂无财务趋势数据。")
         return
 
+    # 图1：Revenue YoY 排名图
+    fig_yoy = build_yoy_ranking_chart(financials_by_company, sector_name=sector_name)
+    if fig_yoy:
+        st.divider()
+        st.markdown("#### 📊 Revenue YoY 排名")
+        st.plotly_chart(fig_yoy, use_container_width=True)
+
+    # 图2：Sector 分位趋势图
     fig = build_financial_trend_chart(financials_by_company, sector_name=sector_name)
     if fig:
-        st.divider()
-        st.markdown("#### 📈 财务趋势图（近3年）")
+        st.markdown("#### 📈 Sector 分位趋势（Top25% / 中位数 / Bottom25%）")
         st.plotly_chart(fig, use_container_width=True)
 
 
