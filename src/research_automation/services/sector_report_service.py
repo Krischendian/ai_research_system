@@ -644,6 +644,86 @@ def _step0_sector_summary(
     return lines
 
 
+def _step0b_company_snapshot_table(
+    per_company: list[
+        tuple[
+            CompanyRecord,
+            list[dict[str, Any]],
+            dict[str, Any],
+            int,
+            bool,
+        ]
+    ],
+) -> list[str]:
+    """个股快速扫描表：一张表横向对比所有公司关键指标。"""
+    from research_automation.extractors.fmp_client import get_financials
+
+    lines: list[str] = ["## 个股快速扫描", ""]
+    lines.append("| Ticker | Revenue | YoY | Gross Margin | EBITDA | Net Debt/Eq | 本周关键信号 |")
+    lines.append("|--------|---------|-----|--------------|--------|-------------|------------|")
+
+    for rec, signals, _insider, _below, _had in per_company:
+        t = rec.ticker
+        try:
+            financials = get_financials(t, years=2)
+            if not financials:
+                lines.append(f"| {t} | — | — | — | — | — | — |")
+                continue
+
+            latest = max(financials, key=lambda r: getattr(r, "year", 0) or 0)
+            prev_list = [r for r in financials if (getattr(r, "year", 0) or 0) < (getattr(latest, "year", 0) or 0)]
+            prev = max(prev_list, key=lambda r: getattr(r, "year", 0) or 0) if prev_list else None
+
+            rev = getattr(latest, "revenue", None)
+            if rev is None:
+                lines.append(f"| {t} | — | — | — | — | — | — |")
+                continue
+
+            prev_rev = getattr(prev, "revenue", None) if prev else None
+            rev_growth = (
+                (float(rev) - float(prev_rev)) / abs(float(prev_rev)) * 100
+                if prev_rev and prev_rev != 0 else None
+            )
+            gm = getattr(latest, "gross_margin", None)
+            ebitda = getattr(latest, "ebitda", None)
+            nd_eq = getattr(latest, "net_debt_to_equity", None)
+
+            def fmt_b(v):
+                if v is None: return "—"
+                x = float(v)
+                return f"${x/1e9:.1f}B" if abs(x) >= 1e9 else f"${x/1e6:.0f}M"
+
+            def fmt_pct(v):
+                if v is None: return "—"
+                val = float(v) * 100 if float(v) < 2 else float(v)
+                return f"{val:.1f}%"
+
+            def fmt_nd(v):
+                if v is None: return "—"
+                return f"{float(v):.1f}x"
+
+            yoy = f"{rev_growth:+.1f}%" if rev_growth is not None else "—"
+
+            # 本周关键信号：取最高相关性的1条新闻标题
+            top_signal = ""
+            if signals:
+                top = max(signals, key=lambda s: int(s.get("relevance_score") or 0))
+                title = str(top.get("title") or "")[:30]
+                top_signal = title + ("…" if len(str(top.get("title") or "")) > 30 else "")
+
+            lines.append(
+                f"| {t} | {fmt_b(rev)} | {yoy} | {fmt_pct(gm)} | {fmt_b(ebitda)} | {fmt_nd(nd_eq)} | {top_signal} |"
+            )
+        except Exception:
+            logger.exception("Step0b 快速扫描失败 ticker=%s", t)
+            lines.append(f"| {t} | — | — | — | — | — | — |")
+
+    lines.append("")
+    lines.append("*数据来源：FMP Annual Financials（最新财年）。本周关键信号来自 Benzinga。*")
+    lines.append("")
+    return lines
+
+
 def _step1_sector_business_overview(
     per_company: list[
         tuple[
@@ -673,8 +753,7 @@ def _step1_sector_business_overview(
         total_b = total / 1e9
         lines.append(f"**{disp} ({t})**　总收入 ${total_b:.1f}B")
         for seg in data:
-            bar = "█" * int(seg["percentage"] / 5)
-            lines.append(f"- {seg['segment']}: {seg['percentage']:.1f}%　{bar}　(${seg['absolute']/1e9:.2f}B)")
+            lines.append(f"- {seg['segment']}: {seg['percentage']:.1f}%　(${seg['absolute']/1e9:.2f}B)")
         lines.append("")
     if not found_any:
         lines.append("*暂无可用的revenue breakdown数据（FMP未收录或非美股）*")
@@ -1350,6 +1429,7 @@ def generate_six_step_sector_report(
     ]
     # Step0（LLM）与 Step1/2/5/6 串行；Step1/2/5/6 无 LLM 调用
     lines.extend(_step0_sector_summary(sec, per_company, sector_watch_items))
+    lines.extend(_step0b_company_snapshot_table(per_company))
     lines.extend(_step1_sector_business_overview(per_company))
     lines.extend(_step2_per_company_revenue_breakdown(per_company))
 
