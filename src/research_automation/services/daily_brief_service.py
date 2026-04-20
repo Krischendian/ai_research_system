@@ -162,6 +162,67 @@ def _fetch_bloomberg_rss(from_dt: datetime, to_dt: datetime) -> list[dict[str, A
     return all_items
 
 
+def _fetch_benzinga_macro_news(
+    from_dt: datetime,
+    to_dt: datetime,
+    page_size: int = 50,
+) -> list[dict[str, Any]]:
+    """从Benzinga拉取无ticker的宏观新闻条目。"""
+    key = _get_bz_key()
+    if not key:
+        return []
+    try:
+        r = requests.get(
+            f"{BENZINGA_BASE}/news",
+            params={
+                "apiKey": key,
+                "pageSize": page_size,
+                "dateFrom": from_dt.strftime("%Y-%m-%dT%H:%M:%S"),
+                "dateTo": to_dt.strftime("%Y-%m-%dT%H:%M:%S"),
+            },
+            timeout=30,
+        )
+        if r.status_code != 200:
+            return []
+        data = r.json()
+        items = data.get("results", []) if isinstance(data, dict) else []
+        # 只保留无ticker的宏观条目，过滤明显噪音
+        macro = []
+        seen_titles: set[str] = set()
+        _NOISE_KEYWORDS = [
+            "trading indicator", "best stock", "penny stock",
+            "assassination", "grandkid", "&#", "&amp", "podcast",
+            "documentary", "wicked accent", "btw:", "short sell fight",
+        ]
+        for item in items:
+            tickers = item.get("tickers") or []
+            # 只要无ticker或ticker全是crypto的条目
+            non_crypto = [t for t in tickers if not str(t).startswith("X:")]
+            if non_crypto:
+                continue
+            title = (item.get("title") or "").strip()
+            if not title:
+                continue
+            # 去重
+            if title in seen_titles:
+                continue
+            # 过滤噪音
+            title_lower = title.lower()
+            if any(kw in title_lower for kw in _NOISE_KEYWORDS):
+                continue
+            seen_titles.add(title)
+            macro.append({
+                "title": title,
+                "content": (item.get("teaser") or "")[:300],
+                "url": item.get("url", ""),
+                "source": "Benzinga",
+            })
+        return macro
+    except Exception as e:
+        logger.warning("Benzinga宏观新闻失败: %s", e)
+        return []
+
+
 def _fetch_benzinga_company_news(
     tickers: list[str],
     from_dt: datetime,
@@ -216,26 +277,42 @@ def _filter_macro_by_sector(
 
 
 def _llm_summarize_macro(items: list[dict[str, Any]], sector: str) -> str:
-    """用LLM提炼宏观新闻要点。"""
+    """用LLM提炼宏观新闻要点，按地区分组输出。"""
     if not items:
         return "*暂无相关宏观新闻*"
     news_text = "\n".join(
-        f"- {item.get('title','')}：{item.get('content','')[:200]}"
-        for item in items[:10]
+        f"- {item.get('title','')}：{item.get('content','')[:250]}"
+        for item in items[:20]
     )
-    prompt = f"""你是金融分析师助手。以下是与{sector}板块相关的宏观新闻：
+    prompt = f"""你是金融分析师助手。以下是今日宏观新闻原文列表：
 
 {news_text}
 
-请提炼3-5条对{sector}板块投资最有价值的宏观要点，每条一行，格式：
-- [要点]（来源：[新闻标题简称]）
+请严格按照以下格式输出，不得添加任何建议、评论或补充说明：
 
-要求：
-1. 只提对投资决策有实际影响的信息
-2. 避免泛泛而谈，要具体（数字、政策名称、地区）
-3. 用中文输出"""
+#### 🌎 北美
+- [要点]（来源：[标题简称]）
+（如无相关新闻则写：*暂无*）
+
+#### 🌍 欧洲
+- [要点]（来源：[标题简称]）
+（如无相关新闻则写：*暂无*）
+
+#### 🌙 中东
+- [要点]（来源：[标题简称]）
+（如无相关新闻则写：*暂无*）
+
+#### 🌏 亚洲（中国/日本/韩国/印度）
+- [要点]（来源：[标题简称]）
+（如无相关新闻则写：*暂无*）
+
+规则：
+1. 只从提供的新闻列表中提取，不得捏造或补充未出现的信息
+2. 每条要点包含具体数字、人名或政策名称
+3. 没有相关地区新闻时直接写*暂无*，不得给出建议或解释
+4. 用中文输出，来源标题保留英文"""
     try:
-        return chat(prompt, max_tokens=500)
+        return chat(prompt, max_tokens=600)
     except Exception as e:
         logger.warning("LLM宏观摘要失败: %s", e)
         return "*宏观摘要生成失败*"
@@ -321,9 +398,23 @@ def generate_daily_brief(
         lines.append(f"## {window_label}")
         lines.append("")
 
-        # 宏观新闻
+        # 宏观新闻：Bloomberg RSS + Benzinga 宏观双源
         bloomberg_items = _fetch_bloomberg_rss(from_dt, to_dt)
-        macro_filtered = _filter_macro_by_sector(bloomberg_items, sector)
+        benzinga_macro = _fetch_benzinga_macro_news(from_dt, to_dt)
+        # 合并去重（Bloomberg优先，Benzinga补充）
+        seen_macro_urls: set[str] = set()
+        combined_macro: list[dict[str, Any]] = []
+        for item in bloomberg_items:
+            u = (item.get("url") or "").strip()
+            if u and u not in seen_macro_urls:
+                seen_macro_urls.add(u)
+                combined_macro.append(item)
+        for item in benzinga_macro:
+            u = (item.get("url") or "").strip()
+            if u and u not in seen_macro_urls:
+                seen_macro_urls.add(u)
+                combined_macro.append(item)
+        macro_filtered = _filter_macro_by_sector(combined_macro, sector)
         lines.append("### 🌍 宏观要点")
         lines.append("")
         macro_summary = _llm_summarize_macro(macro_filtered, sector)
