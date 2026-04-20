@@ -660,7 +660,7 @@ def _step0b_company_snapshot_table(
     """个股快速扫描表：一张表横向对比所有公司关键指标。"""
     from research_automation.extractors.fmp_client import get_financials
 
-    lines: list[str] = ["## 个股快速扫描", ""]
+    lines: list[str] = ["## 个股快速扫描（最新财年）", ""]
     lines.append("| Ticker | Revenue | YoY | Gross Margin | EBITDA | Net Debt/Eq | 本周关键信号 |")
     lines.append("|--------|---------|-----|--------------|--------|-------------|------------|")
 
@@ -1510,7 +1510,6 @@ def generate_six_step_sector_report(
         "",
     ]
     # Step0（LLM）与 Step1/2/5/6 串行；Step1/2/5/6 无 LLM 调用
-    lines.extend(_step0_sector_summary(sec, per_company, sector_watch_items))
     lines.extend(_step0b_company_snapshot_table(per_company))
     lines.extend(_step2_per_company_revenue_breakdown(per_company))
 
