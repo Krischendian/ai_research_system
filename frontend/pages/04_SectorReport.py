@@ -260,65 +260,128 @@ def _render_step6_charts(sector_name: str) -> None:
 
 # ── 主渲染逻辑 ────────────────────────────────────────────────────
 
-ALWAYS_SHOW = {
-    "__header__",
-    "## 📋 执行摘要",
-    "## 个股快速扫描（最新财年）",
-    "## 个股快速扫描",
-}
+st.title("行业监控报告（六步结构）")
 
-SKIP_SECTIONS = {"## Sector 总览"}
+sectors = _distinct_sectors()
+if not sectors:
+    st.warning("数据库中无带 sector 的活跃公司。")
+    st.stop()
 
-# Step标题到中文标签的映射
-STEP_LABELS = {
-    "Step 2": "业务占比",
-    "Step 3": "展望与战略重心",
-    "Step 4": "Earning Call",
-    "Step 5": "新业务 / 收购 / Insider",
-    "Step 6": "财务数据",
-}
+c1, c2, c3 = st.columns([2, 1, 1])
+with c1:
+    sector = st.selectbox("选择 sector", sectors, key="sector_report_pick")
+with c2:
+    thr = st.number_input(
+        "`relevance_score` 下限（0–3）",
+        min_value=0, max_value=3, value=1,
+    )
+with c3:
+    force_refresh = st.checkbox("强制刷新", value=False)
+    gen = st.button("生成报告", type="primary")
 
-for heading, body in sections:
-    # 跳过废弃块
-    if heading in SKIP_SECTIONS:
-        continue
-    if "Sector 整体总结" in heading or "Sector 季度总结" in heading:
-        continue
 
-    # 报告 header（标题、生成时间等）
-    if heading == "__header__":
-        st.markdown(body)
-        continue
+def _current_cache_quarter() -> tuple[int, int]:
+    now = datetime.now(timezone.utc)
+    q = (now.month - 1) // 3 + 1
+    y = now.year
+    if q == 1:
+        return y - 1, 4
+    return y, q - 1
 
-    # 执行摘要和个股快速扫描：直接展示，不折叠
-    if heading in ALWAYS_SHOW:
-        clean = heading.lstrip("#").strip()
-        st.markdown(f"## {clean}")
-        st.markdown(body)
-        continue
 
-    # Step 2/3/4/5：Sector总结直接展示 + 公司详情折叠
-    if any(s in heading for s in ["Step 2", "Step 3", "Step 4", "Step 5"]):
-        clean = heading.lstrip("#").strip()
-        st.markdown(f"## {clean}")
-        detail_label = next(
-            (v for k, v in STEP_LABELS.items() if k in heading),
-            "公司详情"
-        )
-        _render_sector_summary_and_details(body, detail_label)
-        continue
+if sector:
+    cy, cq = _current_cache_quarter()
+    cached = get_cached_report(sector, cy, cq)
+    if cached:
+        st.info(f"✅ 已有 {cy}Q{cq} 缓存报告，点击「生成报告」直接读取（秒级返回）。如需重新生成请勾选「强制刷新」。")
+    else:
+        st.warning(f"⚠️ 暂无 {cy}Q{cq} 缓存，首次生成需要约15-20分钟。")
 
-    # Step 6：个股扫描直接展示 + 图表折叠
-    if "Step 6" in heading:
-        clean = heading.lstrip("#").strip()
-        st.markdown(f"## {clean}")
-        _render_step6_section(
-            body,
-            st.session_state.get("_sector_report_name", sector)
-        )
-        continue
+if gen:
+    with st.spinner("正在生成报告……"):
+        try:
+            st.session_state["_sector_report_md"] = generate_six_step_sector_report(
+                sector,
+                relevance_threshold=int(thr),
+                force_refresh=force_refresh,
+            )
+            st.session_state["_sector_report_name"] = sector
+        except Exception as e:
+            st.error(f"生成失败：{e}")
 
-    # 其他未知块：折叠显示
-    label = heading.lstrip("#").strip()
-    with st.expander(label, expanded=False):
-        st.markdown(body)
+md = st.session_state.get("_sector_report_md")
+if md:
+    st.success(f"已生成：**{st.session_state.get('_sector_report_name', '')}**")
+    st.download_button(
+        "下载 Markdown",
+        data=md.encode("utf-8"),
+        file_name=f"sector_report_{st.session_state.get('_sector_report_name', 'report')}.md",
+        mime="text/markdown",
+    )
+    sections = _split_md_sections(md)
+
+    ALWAYS_SHOW = {
+        "__header__",
+        "## 📋 执行摘要",
+        "## 个股快速扫描（最新财年）",
+        "## 个股快速扫描",
+    }
+
+    SKIP_SECTIONS = {"## Sector 总览"}
+
+    # Step标题到中文标签的映射
+    STEP_LABELS = {
+        "Step 2": "业务占比",
+        "Step 3": "展望与战略重心",
+        "Step 4": "Earning Call",
+        "Step 5": "新业务 / 收购 / Insider",
+        "Step 6": "财务数据",
+    }
+
+    if 'sections' not in dir():
+        sections = []
+
+    for heading, body in sections:
+        # 跳过废弃块
+        if heading in SKIP_SECTIONS:
+            continue
+        if "Sector 整体总结" in heading or "Sector 季度总结" in heading:
+            continue
+
+        # 报告 header（标题、生成时间等）
+        if heading == "__header__":
+            st.markdown(body)
+            continue
+
+        # 执行摘要和个股快速扫描：直接展示，不折叠
+        if heading in ALWAYS_SHOW:
+            clean = heading.lstrip("#").strip()
+            st.markdown(f"## {clean}")
+            st.markdown(body)
+            continue
+
+        # Step 2/3/4/5：Sector总结直接展示 + 公司详情折叠
+        if any(s in heading for s in ["Step 2", "Step 3", "Step 4", "Step 5"]):
+            clean = heading.lstrip("#").strip()
+            st.markdown(f"## {clean}")
+            detail_label = next(
+                (v for k, v in STEP_LABELS.items() if k in heading),
+                "公司详情"
+            )
+            _render_sector_summary_and_details(body, detail_label)
+            continue
+
+        # Step 6：个股扫描直接展示 + 图表折叠
+        if "Step 6" in heading:
+            clean = heading.lstrip("#").strip()
+            st.markdown(f"## {clean}")
+            _render_step6_section(
+                body,
+                st.session_state.get("_sector_report_name", "")
+            )
+            continue
+
+        # 其他未知块：折叠显示
+        label = heading.lstrip("#").strip()
+        with st.expander(label, expanded=False):
+            st.markdown(body)
