@@ -833,9 +833,7 @@ def _step2_per_company_revenue_breakdown(
                 lines.append(f"- {geo_name}：{pct:.1f}%（${geo_rev/1e9:.1f}B）")
             lines.append("")
 
-        lines.append("---")
-        lines.append("")
-        lines.append("**以下为各公司详情：**")
+        lines.append("<!--- COMPANY_DETAILS_START --->")
         lines.append("")
     # ── Sector 总结 END ──────────────────────────────────────────
 
@@ -1009,7 +1007,8 @@ def _step3_per_company_outlook(
 4. 单家公司独有的展望不在此列出，留给个股详情
 5. 每句必须有实质内容，禁止车轱辘话
 6. 数据来源：各公司10-K及Earning Call（SEC EDGAR / FMP）
-7. 中文输出，公司名保留英文"""
+7. 中文输出，公司名保留英文
+8. 禁止输出任何以#开头的标题行，直接输出正文段落"""
 
         try:
             sector_outlook = _chat3(prompt, max_tokens=600)
@@ -1017,9 +1016,7 @@ def _step3_per_company_outlook(
             lines.append("")
             lines.append(sector_outlook)
             lines.append("")
-            lines.append("---")
-            lines.append("")
-            lines.append("**以下为各公司详情（点击展开）：**")
+            lines.append("<!--- COMPANY_DETAILS_START --->")
             lines.append("")
         except Exception:
             logger.exception("Step3 sector总结失败")
@@ -1164,7 +1161,8 @@ def _step4_earning_call_section(
 5. 格式：分点列出，每点以【趋势名称】开头，后跟具体公司数据
 6. 长度不限，但每句必须有实质信息，禁止车轱辘话
 7. 数据来源：各公司Earning Call逐字稿（FMP/SEC EDGAR）
-8. 中文输出，公司名/数字/人名保留英文"""
+8. 中文输出，公司名/数字/人名保留英文
+9. 禁止输出任何以#开头的标题行，直接输出正文段落"""
 
             try:
                 sector_summary = _chat(sector_summary_prompt, max_tokens=800)
@@ -1172,9 +1170,7 @@ def _step4_earning_call_section(
                 lines.append("")
                 lines.append(sector_summary)
                 lines.append("")
-                lines.append("---")
-                lines.append("")
-                lines.append("**以下为各公司详情（点击展开）：**")
+                lines.append("<!--- COMPANY_DETAILS_START --->")
                 lines.append("")
             except Exception:
                 logger.exception("Step4 sector总结失败")
@@ -1336,7 +1332,8 @@ def _step5_new_biz_acquisitions_insider(
 4. 分点列出，格式：[公司] 事件描述（金额/规模）
 5. 如果本周信号较少，如实说明，不要凑字数
 6. 数据来源：Benzinga公司新闻 + FMP Insider交易申报
-7. 中文输出，公司名/金额保留英文"""
+7. 中文输出，公司名/金额保留英文
+8. 禁止输出任何以#开头的标题行，直接输出正文段落"""
 
         try:
             sector_signal = _chat5(prompt, max_tokens=400)
@@ -1344,9 +1341,7 @@ def _step5_new_biz_acquisitions_insider(
             lines.append("")
             lines.append(sector_signal)
             lines.append("")
-            lines.append("---")
-            lines.append("")
-            lines.append("**以下为各公司详情（点击展开）：**")
+            lines.append("<!--- COMPANY_DETAILS_START --->")
             lines.append("")
         except Exception:
             logger.exception("Step5 sector总结失败")

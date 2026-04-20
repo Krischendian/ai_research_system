@@ -119,84 +119,74 @@ def _render_step1_charts(body: str) -> None:
             st.bar_chart(df, height=200)
 
 
-def _render_step2_tables(body: str) -> None:
-    """Step2直接渲染markdown表格，Streamlit原生支持。"""
-    st.markdown(body)
-
-
-def _render_step4_with_company_expanders(body: str) -> None:
+def _render_sector_summary_and_details(body: str, detail_label: str = "公司详情") -> None:
     """
-    渲染 Step4 Earning Call：
-    - Sector 总结段直接展示
-    - 每家公司详情折叠显示
+    通用渲染：
+    - COMPANY_DETAILS_START 之前的内容直接展示（Sector总结）
+    - COMPANY_DETAILS_START 之后的内容按公司折叠
     """
     import re
 
-    # 按 ### ticker 分割
-    company_pattern = re.compile(r"^###\s+(\S+)\s+—\s+(.+)$", re.MULTILINE)
-    matches = list(company_pattern.finditer(body))
+    MARKER = "<!--- COMPANY_DETAILS_START --->"
 
-    if not matches:
-        st.markdown(body)
+    if MARKER in body:
+        summary_part, details_part = body.split(MARKER, 1)
+    else:
+        summary_part = body
+        details_part = ""
+
+    # 渲染 Sector 总结
+    if summary_part.strip():
+        st.markdown(summary_part.strip())
+
+    if not details_part.strip():
         return
 
-    # Sector 总结段（第一个 ### 之前的内容）
-    sector_summary = body[:matches[0].start()].strip()
-    if sector_summary:
-        st.markdown(sector_summary)
-        st.divider()
+    # 公司详情折叠
+    with st.expander(f"📋 {detail_label}（点击展开）", expanded=False):
+        # 按 ### TICKER — 公司名 分割
+        company_pattern = re.compile(
+            r"^###\s+([\w/\-\.]+(?:\s+[\w/\-\.]+)?)\s+—\s+(.+)$",
+            re.MULTILINE
+        )
+        matches = list(company_pattern.finditer(details_part))
 
-    # 每家公司折叠
-    for i, m in enumerate(matches):
-        ticker = m.group(1).strip()
-        company_name = m.group(2).strip()
-        start = m.end()
-        end = matches[i + 1].start() if i + 1 < len(matches) else len(body)
-        company_body = body[start:end].strip()
+        if not matches:
+            st.markdown(details_part.strip())
+            return
 
-        # 判断是否有实质内容（不只是"逐字稿不可用"）
-        has_content = "概括" in company_body or "管理层" in company_body or "关键原话" in company_body
-        label = f"{'✅' if has_content else '⚠️'} {ticker} — {company_name}"
+        for i, m in enumerate(matches):
+            ticker = m.group(1).strip()
+            company_name = m.group(2).strip()
+            start = m.end()
+            end = matches[i + 1].start() if i + 1 < len(matches) else len(details_part)
+            company_body = details_part[start:end].strip()
 
-        with st.expander(label, expanded=False):
-            st.markdown(company_body)
+            # 判断内容质量
+            bad_keywords = ["逐字稿不可用", "画像生成失败", "暂无", "不可用"]
+            has_issue = any(kw in company_body[:100] for kw in bad_keywords)
+            label = f"{'⚠️' if has_issue else '✅'} {ticker} — {company_name}"
+
+            with st.expander(label, expanded=False):
+                st.markdown(company_body)
 
 
-def _render_step_with_company_expanders(body: str, has_content_keywords: list[str] | None = None) -> None:
-    """
-    通用渲染函数：Sector总结段直接展示，每家公司详情折叠。
-    适用于 Step3/Step5。
-    """
-    import re
+def _render_step6_section(body: str, sector_name: str) -> None:
+    """Step6：个股快速扫描直接展示，图表折叠。"""
+    # 快速扫描表在 --- 之前
+    parts = body.split("---", 1)
+    table_part = parts[0].strip()
+    rest_part = parts[1].strip() if len(parts) > 1 else ""
 
-    company_pattern = re.compile(r"^###\s+(\S+)\s+—\s+(.+)$", re.MULTILINE)
-    matches = list(company_pattern.finditer(body))
+    if table_part:
+        st.markdown(table_part)
 
-    if not matches:
-        st.markdown(body)
-        return
+    with st.expander("📈 财务趋势图表（点击展开）", expanded=False):
+        _render_step6_charts(sector_name)
 
-    # Sector 总结段
-    sector_summary = body[:matches[0].start()].strip()
-    if sector_summary:
-        st.markdown(sector_summary)
-        st.divider()
-
-    keywords = has_content_keywords or ["展望", "指引", "战略", "新业务", "收购", "Insider", "买入", "卖出"]
-
-    for i, m in enumerate(matches):
-        ticker = m.group(1).strip()
-        company_name = m.group(2).strip()
-        start = m.end()
-        end = matches[i + 1].start() if i + 1 < len(matches) else len(body)
-        company_body = body[start:end].strip()
-
-        has_content = any(kw in company_body for kw in keywords)
-        has_content = has_content and "原文未明确提及" not in company_body[:50]
-        label = f"{'✅' if has_content else '⚠️'} {ticker} — {company_name}"
-
-        with st.expander(label, expanded=False):
-            st.markdown(company_body)
+    if rest_part:
+        with st.expander("📊 详细财务表格（点击展开）", expanded=False):
+            st.markdown(rest_part)
 
 
 def _render_step6_charts(sector_name: str) -> None:
@@ -218,12 +208,12 @@ def _render_step6_charts(sector_name: str) -> None:
     fmp = FMPClient()
     financials_by_company: dict[str, list[dict]] = {}
 
-    def _g(obj: object, *keys: str) -> object | None:
+    def _g(obj, *keys):
         for k in keys:
             try:
                 v = getattr(obj, k, None)
                 if v is None and hasattr(obj, "__getitem__"):
-                    v = obj[k]  # type: ignore[index]
+                    v = obj[k]
                 if v is not None:
                     return v
             except Exception:
@@ -241,7 +231,6 @@ def _render_step6_charts(sector_name: str) -> None:
                     gm = _g(r, "gross_margin_pct", "gross_margin")
                     if gm is not None and isinstance(gm, (int, float)) and gm < 2:
                         gm = float(gm) * 100
-
                     parsed.append({
                         "year": _g(r, "year", "fiscal_year"),
                         "revenue": _g(r, "revenue"),
@@ -249,7 +238,6 @@ def _render_step6_charts(sector_name: str) -> None:
                         "capex": _g(r, "capex"),
                         "ebitda": _g(r, "ebitda"),
                     })
-
                 parsed.sort(key=lambda x: x.get("year") or 0)
                 financials_by_company[ticker] = parsed
             except Exception:
@@ -259,135 +247,78 @@ def _render_step6_charts(sector_name: str) -> None:
         st.info("暂无财务趋势数据。")
         return
 
-    # 图1：Revenue YoY 排名图
     fig_yoy = build_yoy_ranking_chart(financials_by_company, sector_name=sector_name)
     if fig_yoy:
-        st.divider()
         st.markdown("#### 📊 Revenue YoY 排名")
         st.plotly_chart(fig_yoy, use_container_width=True)
 
-    # 图2：Sector 分位趋势图
     fig = build_financial_trend_chart(financials_by_company, sector_name=sector_name)
     if fig:
         st.markdown("#### 📈 Sector 分位趋势（Top25% / 中位数 / Bottom25%）")
         st.plotly_chart(fig, use_container_width=True)
 
 
-st.title("行业监控报告（六步结构）")
+# ── 主渲染逻辑 ────────────────────────────────────────────────────
 
-sectors = _distinct_sectors()
-if not sectors:
-    st.warning(
-        "数据库中无带 sector 的活跃公司（`companies.is_active=1`）。"
-        "请先向 `companies` 表写入标的。"
-    )
-    st.stop()
+ALWAYS_SHOW = {
+    "__header__",
+    "## 📋 执行摘要",
+    "## 个股快速扫描（最新财年）",
+    "## 个股快速扫描",
+}
 
-c1, c2, c3 = st.columns([2, 1, 1])
-with c1:
-    sector = st.selectbox("选择 sector", sectors, key="sector_report_pick")
-with c2:
-    thr = st.number_input(
-        "`relevance_score` 下限（0–3）",
-        min_value=0, max_value=3, value=1,
-    )
-with c3:
-    force_refresh = st.checkbox("强制刷新", value=False)
-    gen = st.button("生成报告", type="primary")
+SKIP_SECTIONS = {"## Sector 总览"}
 
+# Step标题到中文标签的映射
+STEP_LABELS = {
+    "Step 2": "业务占比",
+    "Step 3": "展望与战略重心",
+    "Step 4": "Earning Call",
+    "Step 5": "新业务 / 收购 / Insider",
+    "Step 6": "财务数据",
+}
 
-def _current_cache_quarter() -> tuple[int, int]:
-    now = datetime.now(timezone.utc)
-    q = (now.month - 1) // 3 + 1
-    y = now.year
-    if q == 1:
-        return y - 1, 4
-    return y, q - 1
+for heading, body in sections:
+    # 跳过废弃块
+    if heading in SKIP_SECTIONS:
+        continue
+    if "Sector 整体总结" in heading or "Sector 季度总结" in heading:
+        continue
 
+    # 报告 header（标题、生成时间等）
+    if heading == "__header__":
+        st.markdown(body)
+        continue
 
-if sector:
-    cy, cq = _current_cache_quarter()
-    cached = get_cached_report(sector, cy, cq)
-    if cached:
-        st.info(
-            f"✅ 已有 {cy}Q{cq} 缓存报告，点击「生成报告」直接读取缓存（秒级返回）。"
-            "如需重新生成请勾选「强制刷新」。"
+    # 执行摘要和个股快速扫描：直接展示，不折叠
+    if heading in ALWAYS_SHOW:
+        clean = heading.lstrip("#").strip()
+        st.markdown(f"## {clean}")
+        st.markdown(body)
+        continue
+
+    # Step 2/3/4/5：Sector总结直接展示 + 公司详情折叠
+    if any(s in heading for s in ["Step 2", "Step 3", "Step 4", "Step 5"]):
+        clean = heading.lstrip("#").strip()
+        st.markdown(f"## {clean}")
+        detail_label = next(
+            (v for k, v in STEP_LABELS.items() if k in heading),
+            "公司详情"
         )
-    else:
-        st.warning(f"⚠️ 暂无 {cy}Q{cq} 缓存，首次生成需要约5-10分钟。")
+        _render_sector_summary_and_details(body, detail_label)
+        continue
 
-if gen:
-    st.session_state.pop("_sector_report_error", None)
-    with st.spinner("正在生成六步结构报告（包含 Earning Call 分析，可能需要2-3分钟）……"):
-        try:
-            st.session_state["_sector_report_md"] = generate_six_step_sector_report(
-                sector,
-                relevance_threshold=int(thr),
-                force_refresh=force_refresh,
-            )
-            st.session_state["_sector_report_name"] = sector
-        except Exception as e:
-            st.session_state["_sector_report_error"] = str(e)
+    # Step 6：个股扫描直接展示 + 图表折叠
+    if "Step 6" in heading:
+        clean = heading.lstrip("#").strip()
+        st.markdown(f"## {clean}")
+        _render_step6_section(
+            body,
+            st.session_state.get("_sector_report_name", sector)
+        )
+        continue
 
-err = st.session_state.pop("_sector_report_error", None)
-if err:
-    st.error(err)
-
-md = st.session_state.get("_sector_report_md")
-if md:
-    st.success(f"已生成：**{st.session_state.get('_sector_report_name', sector)}**")
-
-    st.download_button(
-        "下载 Markdown",
-        data=md.encode("utf-8"),
-        file_name=f"sector_report_{sector}.md",
-        mime="text/markdown",
-    )
-
-    sections = _split_md_sections(md)
-
-    ALWAYS_EXPANDED = {
-        "__header__",
-        "## 📋 执行摘要",
-        "## 个股快速扫描（最新财年）",
-        "## 个股快速扫描",
-    }
-
-    # 旧缓存里的 Sector 总览是空壳（内容在下面的整体总结里），直接跳过
-    SKIP_SECTIONS = {"## Sector 总览"}
-
-    for heading, body in sections:
-        if heading in SKIP_SECTIONS:
-            continue
-
-        # 旧缓存的"整体总结"块——当作执行摘要的一部分展开显示
-        if "Sector 整体总结" in heading or "Sector 季度总结" in heading:
-            st.markdown(body)
-            continue
-
-        if heading == "__header__":
-            st.markdown(body)
-            continue
-
-        if heading in ALWAYS_EXPANDED:
-            st.markdown(f"### {heading.lstrip('#').strip()}")
-            st.markdown(body)
-            continue
-
-        label = heading.lstrip("#").strip()
-        with st.expander(label, expanded=False):
-            if "Step 2" in heading or "Step 1" in heading:
-                _render_step_with_company_expanders(body, ["业务线", "地理", "revenue", "收入", "占比"])
-            elif "Step 4" in heading:
-                _render_step4_with_company_expanders(body)
-            elif "Step 3" in heading:
-                _render_step_with_company_expanders(body, ["展望", "指引", "战略", "行业判断", "前瞻"])
-            elif "Step 5" in heading:
-                _render_step_with_company_expanders(body, ["收购", "新业务", "Insider", "买入", "卖出", "合作"])
-            elif "Step 6" in heading:
-                st.markdown(body)
-                _render_step6_charts(
-                    st.session_state.get("_sector_report_name", sector)
-                )
-            else:
-                st.markdown(body)
+    # 其他未知块：折叠显示
+    label = heading.lstrip("#").strip()
+    with st.expander(label, expanded=False):
+        st.markdown(body)
