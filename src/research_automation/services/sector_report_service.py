@@ -554,6 +554,96 @@ def _confidence_zh(c: str) -> str:
     )
 
 
+def _step0_sector_summary(
+    sector: str,
+    per_company: list[
+        tuple[
+            CompanyRecord,
+            list[dict[str, Any]],
+            dict[str, Any],
+            int,
+            bool,
+        ]
+    ],
+    sector_watch_items: list[str] | None = None,
+) -> list[str]:
+    """Step0：Sector 整体总结段，LLM基于财务数据和公司列表生成。"""
+    from research_automation.extractors.fmp_client import get_financials
+    from research_automation.extractors.llm_client import chat
+
+    lines: list[str] = ["## Sector 总览", ""]
+
+    # 收集各公司最新财务数据
+    company_snapshots: list[str] = []
+    for rec, _signals, _insider, _below, _had in per_company:
+        t = rec.ticker
+        disp = company_display_name(t, rec.company_name)
+        try:
+            financials = get_financials(t, years=2)
+            if not financials:
+                continue
+            latest = max(financials, key=lambda r: getattr(r, "year", 0) or 0)
+            prev_list = [r for r in financials if (getattr(r, "year", 0) or 0) < (getattr(latest, "year", 0) or 0)]
+            prev = max(prev_list, key=lambda r: getattr(r, "year", 0) or 0) if prev_list else None
+
+            rev = getattr(latest, "revenue", None)
+            if rev is None:
+                continue
+            prev_rev = getattr(prev, "revenue", None) if prev else None
+            rev_growth = (
+                (float(rev) - float(prev_rev)) / abs(float(prev_rev)) * 100
+                if rev and prev_rev and prev_rev != 0 else None
+            )
+            gm = getattr(latest, "gross_margin", None)
+            ebitda = getattr(latest, "ebitda", None)
+
+            snap = f"{t}（{disp}）：Revenue ${float(rev)/1e9:.1f}B"
+            if rev_growth is not None:
+                snap += f" YoY {rev_growth:+.1f}%"
+            if gm is not None:
+                gm_val = float(gm) * 100 if float(gm) < 2 else float(gm)
+                snap += f"，Gross Margin {gm_val:.1f}%"
+            if ebitda is not None:
+                snap += f"，EBITDA ${float(ebitda)/1e9:.1f}B"
+            company_snapshots.append(snap)
+        except Exception:
+            logger.exception("Step0 财务快照失败 ticker=%s", t)
+            continue
+
+    if not company_snapshots:
+        lines.append("*（财务数据不可用，无法生成sector总结）*")
+        lines.append("")
+        return lines
+
+    watch_str = "、".join(sector_watch_items) if sector_watch_items else "无"
+    snapshot_text = "\n".join(f"- {s}" for s in company_snapshots)
+
+    prompt = f"""你是资深行业研究分析师。以下是{sector}板块各公司最新财务快照：
+
+{snapshot_text}
+
+本sector重点关注项：{watch_str}
+
+请写一段精准的sector整体总结，要求：
+1. 必须包含具体数字（收入规模、增长率、利润率）
+2. 点出本季度sector最突出的1-2个共同趋势，附具体公司名称和数据
+3. 指出哪些公司表现明显优于或差于sector平均，说明原因
+4. 提及管理层普遍关注的前瞻性因素或风险
+5. 只陈述可验证的事实，不做投资建议
+6. 中文输出，公司名/指标保留英文，长度控制在150-250字"""
+
+    try:
+        summary = chat(prompt, max_tokens=400)
+        lines.append(summary)
+        lines.append("")
+    except Exception:
+        logger.exception("Step0 sector总结LLM调用失败")
+        lines.append("*（sector总结生成失败）*")
+        lines.append("")
+
+    return lines
+
+
 def _step1_sector_business_overview(
     per_company: list[
         tuple[
@@ -1258,7 +1348,8 @@ def generate_six_step_sector_report(
         f"**新闻窗口**：最近 {int(db)} 个 UTC 日历日",
         "",
     ]
-    # Step1/2/5/6 无 LLM 调用，直接串行
+    # Step0（LLM）与 Step1/2/5/6 串行；Step1/2/5/6 无 LLM 调用
+    lines.extend(_step0_sector_summary(sec, per_company, sector_watch_items))
     lines.extend(_step1_sector_business_overview(per_company))
     lines.extend(_step2_per_company_revenue_breakdown(per_company))
 
