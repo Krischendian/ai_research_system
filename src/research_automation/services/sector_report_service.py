@@ -1017,6 +1017,33 @@ def _step3_per_company_outlook(
             lines.append("")
             lines.append(sector_outlook)
             lines.append("")
+
+            # Reference 块
+            lines.append("**参考来源：**")
+            lines.append("")
+            for rec, *_ in per_company:
+                blk = results_map.get(rec.ticker, [])
+                if not blk:
+                    continue
+                blk_text = '\n'.join(blk)
+                if len(blk_text.strip()) < 50:
+                    continue
+                has_guidance = "未来展望" in blk_text and "原文未明确提及" not in blk_text[:100]
+                has_industry = "行业判断" in blk_text and "原文未明确提及" not in blk_text[:200]
+                if not has_guidance and not has_industry:
+                    continue
+                filing_year = __import__('datetime').datetime.now().year - 1
+                content_types = []
+                if has_guidance:
+                    content_types.append("未来展望/指引")
+                if has_industry:
+                    content_types.append("行业判断")
+                lines.append(
+                    f"- **{rec.company_name or rec.ticker} ({rec.ticker})**："
+                    f"10-K FY{filing_year} + Earning Call，来源：SEC EDGAR / FMP｜"
+                    f"内容：{', '.join(content_types)}"
+                )
+            lines.append("")
             lines.append("<!--- COMPANY_DETAILS_START --->")
             lines.append("")
         except Exception:
@@ -1171,6 +1198,33 @@ def _step4_earning_call_section(
                 lines.append("> ⚠️ **以下为系统辅助总结，非原文直接提取，仅供参考。原文 quotations 请展开各公司详情查看。**")
                 lines.append("")
                 lines.append(sector_summary)
+                lines.append("")
+
+                # Reference 块
+                lines.append("**参考来源：**")
+                lines.append("")
+                for t, analysis in successful_analyses:
+                    rec = rec_map.get(t)
+                    company_name = rec.company_name if rec else t
+                    q_label = f"{year}Q{quarter}"
+                    source = "FMP API"
+                    # 列出该公司被引用的关键数据点
+                    data_points = []
+                    if analysis.summary:
+                        # 提取数字（简单正则）
+                        import re as _re4
+
+                        numbers = _re4.findall(r'\$[\d,\.]+[BMK]?|\d+\.?\d*%|\d+,?\d+', analysis.summary[:300])
+                        if numbers:
+                            data_points.append(f"关键数据：{', '.join(numbers[:5])}")
+                    if analysis.quotations:
+                        data_points.append(f"Quotations：{len(analysis.quotations)} 条原话")
+                    if analysis.management_viewpoints:
+                        data_points.append(f"管理层观点：{len(analysis.management_viewpoints)} 条")
+                    ref_line = f"- **{company_name} ({t})**：Earning Call 逐字稿 {q_label}，来源：{source}"
+                    if data_points:
+                        ref_line += f"｜{' ｜ '.join(data_points)}"
+                    lines.append(ref_line)
                 lines.append("")
                 lines.append("<!--- COMPANY_DETAILS_START --->")
                 lines.append("")
@@ -1343,6 +1397,31 @@ def _step5_new_biz_acquisitions_insider(
             lines.append("> ⚠️ **以下为系统辅助总结，非原文直接提取，仅供参考。原文链接请展开各公司详情查看。**")
             lines.append("")
             lines.append(sector_signal)
+            lines.append("")
+
+            # Reference 块
+            lines.append("**参考来源：**")
+            lines.append("")
+            for rec, signals, insider, _below, _had in per_company:
+                t = rec.ticker
+                biz_signals = [
+                    s for s in signals
+                    if str(s.get("signal_type") or "") in ("business_change", "insider_trade")
+                ]
+                insider_count = int(insider.get("trade_count") or 0)
+                if not biz_signals and insider_count == 0:
+                    continue
+                ref_parts = []
+                if biz_signals:
+                    ref_parts.append(f"Benzinga 新闻 {len(biz_signals)} 条")
+                if insider_count > 0:
+                    bc = int(insider.get("buy_count") or 0)
+                    sc = int(insider.get("sell_count") or 0)
+                    ref_parts.append(f"FMP Insider 申报：买入{bc}笔/卖出{sc}笔（Form 4）")
+                lines.append(
+                    f"- **{rec.company_name or t} ({t})**："
+                    f"{' ｜ '.join(ref_parts)}"
+                )
             lines.append("")
             lines.append("<!--- COMPANY_DETAILS_START --->")
             lines.append("")
@@ -1711,12 +1790,34 @@ Sector财务快照：
         logger.exception("执行摘要LLM调用失败")
         return []
 
+    # 生成 Reference 块
+    ref_lines = ["**参考来源：**", ""]
+    ref_lines.append("| 板块 | 数据来源 | 覆盖范围 |")
+    ref_lines.append("|------|---------|---------|")
+    ref_lines.append("| 📊 财务快照 | FMP Annual Financials API | 最新财年 Revenue YoY、Gross Margin，覆盖全部可用美股标的 |")
+    ref_lines.append("| 🔑 本季核心主题 | Earning Call 逐字稿（FMP / SEC EDGAR） | 跨3家以上公司出现的共同表述，每条结论附具体数字 |")
+    ref_lines.append("| ⚡ 重要事件 | Earning Call 逐字稿 + Benzinga 公司新闻 | 涉及资本配置/人员/产品的实质性变化 |")
+    ref_lines.append("| 💬 管理层关键信号 | Earning Call 逐字稿原话 | CEO/CFO 直接表态，附发言人姓名 |")
+    ref_lines.append("| ⚠️ 主要风险 | Earning Call 前瞻性表述（含 expect/may/consider） | 管理层主动披露的不确定因素 |")
+    ref_lines.append("")
+
+    if per_company:
+        ref_lines.append("**涉及公司：**")
+        ref_lines.append("")
+        covered = []
+        for rec, *_ in per_company:
+            covered.append(f"{rec.ticker}（{rec.company_name or rec.ticker}）")
+        ref_lines.append("、".join(covered))
+        ref_lines.append("")
+
     lines_out: list[str] = [
         "## 📋 执行摘要",
         "",
         "> ⚠️ **以下执行摘要为系统基于财务数据及Earning Call逐字稿的辅助总结，非原文直接提取，仅供参考。各项结论的原始依据请查阅各Step详情中的quotations及数据来源。**",
         "",
         summary,
+        "",
+        "\n".join(ref_lines),
         "",
         "---",
         "",
