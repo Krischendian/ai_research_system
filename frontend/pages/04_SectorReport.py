@@ -262,46 +262,43 @@ md = st.session_state.get("_sector_report_md")
 if md:
     st.success(f"已生成：**{st.session_state.get('_sector_report_name', sector)}**")
 
-    col_dl, col_mode = st.columns([3, 1])
-    with col_dl:
-        st.download_button(
-            "下载 Markdown",
-            data=md.encode("utf-8"),
-            file_name=f"sector_report_{sector}.md",
-            mime="text/markdown",
-        )
-    with col_mode:
-        brief_mode = st.toggle("简报模式（1-2屏）", value=False)
+    st.download_button(
+        "下载 Markdown",
+        data=md.encode("utf-8"),
+        file_name=f"sector_report_{sector}.md",
+        mime="text/markdown",
+    )
 
     sections = _split_md_sections(md)
 
-    BRIEF_WHITELIST = {
-        "__header__",
-        "## Step 1｜Sector 业务全景",
+    # 始终展开的顶部区域
+    ALWAYS_EXPANDED = {"__header__", "## 📋 执行摘要", "## 个股快速扫描（最新财年）"}
+    # 默认折叠的详细内容
+    DEFAULT_COLLAPSED = {
+        "## Step 2｜业务占比（产品线 + 地理收入）",
+        "## Step 3｜展望与战略重心",
         "## Step 4｜Earning Call 内容",
         "## Step 5｜新业务 / 收购 / Insider 异动",
-    }
-
-    DEFAULT_EXPANDED = {
-        "## Step 1｜Sector 业务全景",
-        "## Step 4｜Earning Call 内容",
-        "## Step 5｜新业务 / 收购 / Insider 异动",
+        "## Step 6｜财务数据（年度）",
     }
 
     for heading, body in sections:
-        if brief_mode and heading not in BRIEF_WHITELIST:
-            continue
         if heading == "__header__":
             st.markdown(body)
             continue
-        if brief_mode:
-            st.markdown(f"{heading}\n\n{body}")
+
+        if heading in ALWAYS_EXPANDED:
+            # 执行摘要和个股扫描始终展开
+            st.markdown(f"### {heading.lstrip('#').strip()}")
+            st.markdown(body)
             continue
-        expanded = heading in DEFAULT_EXPANDED
-        with st.expander(heading.lstrip("#").strip(), expanded=expanded):
-            if "Step 1" in heading:
-                _render_step1_charts(body)
-            elif "Step 2" in heading:
+
+        # 其余内容折叠
+        label = heading.lstrip("#").strip()
+        expanded = heading not in DEFAULT_COLLAPSED
+
+        with st.expander(label, expanded=expanded):
+            if "Step 2" in heading or "Step 1" in heading:
                 _render_step2_tables(body)
             elif "Step 6" in heading:
                 st.markdown(body)
