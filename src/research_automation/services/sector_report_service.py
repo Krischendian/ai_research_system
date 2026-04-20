@@ -776,7 +776,7 @@ def _step2_per_company_revenue_breakdown(
         get_geographic_revenue,
         get_segment_revenue,
     )
-    lines: list[str] = ["## Step 2｜每家公司业务占比", ""]
+    lines: list[str] = ["## Step 1｜业务占比（产品线 + 地理收入）", ""]
     for rec, _signals, _insider, _below, _had in per_company:
         t = rec.ticker
         disp = company_display_name(t, rec.company_name)
@@ -1366,6 +1366,84 @@ def _step6_financial_table(
     return lines
 
 
+def _executive_summary(
+    sector: str,
+    step4_lines: list[str],
+    step5_lines: list[str],
+    step6_lines: list[str],
+    sector_watch_items: list[str] | None = None,
+) -> list[str]:
+    """执行摘要：汇总Earning Call、新业务、财务数据，生成sector级别的执行摘要。"""
+    from research_automation.extractors.llm_client import chat
+
+    # 抽取关键内容（控制token）
+    def _extract_key_lines(lines: list[str], max_lines: int = 60) -> str:
+        # 过滤掉空行和纯格式行，保留实质内容
+        filtered = [
+            l for l in lines
+            if l.strip() and not l.strip().startswith("|---")
+        ]
+        return "\n".join(filtered[:max_lines])
+
+    step4_text = _extract_key_lines(step4_lines, 80)
+    step5_text = _extract_key_lines(step5_lines, 30)
+    step6_text = _extract_key_lines(step6_lines, 40)
+
+    watch_str = "、".join(sector_watch_items) if sector_watch_items else "无"
+
+    prompt = f"""你是资深行业研究分析师，为对冲基金撰写sector执行摘要。以下是{sector}板块本季度各公司的Earning Call、新业务及财务数据摘录：
+
+【Earning Call 摘录】
+{step4_text}
+
+【新业务/收购/Insider 摘录】
+{step5_text}
+
+【财务数据摘录】
+{step6_text}
+
+本sector重点关注项：{watch_str}
+
+请生成一份执行摘要，严格按以下格式输出：
+
+### 📊 财务表现
+（跨公司财务对比：点出超预期/不及预期的公司，附具体收入/利润率数字，2-4句）
+
+### 🔑 本季核心主题
+（sector级别最重要的1-3个共同趋势，每个趋势必须附2个以上公司名称和具体数据，不得泛泛而谈）
+
+### ⚡ 重要事件
+（本季最值得关注的3-5个具体事件，格式：[公司] 事件描述，按重要性排序）
+
+### 💬 管理层关键信号
+（从Earning Call提炼的跨公司共同表态或分歧，附具体发言人和原话关键词，2-3条）
+
+### ⚠️ 主要风险
+（管理层普遍提及的前瞻性风险，附具体公司和表述，2-3条）
+
+要求：
+1. 每个板块必须有具体公司名称、数字、事件，禁止空洞概括
+2. 只基于提供的原文，不捏造信息
+3. 中文输出，公司名/指标/人名保留英文
+4. 总长度控制在300-400字"""
+
+    try:
+        summary = chat(prompt, max_tokens=600)
+    except Exception:
+        logger.exception("执行摘要LLM调用失败")
+        return []
+
+    lines_out: list[str] = [
+        "## 📋 执行摘要",
+        "",
+        summary,
+        "",
+        "---",
+        "",
+    ]
+    return lines_out
+
+
 def generate_six_step_sector_report(
     sector: str,
     days_back: int | None = None,
@@ -1430,7 +1508,6 @@ def generate_six_step_sector_report(
     # Step0（LLM）与 Step1/2/5/6 串行；Step1/2/5/6 无 LLM 调用
     lines.extend(_step0_sector_summary(sec, per_company, sector_watch_items))
     lines.extend(_step0b_company_snapshot_table(per_company))
-    lines.extend(_step1_sector_business_overview(per_company))
     lines.extend(_step2_per_company_revenue_breakdown(per_company))
 
     # Step3/4 有 LLM 调用，并行执行
@@ -1447,10 +1524,23 @@ def generate_six_step_sector_report(
         step3_lines = f3.result()
         step4_lines = f4.result()
 
+    step5_lines = _step5_new_biz_acquisitions_insider(per_company)
+    step6_lines = _step6_annual_financial_table(per_company, years=3)
+
+    # 生成执行摘要（需要step4/5/6内容）
+    exec_summary_lines = _executive_summary(
+        sec, step4_lines, step5_lines, step6_lines, sector_watch_items
+    )
+
+    # 执行摘要插入报告最前面（header之后）
+    header_lines = lines[:4]  # # 标题、生成时间、新闻窗口、空行
+    body_lines = lines[4:]
+    lines = header_lines + exec_summary_lines + body_lines
+
     lines.extend(step3_lines)
     lines.extend(step4_lines)
-    lines.extend(_step5_new_biz_acquisitions_insider(per_company))
-    lines.extend(_step6_annual_financial_table(per_company, years=3))
+    lines.extend(step5_lines)
+    lines.extend(step6_lines)
     # ── 缓存写入 ──────────────────────────────────────────────
     report_md = "\n".join(lines).rstrip() + "\n"
     save_report_cache(sec, cache_year, cache_quarter, report_md)
