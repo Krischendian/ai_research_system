@@ -233,34 +233,48 @@ def _fetch_benzinga_company_news(
     tickers: list[str],
     from_dt: datetime,
     to_dt: datetime,
-    page_size: int = 50,
+    page_size: int = 20,
 ) -> list[dict[str, Any]]:
-    """从Benzinga API按ticker拉取公司新闻。"""
+    """从Benzinga API逐个ticker拉取公司新闻并合并。"""
     key = _get_bz_key()
     if not key:
         return []
     us_tickers = [t for t in tickers if " " not in t and "." not in t]
     if not us_tickers:
         return []
-    try:
-        r = requests.get(
-            f"{BENZINGA_BASE}/news",
-            params={
-                "apiKey": key,
-                "pageSize": page_size,
-                "tickers": ",".join(us_tickers[:30]),
-                "dateFrom": from_dt.strftime("%Y-%m-%dT%H:%M:%S"),
-                "dateTo": to_dt.strftime("%Y-%m-%dT%H:%M:%S"),
-            },
-            timeout=30,
-        )
-        if r.status_code != 200:
-            return []
-        data = r.json()
-        return data.get("results", []) if isinstance(data, dict) else []
-    except Exception as e:
-        logger.warning("Benzinga公司新闻失败: %s", e)
-        return []
+
+    all_items: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+
+    for ticker in us_tickers[:30]:
+        try:
+            r = requests.get(
+                f"{BENZINGA_BASE}/news",
+                params={
+                    "apiKey": key,
+                    "pageSize": page_size,
+                    "tickers": ticker,
+                    "dateFrom": from_dt.strftime("%Y-%m-%dT%H:%M:%S"),
+                    "dateTo": to_dt.strftime("%Y-%m-%dT%H:%M:%S"),
+                },
+                timeout=30,
+            )
+            if r.status_code != 200:
+                continue
+            data = r.json()
+            items = data.get("results", []) if isinstance(data, dict) else []
+            for item in items:
+                item_id = str(item.get("benzinga_id") or item.get("id") or "")
+                if item_id and item_id in seen_ids:
+                    continue
+                if item_id:
+                    seen_ids.add(item_id)
+                all_items.append(item)
+        except Exception as e:
+            logger.warning("Benzinga公司新闻失败 ticker=%s: %s", ticker, e)
+            continue
+
+    return all_items
 
 
 def _filter_macro_by_sector(
