@@ -271,33 +271,36 @@ if md:
 
     sections = _split_md_sections(md)
 
-    # 始终展开的顶部区域
-    ALWAYS_EXPANDED = {"__header__", "## 📋 执行摘要", "## 个股快速扫描（最新财年）"}
-    # 默认折叠的详细内容
-    DEFAULT_COLLAPSED = {
-        "## Step 2｜业务占比（产品线 + 地理收入）",
-        "## Step 3｜展望与战略重心",
-        "## Step 4｜Earning Call 内容",
-        "## Step 5｜新业务 / 收购 / Insider 异动",
-        "## Step 6｜财务数据（年度）",
+    ALWAYS_EXPANDED = {
+        "__header__",
+        "## 📋 执行摘要",
+        "## 个股快速扫描（最新财年）",
+        "## 个股快速扫描",
     }
 
+    # 旧缓存里的 Sector 总览是空壳（内容在下面的整体总结里），直接跳过
+    SKIP_SECTIONS = {"## Sector 总览"}
+
     for heading, body in sections:
+        if heading in SKIP_SECTIONS:
+            continue
+
+        # 旧缓存的"整体总结"块——当作执行摘要的一部分展开显示
+        if "Sector 整体总结" in heading or "Sector 季度总结" in heading:
+            st.markdown(body)
+            continue
+
         if heading == "__header__":
             st.markdown(body)
             continue
 
         if heading in ALWAYS_EXPANDED:
-            # 执行摘要和个股扫描始终展开
             st.markdown(f"### {heading.lstrip('#').strip()}")
             st.markdown(body)
             continue
 
-        # 其余内容折叠
         label = heading.lstrip("#").strip()
-        expanded = heading not in DEFAULT_COLLAPSED
-
-        with st.expander(label, expanded=expanded):
+        with st.expander(label, expanded=False):
             if "Step 2" in heading or "Step 1" in heading:
                 _render_step2_tables(body)
             elif "Step 6" in heading:
