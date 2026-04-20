@@ -11,6 +11,7 @@ for p in (_fe_root, _src):
         sys.path.insert(0, str(p))
 
 import streamlit as st
+from datetime import date, timedelta
 from dotenv import load_dotenv
 from research_automation.core.company_manager import list_companies
 from research_automation.core.database import get_connection, init_db
@@ -22,6 +23,15 @@ st.title("每日新闻简报")
 st.caption("宏观：Bloomberg RSS（sector相关过滤）｜公司：Benzinga API｜摘要：Claude")
 
 force_refresh = st.sidebar.checkbox("强制刷新简报（忽略缓存）", value=False)
+use_custom_date = st.sidebar.checkbox("指定日期（测试用）", value=False)
+if use_custom_date:
+    target_date = st.sidebar.date_input(
+        "选择纽约日期",
+        value=date.today() - timedelta(days=1),
+        max_value=date.today(),
+    )
+else:
+    target_date = None
 
 
 def _get_sectors() -> list[str]:
@@ -58,7 +68,7 @@ if gen:
     with st.spinner("正在拉取新闻并生成摘要（约30-60秒）..."):
         try:
             brief = generate_daily_brief(
-                sector, tickers, force_refresh=force_refresh
+                sector, tickers, force_refresh=force_refresh, target_date=target_date
             )
             st.session_state[cache_key] = brief
         except Exception as e:

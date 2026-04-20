@@ -11,7 +11,7 @@ import hashlib
 import logging
 import os
 import sqlite3
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 import requests
@@ -110,12 +110,18 @@ def _get_bz_key() -> str | None:
     return (os.environ.get("BENZINGA_API_KEY") or "").strip() or None
 
 
-def _ny_windows() -> tuple[tuple[datetime, datetime], tuple[datetime, datetime]]:
-    """返回隔夜和昨日两个UTC时间窗口。"""
-    # 用UTC-4近似纽约时间（EDT）
+def _ny_windows(
+    target_date: date | None = None,
+) -> tuple[tuple[datetime, datetime], tuple[datetime, datetime]]:
+    """返回隔夜和昨日两个UTC时间窗口。target_date为纽约日期，默认今天。"""
     ny_offset = timedelta(hours=-4)
-    now_ny = datetime.now(timezone.utc).astimezone(timezone(ny_offset))
-    today_ny = now_ny.replace(hour=0, minute=0, second=0, microsecond=0)
+    if target_date is not None:
+        from datetime import date as date_type
+
+        today_ny = datetime.combine(target_date, datetime.min.time()).replace(tzinfo=timezone(ny_offset))
+    else:
+        now_ny = datetime.now(timezone.utc).astimezone(timezone(ny_offset))
+        today_ny = now_ny.replace(hour=0, minute=0, second=0, microsecond=0)
     yesterday_ny = today_ny - timedelta(days=1)
 
     overnight = (
@@ -371,13 +377,14 @@ def generate_daily_brief(
     tickers: list[str],
     *,
     force_refresh: bool = False,
+    target_date: date | None = None,
 ) -> str:
     """
     生成单个sector的每日新闻简报。
     返回Markdown字符串。
     """
     # ── 缓存读取 ──────────────────────────────────────────────────
-    ny_today = datetime.now(timezone(timedelta(hours=-4))).strftime("%Y-%m-%d")
+    ny_today = target_date.strftime("%Y-%m-%d") if target_date else datetime.now(timezone(timedelta(hours=-4))).strftime("%Y-%m-%d")
     if not force_refresh:
         cached = _get_brief_cache(sector, ny_today)
         if cached:
@@ -385,7 +392,7 @@ def generate_daily_brief(
             return cached
     # ── 缓存读取 END ──────────────────────────────────────────────
 
-    overnight_window, yesterday_window = _ny_windows()
+    overnight_window, yesterday_window = _ny_windows(target_date)
     ov_start, ov_end = overnight_window
     yd_start, yd_end = yesterday_window
 
