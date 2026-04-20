@@ -781,6 +781,64 @@ def _step2_per_company_revenue_breakdown(
         get_segment_revenue,
     )
     lines: list[str] = ["## Step 2｜业务占比（产品线 + 地理收入）", ""]
+
+    # ── Sector 级别业务占比总结（纯数据，无LLM）──────────────────
+    from research_automation.extractors.fmp_client import get_segment_revenue, get_geographic_revenue
+
+    # 收集所有公司产品线数据
+    all_segments: dict[str, float] = {}
+    all_geo: dict[str, float] = {}
+    total_rev = 0.0
+    covered = 0
+
+    for rec, *_ in per_company:
+        t = rec.ticker
+        data = get_segment_revenue(t, 2024) or get_segment_revenue(t, 2023)
+        if not data:
+            continue
+        covered += 1
+        rev_total = sum(d["absolute"] for d in data)
+        total_rev += rev_total
+        for seg in data:
+            key = seg["segment"]
+            all_segments[key] = all_segments.get(key, 0) + seg["absolute"]
+
+        geo = get_geographic_revenue(t, 2024) or get_geographic_revenue(t, 2023)
+        if geo:
+            for g in geo:
+                key = g["region"]
+                all_geo[key] = all_geo.get(key, 0) + g["absolute"]
+
+    if covered > 0 and total_rev > 0:
+        lines.append(f"> **数据来源**：FMP Revenue Segmentation | **覆盖**：{covered}/{len(per_company)} 家公司 | **合计收入**：${total_rev/1e9:.1f}B")
+        lines.append("")
+
+        # 产品线 Top5
+        top_segs = sorted(all_segments.items(), key=lambda x: x[1], reverse=True)[:5]
+        lines.append("**板块收入结构（产品线 Top 5，按绝对收入排序）：**")
+        lines.append("")
+        for seg_name, seg_rev in top_segs:
+            pct = seg_rev / total_rev * 100
+            lines.append(f"- {seg_name}：{pct:.1f}%（${seg_rev/1e9:.1f}B）")
+        lines.append("")
+
+        # 地理 Top5
+        if all_geo:
+            geo_total = sum(all_geo.values())
+            top_geo = sorted(all_geo.items(), key=lambda x: x[1], reverse=True)[:5]
+            lines.append("**板块地理收入分布（Top 5）：**")
+            lines.append("")
+            for geo_name, geo_rev in top_geo:
+                pct = geo_rev / geo_total * 100
+                lines.append(f"- {geo_name}：{pct:.1f}%（${geo_rev/1e9:.1f}B）")
+            lines.append("")
+
+        lines.append("---")
+        lines.append("")
+        lines.append("**以下为各公司详情：**")
+        lines.append("")
+    # ── Sector 总结 END ──────────────────────────────────────────
+
     for rec, _signals, _insider, _below, _had in per_company:
         t = rec.ticker
         disp = company_display_name(t, rec.company_name)
@@ -922,6 +980,50 @@ def _step3_per_company_outlook(
                 results_map[ticker] = chunk
             except Exception:
                 logger.exception("Step3 并行任务异常 ticker=%s", tk)
+
+    # ── Sector 级别展望总结（LLM）────────────────────────────
+    from research_automation.extractors.llm_client import chat as _chat3
+
+    # 收集各公司 future_guidance 和 industry_view
+    outlook_briefs: list[str] = []
+    for rec, *_ in per_company:
+        blk = results_map.get(rec.ticker, [])
+        if not blk:
+            continue
+        blk_text = '\n'.join(blk)
+        if '原文未明确提及' in blk_text and 'NOT_FOUND' in blk_text:
+            continue
+        # 只取前300字
+        outlook_briefs.append(f"【{rec.ticker}】\n{blk_text[:300]}")
+
+    if len(outlook_briefs) >= 2:
+        briefs_text = '\n\n'.join(outlook_briefs)
+        prompt = f"""你是资深行业研究分析师。以下是{sector if hasattr(locals(), 'sector') else '该'}板块各公司管理层对未来的展望与行业判断：
+
+{briefs_text}
+
+请生成板块整体展望总结。要求：
+1. 只提炼多家公司（至少2家）共同提到的战略方向或行业判断
+2. 每条结论必须标注具体公司名称，禁止模糊表述
+3. 分点列出，每点以【战略方向】或【行业判断】开头
+4. 单家公司独有的展望不在此列出，留给个股详情
+5. 每句必须有实质内容，禁止车轱辘话
+6. 数据来源：各公司10-K及Earning Call（SEC EDGAR / FMP）
+7. 中文输出，公司名保留英文"""
+
+        try:
+            sector_outlook = _chat3(prompt, max_tokens=600)
+            lines.append("> **数据来源**：各公司 10-K 及 Earning Call（SEC EDGAR / FMP）｜**评判标准**：至少2家公司共同提及的战略方向或行业判断")
+            lines.append("")
+            lines.append(sector_outlook)
+            lines.append("")
+            lines.append("---")
+            lines.append("")
+            lines.append("**以下为各公司详情（点击展开）：**")
+            lines.append("")
+        except Exception:
+            logger.exception("Step3 sector总结失败")
+    # ── Sector 总结 END ──────────────────────────────────────
 
     for rec, *_rest in per_company:
         blk = results_map.get(rec.ticker)
@@ -1188,6 +1290,68 @@ def _step5_new_biz_acquisitions_insider(
     ],
 ) -> list[str]:
     lines: list[str] = ["## Step 5｜新业务 / 收购 / Insider 异动", ""]
+
+    # ── Sector 级别新业务/收购总结（LLM）────────────────────────
+    from research_automation.extractors.llm_client import chat as _chat5
+
+    # 收集所有公司的业务信号
+    all_signals_brief: list[str] = []
+    for rec, signals, insider, _below, _had in per_company:
+        t = rec.ticker
+        biz_signals = [
+            s for s in signals
+            if str(s.get("signal_type") or "") in ("business_change", "insider_trade")
+        ]
+        insider_count = int(insider.get("trade_count") or 0)
+        if not biz_signals and insider_count == 0:
+            continue
+        parts = [f"【{t}】"]
+        for s in biz_signals[:3]:
+            title = str(s.get("title") or "")[:100]
+            parts.append(f"- {title}")
+        if insider_count > 0:
+            bc = int(insider.get("buy_count") or 0)
+            sc = int(insider.get("sell_count") or 0)
+            tbv = insider.get("total_buy_value")
+            tsv = insider.get("total_sell_value")
+            insider_str = f"Insider：买入{bc}笔"
+            if tbv:
+                insider_str += f"（${float(tbv)/1e6:.1f}M）"
+            insider_str += f"，卖出{sc}笔"
+            if tsv:
+                insider_str += f"（${float(tsv)/1e6:.1f}M）"
+            parts.append(f"- {insider_str}")
+        all_signals_brief.append('\n'.join(parts))
+
+    if len(all_signals_brief) >= 1:
+        briefs_text = '\n\n'.join(all_signals_brief)
+        prompt = f"""你是资深行业研究分析师。以下是板块各公司本周的新业务、收购并购及Insider交易信号：
+
+{briefs_text}
+
+请生成板块整体新业务与Insider动态总结。要求：
+1. 重点标注：大额收购、战略合作、管理层大额买入/卖出
+2. 每条结论必须有具体公司名称、金额或事件名称
+3. Insider交易：只标注异常的（买入超过$1M或卖出超过$5M）
+4. 分点列出，格式：[公司] 事件描述（金额/规模）
+5. 如果本周信号较少，如实说明，不要凑字数
+6. 数据来源：Benzinga公司新闻 + FMP Insider交易申报
+7. 中文输出，公司名/金额保留英文"""
+
+        try:
+            sector_signal = _chat5(prompt, max_tokens=400)
+            lines.append("> **数据来源**：Benzinga 公司新闻 + FMP Insider 交易申报（Form 4）｜**评判标准**：收购/战略合作/异常 Insider 交易（买入>$1M 或卖出>$5M）")
+            lines.append("")
+            lines.append(sector_signal)
+            lines.append("")
+            lines.append("---")
+            lines.append("")
+            lines.append("**以下为各公司详情（点击展开）：**")
+            lines.append("")
+        except Exception:
+            logger.exception("Step5 sector总结失败")
+    # ── Sector 总结 END ──────────────────────────────────────────
+
     for rec, signals, insider, _below, _had in per_company:
         t = rec.ticker
         disp = company_display_name(t, rec.company_name)

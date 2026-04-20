@@ -162,6 +162,43 @@ def _render_step4_with_company_expanders(body: str) -> None:
             st.markdown(company_body)
 
 
+def _render_step_with_company_expanders(body: str, has_content_keywords: list[str] | None = None) -> None:
+    """
+    通用渲染函数：Sector总结段直接展示，每家公司详情折叠。
+    适用于 Step3/Step5。
+    """
+    import re
+
+    company_pattern = re.compile(r"^###\s+(\S+)\s+—\s+(.+)$", re.MULTILINE)
+    matches = list(company_pattern.finditer(body))
+
+    if not matches:
+        st.markdown(body)
+        return
+
+    # Sector 总结段
+    sector_summary = body[:matches[0].start()].strip()
+    if sector_summary:
+        st.markdown(sector_summary)
+        st.divider()
+
+    keywords = has_content_keywords or ["展望", "指引", "战略", "新业务", "收购", "Insider", "买入", "卖出"]
+
+    for i, m in enumerate(matches):
+        ticker = m.group(1).strip()
+        company_name = m.group(2).strip()
+        start = m.end()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(body)
+        company_body = body[start:end].strip()
+
+        has_content = any(kw in company_body for kw in keywords)
+        has_content = has_content and "原文未明确提及" not in company_body[:50]
+        label = f"{'✅' if has_content else '⚠️'} {ticker} — {company_name}"
+
+        with st.expander(label, expanded=False):
+            st.markdown(company_body)
+
+
 def _render_step6_charts(sector_name: str) -> None:
     """从FMP拉取各公司年度财务，渲染Plotly趋势图。"""
     conn = get_connection()
@@ -340,9 +377,13 @@ if md:
         label = heading.lstrip("#").strip()
         with st.expander(label, expanded=False):
             if "Step 2" in heading or "Step 1" in heading:
-                _render_step2_tables(body)
+                _render_step_with_company_expanders(body, ["业务线", "地理", "revenue", "收入", "占比"])
             elif "Step 4" in heading:
                 _render_step4_with_company_expanders(body)
+            elif "Step 3" in heading:
+                _render_step_with_company_expanders(body, ["展望", "指引", "战略", "行业判断", "前瞻"])
+            elif "Step 5" in heading:
+                _render_step_with_company_expanders(body, ["收购", "新业务", "Insider", "买入", "卖出", "合作"])
             elif "Step 6" in heading:
                 st.markdown(body)
                 _render_step6_charts(
