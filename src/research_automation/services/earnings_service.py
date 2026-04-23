@@ -330,10 +330,23 @@ def analyze_earnings_call(
 
     try:
         payload = _extract_json_object(reply)
-    except (json.JSONDecodeError, ValueError) as e:
-        raise EarningsAnalysisError(
-            "模型返回内容无法解析为 JSON，请稍后重试。"
-        ) from e
+    except (json.JSONDecodeError, ValueError):
+        # JSON解析失败时重试一次（Claude偶发返回不完整JSON）
+        logger.warning("Step4 JSON解析失败，重试一次 ticker=%s", symbol)
+        try:
+            reply2 = chat(
+                prompt,
+                response_format={"type": "json_object"},
+                timeout=180.0,
+                max_tokens=6000,
+            )
+            payload = _extract_json_object(reply2)
+        except (json.JSONDecodeError, ValueError) as e2:
+            raise EarningsAnalysisError(
+                "模型返回内容无法解析为 JSON，请稍后重试。"
+            ) from e2
+        except RuntimeError as e2:
+            raise EarningsAnalysisError(f"调用语言模型失败：{e2}") from e2
 
     summary = str(payload.get("summary", "") or "").strip()
     summary_ids = normalize_paragraph_ref_list(
