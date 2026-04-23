@@ -51,43 +51,51 @@ class EarningsAnalysisError(Exception):
 
 
 def _extract_json_object(raw: str) -> dict[str, Any]:
-    """从模型原始字符串中提取 JSON 对象，并处理弯引号等非法字符。"""
+    """从模型原始字符串中提取 JSON 对象，健壮处理 Claude 常见输出问题。"""
     text = raw.strip()
 
-    # 去掉 markdown 代码块
+    # 1. 去掉 markdown 代码块
     m = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", text)
     if m:
         text = m.group(1).strip()
 
-    # 替换 Unicode 弯引号为直引号（Claude 有时在 quote 字段内用弯引号）
-    text = text.replace("\u201c", '\\"').replace("\u201d", '\\"')
-    text = text.replace("\u2018", "'").replace("\u2019", "'")
-
+    # 2. 先尝试直接解析
     try:
-        data = json.loads(text)
+        return json.loads(text)
     except json.JSONDecodeError:
-        start = text.find("{")
-        end = text.rfind("}")
-        if start == -1 or end <= start:
-            raise
-        chunk = text[start : end + 1]
-        # 再次尝试替换后解析
+        pass
+
+    # 3. 提取首个 {...} 块
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end > start:
+        chunk = text[start: end + 1]
         try:
-            data = json.loads(chunk)
+            return json.loads(chunk)
         except json.JSONDecodeError:
-            # 最后尝试：用 ast.literal_eval 作为兜底（仅对简单结构有效）
+            pass
+
+        # 4. 弯引号处理：只在 JSON 字符串值内替换，用 \" 转义
+        # 策略：把弯引号先变成占位符，parse 后再还原
+        cleaned = chunk
+        # 把弯左/右引号替换为转义双引号
+        cleaned = re.sub(r"[\u201c\u201d]", '\\"', cleaned)
+        cleaned = cleaned.replace("\u2018", "'").replace("\u2019", "'")
+        try:
+            return json.loads(cleaned)
+        except json.JSONDecodeError:
+            pass
+
+        # 5. 最后兜底：强制用 ast
+        try:
             import ast
+            result = ast.literal_eval(chunk)
+            if isinstance(result, dict):
+                return result
+        except Exception:
+            pass
 
-            try:
-                data = ast.literal_eval(chunk)
-            except Exception:
-                raise json.JSONDecodeError(
-                    "无法解析 JSON", chunk, 0
-                )
-
-    if not isinstance(data, dict):
-        raise ValueError("JSON 根节点须为对象")
-    return data
+    raise json.JSONDecodeError("无法解析 JSON", text, 0)
 
 
 def _build_prompt(
