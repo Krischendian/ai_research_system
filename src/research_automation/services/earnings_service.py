@@ -105,6 +105,12 @@ def _build_prompt(
     sector_watch_items: list[str] | None = None,
 ) -> str:
     """拼装 LLM 提示词（含段落溯源要求）。"""
+    # 防止 prompt 过长导致输出截断：超过 40000 字符时截取前 40000 字符
+    MAX_TRANSCRIPT_CHARS = 40000
+    numbered = numbered_transcript
+    if len(numbered) > MAX_TRANSCRIPT_CHARS:
+        numbered = numbered[:MAX_TRANSCRIPT_CHARS] + "\n\n[逐字稿过长，已截取前40000字符]"
+
     watch_block = ""
     if sector_watch_items:
         items = "；".join(
@@ -148,7 +154,7 @@ summary, summary_source_paragraph_ids, management_viewpoints, quotations, new_bu
 季度：{quarter}
 
 【分段逐字稿】
-{numbered_transcript}
+{numbered}
 """
 
 
@@ -313,6 +319,7 @@ def analyze_earnings_call(
             prompt,
             response_format={"type": "json_object"},
             timeout=180.0,
+            max_tokens=4096,
         )
     except ValueError as e:
         raise EarningsAnalysisError(f"语言模型未就绪：{e}") from e
