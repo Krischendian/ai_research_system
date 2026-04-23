@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import concurrent.futures
+import json
 import logging
 import os
 import re
@@ -68,6 +69,30 @@ def _excerpt(content: str, max_len: int = 220) -> str:
     if len(t) > max_len:
         return t[: max_len - 1] + "…"
     return t
+
+
+def _parse_llm_json_payload(raw: str) -> dict[str, Any] | None:
+    """尽量从 LLM 文本中提取首个 JSON 对象并解析。"""
+    s = (raw or "").strip()
+    if not s:
+        return None
+
+    # 先去掉常见 markdown fenced code block 包裹
+    if s.startswith("```"):
+        s = re.sub(r"^```(?:json)?\s*", "", s, flags=re.IGNORECASE)
+        s = re.sub(r"\s*```$", "", s)
+        s = s.strip()
+
+    # 若含解释文字，抽取最外层 JSON 对象
+    m = re.search(r"\{[\s\S]*\}", s)
+    if m:
+        s = m.group(0).strip()
+
+    try:
+        parsed = json.loads(s)
+    except Exception:
+        return None
+    return parsed if isinstance(parsed, dict) else None
 
 
 def _filter_sort_signals(
@@ -785,54 +810,131 @@ def _step2_per_company_revenue_breakdown(
     # ── Sector 级别业务占比总结（纯数据，无LLM）──────────────────
     from research_automation.extractors.fmp_client import get_segment_revenue, get_geographic_revenue
 
-    # 收集所有公司产品线数据
-    all_segments: dict[str, float] = {}
-    all_geo: dict[str, float] = {}
-    total_rev = 0.0
-    covered = 0
+    try:
+        # 收集各公司分部数据
+        company_segment_data: dict[str, list] = {}
+        covered = 0
+        no_data_tickers: list[str] = []
 
-    for rec, *_ in per_company:
-        t = rec.ticker
-        data = get_segment_revenue(t, 2024) or get_segment_revenue(t, 2023)
-        if not data:
-            continue
-        covered += 1
-        rev_total = sum(d["absolute"] for d in data)
-        total_rev += rev_total
-        for seg in data:
-            key = seg["segment"]
-            all_segments[key] = all_segments.get(key, 0) + seg["absolute"]
+        for rec, *_ in per_company:
+            t = rec.ticker
+            data = get_segment_revenue(t, 2024) or get_segment_revenue(t, 2023)
+            if data:
+                company_segment_data[t] = data
+                covered += 1
+            else:
+                no_data_tickers.append(t)
 
-        geo = get_geographic_revenue(t, 2024) or get_geographic_revenue(t, 2023)
-        if geo:
-            for g in geo:
-                key = g["region"]
-                all_geo[key] = all_geo.get(key, 0) + g["absolute"]
+        if covered > 0:
+            # 构建传给 LLM 的数据
+            from research_automation.extractors.llm_client import chat as _chat2
 
-    if covered > 0 and total_rev > 0:
-        lines.append(f"> **数据来源**：FMP Revenue Segmentation | **覆盖**：{covered}/{len(per_company)} 家公司 | **合计收入**：${total_rev/1e9:.1f}B")
-        lines.append("")
+            seg_json = json.dumps(company_segment_data, ensure_ascii=False, indent=2)
+            sector_name = per_company[0][0].sector if per_company else "未知板块"
 
-        # 产品线 Top5
-        top_segs = sorted(all_segments.items(), key=lambda x: x[1], reverse=True)[:5]
-        lines.append("**板块收入结构（产品线 Top 5，按绝对收入排序）：**")
-        lines.append("")
-        for seg_name, seg_rev in top_segs:
-            pct = seg_rev / total_rev * 100
-            lines.append(f"- {seg_name}：{pct:.1f}%（${seg_rev/1e9:.1f}B）")
-        lines.append("")
+            prompt = f"""你是金融数据分析师。以下是 {sector_name} 板块各公司的分部收入数据（来源：FMP）。
 
-        # 地理 Top5
-        if all_geo:
-            geo_total = sum(all_geo.values())
-            top_geo = sorted(all_geo.items(), key=lambda x: x[1], reverse=True)[:5]
-            lines.append("**板块地理收入分布（Top 5）：**")
+请完成两个任务，返回严格的 JSON，不要任何额外文字、不要 markdown 代码块：
+
+{{
+  "business_type_distribution": [
+    {{"type": "咨询与数字化转型", "companies": ["ACN", "CTSH"], "description": "为企业提供IT咨询、数字化转型服务"}},
+    {{"type": "企业软件与SaaS", "companies": ["IBM", "ZM"], "description": "软件产品、云服务、数据库"}}
+  ],
+  "unified_segments": [
+    {{"category": "Consulting & Services", "total_absolute": 123456789, "companies": ["ACN", "CTSH"]}},
+    {{"category": "Software & Cloud", "total_absolute": 987654321, "companies": ["IBM", "ZM"]}}
+  ]
+}}
+
+各公司分部数据：
+{seg_json}
+
+要求：
+1. business_type_distribution 按主营业务归类，每家公司只归入一个类型，不超过6个类型
+2. unified_segments 把各公司 segment 名称映射到不超过6个统一大类，合并同类绝对金额之和
+3. 只基于提供的数据，不推断或补充数据中没有的信息
+4. 所有金额单位与原始数据一致（美元）
+"""
+
+            llm_result = None
+            try:
+                raw = _chat2(prompt, max_tokens=1200)
+                llm_result = _parse_llm_json_payload(raw)
+                if llm_result is None:
+                    logger.warning(
+                        "Step2 LLM 未返回可解析 JSON，fallback。raw_preview=%s",
+                        (raw or "")[:240].replace("\n", " "),
+                    )
+            except Exception as e:
+                logger.warning("Step2 LLM 归类失败，fallback 到简单加总: %s", e)
+
+            lines.append(
+                f"> **数据来源**：FMP Revenue Segmentation | **覆盖**：{covered}/{len(per_company)} 家公司 | "
+                f"**暂无数据**：{', '.join(no_data_tickers) if no_data_tickers else '无'}"
+            )
             lines.append("")
-            for geo_name, geo_rev in top_geo:
-                pct = geo_rev / geo_total * 100
-                lines.append(f"- {geo_name}：{pct:.1f}%（${geo_rev/1e9:.1f}B）")
+
+            if llm_result:
+                # A. 板块业务类型分布
+                biz_dist = llm_result.get("business_type_distribution", [])
+                if biz_dist:
+                    lines.append("**板块业务类型分布：**")
+                    lines.append("")
+                    lines.append("| 业务类型 | 涉及公司 | 说明 |")
+                    lines.append("|---------|---------|------|")
+                    for item in biz_dist:
+                        btype = item.get("type", "")
+                        comps = "、".join(item.get("companies", []))
+                        desc = item.get("description", "")
+                        lines.append(f"| {btype} | {comps} | {desc} |")
+                    lines.append("")
+
+                # B. 统一分类后的收入结构
+                unified = llm_result.get("unified_segments", [])
+                if unified:
+                    total_unified = sum(u.get("total_absolute", 0) for u in unified)
+                    unified_sorted = sorted(
+                        unified, key=lambda x: x.get("total_absolute", 0), reverse=True
+                    )
+                    lines.append("**板块收入结构（LLM归类后）：**")
+                    lines.append("")
+                    for u in unified_sorted:
+                        cat = u.get("category", "")
+                        amt = u.get("total_absolute", 0)
+                        comps = "、".join(u.get("companies", []))
+                        pct = amt / total_unified * 100 if total_unified > 0 else 0
+                        lines.append(f"- {cat}：{pct:.1f}%（${amt/1e9:.1f}B）—— {comps}")
+                    lines.append("")
+
+                lines.append("> ⚠️ 系统辅助归类，基于FMP分部数据由LLM映射，请核对原始数据。")
+                lines.append("")
+            else:
+                # fallback：简单列出各公司主要分部
+                lines.append("**各公司主要业务线（FMP数据）：**")
+                lines.append("")
+                for t, data in company_segment_data.items():
+                    top = data[0] if data else None
+                    if top:
+                        lines.append(f"- {t}：{top['segment']}（{top['percentage']:.1f}%）等")
+                lines.append("")
+        else:
+            lines.append(
+                f"> **数据来源**：FMP Revenue Segmentation | **覆盖**：0/{len(per_company)} 家公司 | "
+                f"**暂无数据**：{', '.join(no_data_tickers) if no_data_tickers else '无'}"
+            )
             lines.append("")
 
+        lines.append("<!--- COMPANY_DETAILS_START --->")
+        lines.append("")
+    except Exception as e:
+        logger.warning("Step2 聚合异常，降级到空聚合: %s", e)
+        lines.append(
+            f"> **数据来源**：FMP Revenue Segmentation | **覆盖**：0/{len(per_company)} 家公司 | **暂无数据**：异常"
+        )
+        lines.append("")
+        lines.append("**各公司主要业务线（FMP数据）：**")
+        lines.append("")
         lines.append("<!--- COMPANY_DETAILS_START --->")
         lines.append("")
     # ── Sector 总结 END ──────────────────────────────────────────
@@ -996,7 +1098,7 @@ def _step3_per_company_outlook(
 
     if len(outlook_briefs) >= 2:
         briefs_text = '\n\n'.join(outlook_briefs)
-        prompt = f"""你是资深行业研究分析师。以下是{sector if hasattr(locals(), 'sector') else '该'}板块各公司管理层对未来的展望与行业判断：
+        prompt = f"""你是资深行业研究分析师。以下是该板块各公司管理层对未来的展望与行业判断：
 
 {briefs_text}
 
