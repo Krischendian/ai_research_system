@@ -155,6 +155,8 @@ summary, summary_source_paragraph_ids, management_viewpoints, quotations, new_bu
 
 【分段逐字稿】
 {numbered}
+
+重要：直接输出 JSON 对象，第一个字符必须是 {{，最后一个字符必须是 }}，不要任何解释、不要 markdown 代码块。
 """
 
 
@@ -319,7 +321,7 @@ def analyze_earnings_call(
             prompt,
             response_format={"type": "json_object"},
             timeout=180.0,
-            max_tokens=4096,
+            max_tokens=6000,
         )
     except ValueError as e:
         raise EarningsAnalysisError(f"语言模型未就绪：{e}") from e
