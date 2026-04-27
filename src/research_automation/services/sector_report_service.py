@@ -2385,9 +2385,21 @@ def _step5_new_biz_acquisitions_insider(
             _rogue = _found_tickers - _allowed_set_s5 - _COMMON_ABBREVS
             if _rogue:
                 logger.warning(
-                    "Step5 LLM输出包含非白名单实体: %s，已记录但不阻断输出",
+                    "Step5 LLM输出包含非白名单实体: %s，执行过滤",
                     _rogue,
                 )
+                # 强制删除非白名单公司的整行内容
+                import re as _re_filter
+                filtered_lines = []
+                for _line in sector_signal.split("\n"):
+                    # 检查这行是否包含非白名单 ticker
+                    _line_tickers = set(_re_filter.findall(r'\b[A-Z]{2,5}\b', _line))
+                    _line_rogue = _line_tickers - _allowed_set_s5 - _COMMON_ABBREVS
+                    if _line_rogue:
+                        logger.warning("Step5 过滤行: %s", _line.strip())
+                        continue  # 跳过这行
+                    filtered_lines.append(_line)
+                sector_signal = "\n".join(filtered_lines)
             if _is_truncated_llm_output(sector_signal) or len(
                 (sector_signal or "").strip()
             ) < 40:
@@ -2417,11 +2429,14 @@ def _step5_new_biz_acquisitions_insider(
                     if str(s.get("signal_type") or "") in ("business_change", "insider_trade")
                 ]
                 insider_count = int(insider.get("trade_count") or 0)
-                if not biz_signals and insider_count == 0:
+                ec_items_ref = ec_step5_items_by_ticker.get(t, [])
+                if not biz_signals and insider_count == 0 and not ec_items_ref:
                     continue
                 ref_parts = []
                 if biz_signals:
                     ref_parts.append(f"Benzinga 新闻 {len(biz_signals)} 条")
+                if ec_items_ref:
+                    ref_parts.append(f"Earning Call 逐字稿 {len(ec_items_ref)} 条")
                 if insider_count > 0:
                     bc = int(insider.get("buy_count") or 0)
                     sc = int(insider.get("sell_count") or 0)
@@ -2997,10 +3012,14 @@ def _executive_summary(
             top3 = sorted(company_snaps, reverse=True)[:3]
             bot3 = sorted(company_snaps)[:3]
             gm_disp = f"{median_gm:.1f}%" if median_gm is not None else "—"
+            total_companies = len(per_company)
+            yoy_sample = len(yoy_list)
+            gm_sample = len(gm_list)
             financial_snapshot = f"""
 Sector财务快照：
-- 中位Revenue YoY：{median_yoy:+.1f}%
-- 中位Gross Margin：{gm_disp}
+- 监控公司总数：{total_companies} 家，其中有效Revenue YoY样本：{yoy_sample} 家，有效Gross Margin样本：{gm_sample} 家
+- 中位Revenue YoY（基于{yoy_sample}家）：{median_yoy:+.1f}%
+- 中位Gross Margin（基于{gm_sample}家）：{gm_disp}
 - 增速前三：{", ".join(top3)}
 - 增速后三：{", ".join(bot3)}
 """
@@ -3023,11 +3042,16 @@ Sector财务快照：
 
 {struct_notes}
 
+⚠️ 数字一致性要求：
+- 所有具体数字（EPS、营收、增速、指引区间等）必须直接引用上方【Earning Call 摘录】中已出现的数字，禁止自行计算或重新生成
+- 特别是各公司的指引数字（如EPS指引、营收指引），必须与Earning Call摘录中的原文完全一致
+- 如果某公司的指引数字在摘录中出现多处且不一致，选用最新/最详细的那处，并只引用一次
+
 请严格按照以下模板填充内容，模板中的每个板块标题和格式不得修改，不得新增任何板块：
 
 ### 📊 财务快照
 > 数据来源：FMP Annual Financials | 评判标准：最新财年Revenue YoY增速中位数及分布
-[在此填写：sector整体增速中位数、头尾公司对比、Gross Margin水平，2-3句，必须有具体数字]
+[在此填写：sector整体增速中位数（注明基于几家公司）、头尾公司对比、Gross Margin水平，2-3句，必须有具体数字和样本数]
 
 ---
 
@@ -3112,13 +3136,24 @@ Sector财务快照：
         if per_company:
             # 收集有财务数据的公司
             ranked_tickers = []
+            skipped_tickers = []
             for rec, *_ in per_company:
                 try:
                     rows, _ = _get_validated_financials(rec.ticker, years=1)
                     if rows:
-                        ranked_tickers.append(rec.ticker)
+                        latest = max(rows, key=lambda r: getattr(r, "year", 0) or 0)
+                        rev = getattr(latest, "revenue", None)
+                        # 必须有有效Revenue才能参与排名
+                        if rev is not None and float(rev) > 0:
+                            ranked_tickers.append(rec.ticker)
+                        else:
+                            skipped_tickers.append(rec.ticker)
+                            logger.info(
+                                "排名表跳过 %s：Revenue 不可用或为零",
+                                rec.ticker,
+                            )
                 except Exception:
-                    pass
+                    skipped_tickers.append(rec.ticker)
 
             if ranked_tickers:
                 # 构建每家公司的财务摘要供LLM参考
@@ -3196,9 +3231,10 @@ Sector财务快照：
                         # 按rank排序
                         rankings.sort(key=lambda x: int(x.get("rank", 99)))
                         # 重新编号确保连续
+                        _skip_note = f"（以下公司因财务数据不足未参与排名：{', '.join(skipped_tickers)}）" if skipped_tickers else ""
                         table_lines = [
                             "### 🏆 相对强弱排序",
-                            "> 数据来源：综合财务快照 + 管理层前瞻指引 + 重要事件 | 评判标准：当前基本面动能与指引置信度的综合评估",
+                            f"> 数据来源：综合财务快照 + 管理层前瞻指引 + 重要事件 | 评判标准：当前基本面动能与指引置信度的综合评估 {_skip_note}",
                             "",
                             "| 排名 | 公司 | 核心优势 | 主要风险 |",
                             "|------|------|----------|----------|",
@@ -3213,9 +3249,10 @@ Sector财务快照：
                     else:
                         logger.warning("排名表LLM返回JSON解析失败，使用降级方案")
                         # 降级：只用公司列表生成空表
+                        _skip_note = f"（以下公司因财务数据不足未参与排名：{', '.join(skipped_tickers)}）" if skipped_tickers else ""
                         table_lines = [
                             "### 🏆 相对强弱排序",
-                            "> 数据来源：综合财务快照 + 管理层前瞻指引 | 评判标准：财务数据",
+                            f"> 数据来源：综合财务快照 + 管理层前瞻指引 | 评判标准：财务数据 {_skip_note}",
                             "",
                             "| 排名 | 公司 | 核心优势 | 主要风险 |",
                             "|------|------|----------|----------|",
