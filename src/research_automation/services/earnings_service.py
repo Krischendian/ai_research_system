@@ -2,6 +2,11 @@
 from __future__ import annotations
 
 import json
+try:
+    from json_repair import repair_json
+    _JSON_REPAIR_AVAILABLE = True
+except ImportError:
+    _JSON_REPAIR_AVAILABLE = False
 import logging
 import re
 from datetime import datetime, timezone
@@ -40,13 +45,15 @@ EARNINGS_NO_TRANSCRIPT_MESSAGE = (
     "No earnings call transcript available：FMP、EDGAR 8-K 与 sec-api.io（"
     "SEC_API_KEY）均未返回该季度可用逐字稿；请换季度或检查网络与密钥配置。"
 )
+EARNINGS_NO_TRANSCRIPT_TAG = "NO_TRANSCRIPT"
 
 
 class EarningsAnalysisError(Exception):
     """无法生成电话会分析。"""
 
-    def __init__(self, message: str) -> None:
+    def __init__(self, message: str, tag: str = "") -> None:
         self.message = message
+        self.tag = tag
         super().__init__(message)
 
 
@@ -68,17 +75,16 @@ def _extract_json_object(raw: str) -> dict[str, Any]:
     # 3. 提取首个 {...} 块
     start = text.find("{")
     end = text.rfind("}")
+    chunk = ""
     if start != -1 and end > start:
-        chunk = text[start: end + 1]
+        chunk = text[start : end + 1]
         try:
             return json.loads(chunk)
         except json.JSONDecodeError:
             pass
 
-        # 4. 弯引号处理：只在 JSON 字符串值内替换，用 \" 转义
-        # 策略：把弯引号先变成占位符，parse 后再还原
+        # 4. 弯引号处理
         cleaned = chunk
-        # 把弯左/右引号替换为转义双引号
         cleaned = re.sub(r"[\u201c\u201d]", '\\"', cleaned)
         cleaned = cleaned.replace("\u2018", "'").replace("\u2019", "'")
         try:
@@ -86,15 +92,27 @@ def _extract_json_object(raw: str) -> dict[str, Any]:
         except json.JSONDecodeError:
             pass
 
-        # 5. 最后兜底：强制用 ast
+    # 5. json_repair（处理截断、缺括号、多余逗号等）
+    if _JSON_REPAIR_AVAILABLE:
         try:
-            import ast
-            result = ast.literal_eval(chunk)
-            if isinstance(result, dict):
-                return result
+            repaired = repair_json(text, return_objects=True)
+            if isinstance(repaired, dict):
+                return repaired
         except Exception:
             pass
 
+    # 6. 最后兜底：ast
+    target = chunk if (start != -1 and end > start) else text
+    try:
+        import ast
+        result = ast.literal_eval(target)
+        if isinstance(result, dict):
+            return result
+    except Exception:
+        pass
+
+    logger.error("JSON解析失败原始输出（前500字）: %s", text[:500])
+    logger.error("JSON解析失败原始输出（后500字）: %s", text[-500:])
     raise json.JSONDecodeError("无法解析 JSON", text, 0)
 
 
@@ -146,6 +164,18 @@ def _build_prompt(
 4. new_business_highlights：与新产品线、AI、收购、战略投资相关的要点（中文），**至少3条**，无则空数组。
 
 ⚠️ 如果 quotations 少于5条，你的回答将被视为不合格。请仔细阅读逐字稿找出足够的原话。
+
+【数字与事实准确性规则 — 违反则输出无效】
+A. 禁止推算派生指标：Net Revenue Retention、Book-to-Bill、订单覆盖率、管道规模等指标，
+   只有逐字稿原文明确给出数字时才可引用，禁止用其他数字推算后填入。
+B. 保留不确定性修饰：原文含 roughly / approximately / about / around / ~等词时，
+   中文输出必须保留"约""大约""左右"，禁止省略使数字显得比原文更精确。
+C. 禁止跨公司混淆：本次分析对象仅为 {symbol}，所有数字和事件只能来自本公司逐字稿，
+   禁止引用其他公司的数据。
+D. 员工人数、门店数量等运营指标须在数字后注明数据截止时间，
+   格式：（截至YYYY年Q季度末）。若逐字稿未明确时间，写（时间不详）。
+E. 禁止将分析师提问中的数字当作管理层确认的事实引用；
+   只有管理层明确回应确认的数字才可进入 management_viewpoints。
 
 仅输出一个 JSON 对象，键名必须为：
 summary, summary_source_paragraph_ids, management_viewpoints, quotations, new_business_highlights。
@@ -232,6 +262,27 @@ def analyze_earnings_call(
     if quarter < 1 or quarter > 4:
         raise EarningsAnalysisError("quarter 必须在 1～4 之间")
 
+    from research_automation.core.database import get_step_cache, set_step_cache
+    import json
+
+    _EARNINGS_CACHE_VERSION = 3  # 改动prompt时bump这个数字
+
+    # 先查缓存
+    cached = get_step_cache(
+        sector="__earnings__",  # earnings缓存用特殊sector名
+        year=year,
+        quarter=quarter,
+        step="step4_analysis",
+        ticker=symbol,
+        cache_version=_EARNINGS_CACHE_VERSION,
+    )
+    if cached:
+        try:
+            data = json.loads(cached)
+            return EarningsCallAnalysis.model_validate(data)
+        except Exception:
+            pass  # 缓存损坏，继续正常流程
+
     qlabel = f"{year}Q{quarter}"
 
     fmp_tr: dict[str, Any] | None = None
@@ -295,7 +346,10 @@ def analyze_earnings_call(
 
     if not transcript:
         logger.warning("无逐字稿 ticker=%s %s", symbol, qlabel)
-        raise EarningsAnalysisError(EARNINGS_NO_TRANSCRIPT_MESSAGE)
+        raise EarningsAnalysisError(
+            EARNINGS_NO_TRANSCRIPT_MESSAGE,
+            tag=EARNINGS_NO_TRANSCRIPT_TAG,
+        )
 
     doc_uid = build_earnings_doc_uid(symbol, year, quarter)
     chunks = split_into_paragraphs(transcript)
@@ -333,9 +387,11 @@ def analyze_earnings_call(
     except (json.JSONDecodeError, ValueError):
         # JSON解析失败时重试一次（Claude偶发返回不完整JSON）
         logger.warning("Step4 JSON解析失败，重试一次 ticker=%s", symbol)
+        # 重试用更保守的 prompt：缩短输出要求，降低截断概率
+        retry_prompt = prompt + "\n\n[重要提示] 上次输出解析失败，请确保 JSON 完整闭合，所有数组和对象都有对应的结束括号。management_viewpoints 和 quotations 各最多返回3条即可。"
         try:
             reply2 = chat(
-                prompt,
+                retry_prompt,
                 response_format={"type": "json_object"},
                 timeout=180.0,
                 max_tokens=6000,
@@ -416,7 +472,7 @@ def analyze_earnings_call(
             "分析由本地 LLM 基于该文本生成。"
         )
 
-    return EarningsCallAnalysis(
+    result = EarningsCallAnalysis(
         ticker=symbol,
         quarter=qlabel,
         summary=summary,
@@ -430,3 +486,19 @@ def analyze_earnings_call(
         document_uid=doc_uid,
         source_paragraphs=source_paragraphs,
     )
+
+    # 写入缓存
+    try:
+        set_step_cache(
+            sector="__earnings__",
+            year=year,
+            quarter=quarter,
+            step="step4_analysis",
+            ticker=symbol,
+            content=result.model_dump_json(),
+            cache_version=_EARNINGS_CACHE_VERSION,
+        )
+    except Exception:
+        pass  # 缓存写入失败不影响主流程
+
+    return result

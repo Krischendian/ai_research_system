@@ -1,0 +1,1517 @@
+{
+  "markdown": "## 宏观\n\n- 货币政策/利率（3 条新闻）\n- 地缘与政策-霍尔木兹危机（6 条新闻）\n- 地缘与政策-中欧制裁（1 条新闻）\n- 地缘与政策-伊朗局势与市场（1 条新闻）\n- 大宗与汇率（3 条新闻）\n- 市场全景（4 条新闻）\n- 多主体行业动态-AI与科技（13 条新闻）\n- 多主体行业动态-能源与油服（2 条新闻）\n- 多主体行业动态-预测市场（1 条新闻）\n- 多主体行业动态-气候科技（1 条新闻）\n- 多主体行业动态-欧债（1 条新闻）\n- 多主体行业动态-就业与薪酬（3 条新闻）\n- 多主体行业动态-个人理财（3 条新闻）\n- 多主体行业动态-右修权立法（1 条新闻）\n- 其他要闻（1 条新闻）\n\n## 公司\n\n- Amazon多维动态（7 条）\n- Alphabet/Google AI投资与战略（5 条）\n- Meta AI合作与裁员（2 条）\n- Microsoft战略与诉讼（5 条）\n- Apple新CEO与硬件战略（4 条）\n- Skyworks Solutions升级（2 条）\n- UPS附加费影响（1 条）\n- SLB季报（2 条）\n- Baker Hughes季报（3 条）\n- HCA Healthcare季报（2 条）\n- PPG Industries研发动态（2 条）\n- PepsiCo云合作（1 条）\n- ServiceNow AI策略（1 条）\n- Anthropic-AI代理实验（1 条）\n- OpenAI道歉事件（2 条）\n- Cohere与Aleph Alpha合并（1 条）\n- Cadence Design Systems合作（1 条）\n- Marvell与Google芯片合作（1 条）\n- Broadcom AI芯片（1 条）\n- Cognizant AI合作（1 条）\n- AT&T股票分析（1 条）\n- Berkshire Hathaway关注（1 条）\n- TJX股息（1 条）\n- Eli Lilly GLP-1竞争（1 条）\n- Alkami Technology持仓变动（1 条）\n- Lowe's CEO AI观点（1 条）\n- Maine数据中心禁令被否决（1 条）\n- PBOC金融内卷警告（1 条）\n- Snabbit融资（1 条）\n- USPS财务危机（1 条）\n- Bill Ackman持仓（1 条）\n- Michael Burry买入软件股（1 条）\n- Gary Vaynerchuk营销建议（1 条）\n- 印度科技与AI（1 条）\n- 多主体AI股票推荐（1 条）\n- 伦敦住房危机（1 条）\n- doomscrolling应用（1 条）\n- 私人情报商机（1 条）",
+  "macro": [
+    {
+      "topic": "货币政策/利率",
+      "count": 3,
+      "article_indices": [
+        12,
+        68,
+        74
+      ],
+      "tickers": []
+    },
+    {
+      "topic": "地缘与政策-霍尔木兹危机",
+      "count": 6,
+      "article_indices": [
+        2,
+        51,
+        61,
+        63,
+        70,
+        103
+      ],
+      "tickers": []
+    },
+    {
+      "topic": "地缘与政策-中欧制裁",
+      "count": 1,
+      "article_indices": [
+        1
+      ],
+      "tickers": []
+    },
+    {
+      "topic": "地缘与政策-伊朗局势与市场",
+      "count": 1,
+      "article_indices": [
+        24
+      ],
+      "tickers": []
+    },
+    {
+      "topic": "大宗与汇率",
+      "count": 3,
+      "article_indices": [
+        80,
+        93,
+        102
+      ],
+      "tickers": []
+    },
+    {
+      "topic": "市场全景",
+      "count": 4,
+      "article_indices": [
+        46,
+        71,
+        72,
+        87
+      ],
+      "tickers": []
+    },
+    {
+      "topic": "多主体行业动态-AI与科技",
+      "count": 13,
+      "article_indices": [
+        3,
+        5,
+        9,
+        20,
+        29,
+        57,
+        64,
+        65,
+        81,
+        83,
+        84,
+        85,
+        88
+      ],
+      "tickers": []
+    },
+    {
+      "topic": "多主体行业动态-能源与油服",
+      "count": 2,
+      "article_indices": [
+        14,
+        31
+      ],
+      "tickers": []
+    },
+    {
+      "topic": "多主体行业动态-预测市场",
+      "count": 1,
+      "article_indices": [
+        28
+      ],
+      "tickers": []
+    },
+    {
+      "topic": "多主体行业动态-气候科技",
+      "count": 1,
+      "article_indices": [
+        52
+      ],
+      "tickers": []
+    },
+    {
+      "topic": "多主体行业动态-欧债",
+      "count": 1,
+      "article_indices": [
+        44
+      ],
+      "tickers": []
+    },
+    {
+      "topic": "多主体行业动态-就业与薪酬",
+      "count": 3,
+      "article_indices": [
+        38,
+        53,
+        58
+      ],
+      "tickers": []
+    },
+    {
+      "topic": "多主体行业动态-个人理财",
+      "count": 3,
+      "article_indices": [
+        10,
+        37,
+        54
+      ],
+      "tickers": []
+    },
+    {
+      "topic": "多主体行业动态-右修权立法",
+      "count": 1,
+      "article_indices": [
+        78
+      ],
+      "tickers": []
+    },
+    {
+      "topic": "其他要闻",
+      "count": 1,
+      "article_indices": [
+        59
+      ],
+      "tickers": []
+    }
+  ],
+  "company": [
+    {
+      "topic": "Amazon多维动态",
+      "count": 7,
+      "article_indices": [
+        6,
+        13,
+        16,
+        27,
+        32,
+        45,
+        100
+      ],
+      "tickers": [
+        "AMZN"
+      ]
+    },
+    {
+      "topic": "Alphabet/Google AI投资与战略",
+      "count": 5,
+      "article_indices": [
+        15,
+        60,
+        62,
+        86,
+        95
+      ],
+      "tickers": [
+        "GOOGL"
+      ]
+    },
+    {
+      "topic": "Meta AI合作与裁员",
+      "count": 2,
+      "article_indices": [
+        17,
+        55
+      ],
+      "tickers": [
+        "META"
+      ]
+    },
+    {
+      "topic": "Microsoft战略与诉讼",
+      "count": 5,
+      "article_indices": [
+        19,
+        22,
+        47,
+        69,
+        99
+      ],
+      "tickers": [
+        "MSFT"
+      ]
+    },
+    {
+      "topic": "Apple新CEO与硬件战略",
+      "count": 4,
+      "article_indices": [
+        41,
+        48,
+        67,
+        98
+      ],
+      "tickers": [
+        "AAPL"
+      ]
+    },
+    {
+      "topic": "Skyworks Solutions升级",
+      "count": 2,
+      "article_indices": [
+        25,
+        56
+      ],
+      "tickers": [
+        "SWKS"
+      ]
+    },
+    {
+      "topic": "UPS附加费影响",
+      "count": 1,
+      "article_indices": [
+        11
+      ],
+      "tickers": [
+        "UPS"
+      ]
+    },
+    {
+      "topic": "SLB季报",
+      "count": 2,
+      "article_indices": [
+        18,
+        90
+      ],
+      "tickers": [
+        "SLB"
+      ]
+    },
+    {
+      "topic": "Baker Hughes季报",
+      "count": 3,
+      "article_indices": [
+        50,
+        66,
+        92
+      ],
+      "tickers": [
+        "BKR"
+      ]
+    },
+    {
+      "topic": "HCA Healthcare季报",
+      "count": 2,
+      "article_indices": [
+        30,
+        91
+      ],
+      "tickers": [
+        "HCA"
+      ]
+    },
+    {
+      "topic": "PPG Industries研发动态",
+      "count": 2,
+      "article_indices": [
+        34,
+        94
+      ],
+      "tickers": [
+        "PPG"
+      ]
+    },
+    {
+      "topic": "PepsiCo云合作",
+      "count": 1,
+      "article_indices": [
+        35
+      ],
+      "tickers": [
+        "PEP"
+      ]
+    },
+    {
+      "topic": "ServiceNow AI策略",
+      "count": 1,
+      "article_indices": [
+        36
+      ],
+      "tickers": [
+        "NOW"
+      ]
+    },
+    {
+      "topic": "Anthropic-AI代理实验",
+      "count": 1,
+      "article_indices": [
+        4
+      ],
+      "tickers": []
+    },
+    {
+      "topic": "OpenAI道歉事件",
+      "count": 2,
+      "article_indices": [
+        23,
+        107
+      ],
+      "tickers": []
+    },
+    {
+      "topic": "Cohere与Aleph Alpha合并",
+      "count": 1,
+      "article_indices": [
+        33
+      ],
+      "tickers": []
+    },
+    {
+      "topic": "Cadence Design Systems合作",
+      "count": 1,
+      "article_indices": [
+        75
+      ],
+      "tickers": [
+        "CDNS"
+      ]
+    },
+    {
+      "topic": "Marvell与Google芯片合作",
+      "count": 1,
+      "article_indices": [
+        96
+      ],
+      "tickers": [
+        "MRVL"
+      ]
+    },
+    {
+      "topic": "Broadcom AI芯片",
+      "count": 1,
+      "article_indices": [
+        97
+      ],
+      "tickers": [
+        "AVGO"
+      ]
+    },
+    {
+      "topic": "Cognizant AI合作",
+      "count": 1,
+      "article_indices": [
+        101
+      ],
+      "tickers": [
+        "CTSH"
+      ]
+    },
+    {
+      "topic": "AT&T股票分析",
+      "count": 1,
+      "article_indices": [
+        77
+      ],
+      "tickers": [
+        "T"
+      ]
+    },
+    {
+      "topic": "Berkshire Hathaway关注",
+      "count": 1,
+      "article_indices": [
+        82
+      ],
+      "tickers": [
+        "BRK.B"
+      ]
+    },
+    {
+      "topic": "TJX股息",
+      "count": 1,
+      "article_indices": [
+        76
+      ],
+      "tickers": [
+        "TJX"
+      ]
+    },
+    {
+      "topic": "Eli Lilly GLP-1竞争",
+      "count": 1,
+      "article_indices": [
+        79
+      ],
+      "tickers": [
+        "LLY"
+      ]
+    },
+    {
+      "topic": "Alkami Technology持仓变动",
+      "count": 1,
+      "article_indices": [
+        42
+      ],
+      "tickers": [
+        "ALKT"
+      ]
+    },
+    {
+      "topic": "Lowe's CEO AI观点",
+      "count": 1,
+      "article_indices": [
+        21
+      ],
+      "tickers": [
+        "LOW"
+      ]
+    },
+    {
+      "topic": "Maine数据中心禁令被否决",
+      "count": 1,
+      "article_indices": [
+        8
+      ],
+      "tickers": []
+    },
+    {
+      "topic": "PBOC金融内卷警告",
+      "count": 1,
+      "article_indices": [
+        104
+      ],
+      "tickers": []
+    },
+    {
+      "topic": "Snabbit融资",
+      "count": 1,
+      "article_indices": [
+        43
+      ],
+      "tickers": []
+    },
+    {
+      "topic": "USPS财务危机",
+      "count": 1,
+      "article_indices": [
+        73
+      ],
+      "tickers": []
+    },
+    {
+      "topic": "Bill Ackman持仓",
+      "count": 1,
+      "article_indices": [
+        26
+      ],
+      "tickers": []
+    },
+    {
+      "topic": "Michael Burry买入软件股",
+      "count": 1,
+      "article_indices": [
+        7
+      ],
+      "tickers": []
+    },
+    {
+      "topic": "Gary Vaynerchuk营销建议",
+      "count": 1,
+      "article_indices": [
+        106
+      ],
+      "tickers": []
+    },
+    {
+      "topic": "印度科技与AI",
+      "count": 1,
+      "article_indices": [
+        39
+      ],
+      "tickers": []
+    },
+    {
+      "topic": "多主体AI股票推荐",
+      "count": 1,
+      "article_indices": [
+        105
+      ],
+      "tickers": []
+    },
+    {
+      "topic": "伦敦住房危机",
+      "count": 1,
+      "article_indices": [
+        89
+      ],
+      "tickers": []
+    },
+    {
+      "topic": "doomscrolling应用",
+      "count": 1,
+      "article_indices": [
+        40
+      ],
+      "tickers": []
+    },
+    {
+      "topic": "私人情报商机",
+      "count": 1,
+      "article_indices": [
+        49
+      ],
+      "tickers": []
+    }
+  ],
+  "articles_in_window": 107,
+  "window_start_ny": "2026-04-25T00:00:00-04:00",
+  "window_end_ny": "2026-04-26T00:00:00-04:00",
+  "provenance_note": "昨日日历日 2026-04-25（2026-04-25T00:00:00-04:00–2026-04-26T00:00:00-04:00，America/New_York）；含 Benzinga/Finnhub 公司新闻与 RSS 合并去重；发布时间优先 API Unix，否则 RSS；仅统计带有效发布时间的条目。主题归类与聚类/评分/早评为独立模型调用；请核对原文。",
+  "clusters": [
+    {
+      "cluster_id": "china_eu_russia_sanctions",
+      "representative_title": "中国警告欧盟：将对欧盟涉俄制裁中国实体采取必要措施",
+      "importance_score": 8,
+      "news_items": [
+        {
+          "title": "Beijing Warns EU After China Firms Included in Russia Sanctions",
+          "summary": "China said it will take necessary measures after the European Union added Chinese entities to its latest Russia sanctions package, warning that all consequences would be borne by the EU.",
+          "source": "Bloomberg",
+          "source_url": "https://www.bloomberg.com/news/articles/2026-04-26/beijing-warns-eu-after-china-firms-included-in-russia-sanctions",
+          "published_at": "2026-04-26T02:26:24Z",
+          "matched_tickers": [],
+          "importance_score": 8,
+          "sentiment": null
+        }
+      ]
+    },
+    {
+      "cluster_id": "hormuz_strait_shipping_crisis",
+      "representative_title": "特朗普霍尔木兹封锁加剧全球能源航运危机",
+      "importance_score": 8,
+      "news_items": [
+        {
+          "title": "Trump’s Hormuz Blockade Has Deepened a Historic Shipping Crisis",
+          "summary": "In early April — after a month of disruption around one of the world’s most important energy chokepoints — US President Donald Trump wrote that with “a little ​more time, we can easily OPEN THE ​HORMUZ STRAIT, TAKE THE OIL, & MAKE A ⁠FORTUNE.”",
+          "source": "Bloomberg",
+          "source_url": "https://www.bloomberg.com/news/articles/2026-04-26/iran-war-hormuz-double-blockade-halts-ship-traffic-dims-hope-for-the-economy",
+          "published_at": "2026-04-26T00:04:49Z",
+          "matched_tickers": [],
+          "importance_score": 8,
+          "sentiment": null
+        }
+      ]
+    },
+    {
+      "cluster_id": "ai_hyperscaler_capex",
+      "representative_title": "AI超大规模云厂商700亿美元资本支出竞赛与云经济影响",
+      "importance_score": 8,
+      "news_items": [
+        {
+          "title": "The $720 Billion Capex Trap: 2 Artificial Intelligence (AI) Hyperscalers Spending on Growth While the Rest Spend on Maintenance",
+          "summary": "The big five hyperscalers plan to spend a total of more than $700 billion on artificial intelligence (AI) infrastructure this year.",
+          "source": "Finnhub-Yahoo",
+          "source_url": "https://finnhub.io/api/news?id=c8ac58b0502e488df5e5bff7173e959ca584a022939ba5ee12b437c13ab21147",
+          "published_at": "2026-04-25T22:51:00Z",
+          "matched_tickers": [
+            "AMZN"
+          ],
+          "importance_score": 7,
+          "sentiment": null
+        },
+        {
+          "title": "Alphabet’s US$40b Anthropic Bet Tests AI Capex And Cloud Economics",
+          "summary": "Alphabet announces plans to invest up to $40b in Anthropic, deepening their AI partnership. As part of the deal, Anthropic will use Google Cloud as its primary AI infrastructure provider. The agreement includes long term commitments around cloud capacity and access to Alphabet’s TPU chips. Alphabet, listed as NasdaqGS:",
+          "source": "Finnhub-Yahoo",
+          "source_url": "https://finnhub.io/api/news?id=bf207cae5f1dbdc16593035f6ea77b1a9b04dccad99defa91ed867246c53a397",
+          "published_at": "2026-04-25T19:03:22Z",
+          "matched_tickers": [
+            "GOOGL"
+          ],
+          "importance_score": 8,
+          "sentiment": null
+        },
+        {
+          "title": "3 Cloud Computing ETFs to Buy as Enterprise AI Spending Accelerates in 2026",
+          "summary": "Enterprise digital transformation remains the primary driver of demand for public and hybrid cloud services. Companies continue shifting workloads to the cloud, and AI‑driven infrastructure spending has added another layer of momentum. The profit engine behind software, IT services, and cloud platforms has expanded mea",
+          "source": "Finnhub-Yahoo",
+          "source_url": "https://finnhub.io/api/news?id=2e775a60128ebfe3fa6e6f479b1b8db504067dafa1034f80cfaad9dd7ab0af98",
+          "published_at": "2026-04-25T17:37:06Z",
+          "matched_tickers": [
+            "AMZN"
+          ],
+          "importance_score": 5,
+          "sentiment": null
+        }
+      ]
+    },
+    {
+      "cluster_id": "anthropic_ai_agent_marketplace",
+      "representative_title": "Anthropic创建AI代理交易市场实验",
+      "importance_score": 5,
+      "news_items": [
+        {
+          "title": "Anthropic created a test marketplace for agent-on-agent commerce",
+          "summary": "In a recent experiment, Anthropic created a classified marketplace where AI agents represented both buyers and sellers, striking real deals for real goods and real money.",
+          "source": "TechCrunch",
+          "source_url": "https://techcrunch.com/2026/04/25/anthropic-created-a-test-marketplace-for-agent-on-agent-commerce/",
+          "published_at": "2026-04-25T21:43:37Z",
+          "matched_tickers": [],
+          "importance_score": 5,
+          "sentiment": null
+        }
+      ]
+    },
+    {
+      "cluster_id": "ai_stock_outlook_general",
+      "representative_title": "AI股票看涨观点与纳斯达克新高预测",
+      "importance_score": 3,
+      "news_items": [
+        {
+          "title": "Prediction: Artificial Intelligence (AI) Stocks Will Lead the Nasdaq to New Highs. Here Are the 3 Best to Buy Now.",
+          "summary": "The Nasdaq has had a huge rally, but it could just be getting started.",
+          "source": "Finnhub-Yahoo",
+          "source_url": "https://finnhub.io/api/news?id=1f0bfe172350341a2d4574a1fca67fa7cc712437909fa3944218b71049933ec7",
+          "published_at": "2026-04-25T21:35:00Z",
+          "matched_tickers": [
+            "AMZN"
+          ],
+          "importance_score": 3,
+          "sentiment": null
+        },
+        {
+          "title": "The Best Artificial Intelligence (AI) Growth Stock on the Nasdaq That Morningstar Says Is Still Undervalued",
+          "summary": "The \"Great Rotation\" made this AI company an attractive buy.",
+          "source": "Finnhub-Yahoo",
+          "source_url": "https://finnhub.io/api/news?id=ae8d3fbfca58020c713248bf74cbb40ed533034ae0133ed8336050898318216f",
+          "published_at": "2026-04-25T20:35:00Z",
+          "matched_tickers": [
+            "MSFT"
+          ],
+          "importance_score": 3,
+          "sentiment": null
+        },
+        {
+          "title": "Billionaire Bill Ackman Has 38% of His Hedge Fund's $15 Billion Stock Portfolio Invested in 3 Magnificent Artificial Intelligence (AI) Stocks",
+          "summary": "Bill Ackman's Pershing Square portfolio holds three members of the \"Magnificent Seven\" among its largest positions.",
+          "source": "Finnhub-Yahoo",
+          "source_url": "https://finnhub.io/api/news?id=693e07935045f56a170b9888cd19b541f41a8d14453e0c7369b8793d73c4d9ed",
+          "published_at": "2026-04-25T17:05:00Z",
+          "matched_tickers": [
+            "GOOGL"
+          ],
+          "importance_score": 3,
+          "sentiment": null
+        },
+        {
+          "title": "Prediction: This Fallen AI Stock Could Be the Comeback Story of 2026",
+          "summary": "Microsoft has struggled in 2026.",
+          "source": "Finnhub-Yahoo",
+          "source_url": "https://finnhub.io/api/news?id=58de30c9b0db74f0ec0ede69f7d5d39b5898076d0ec8bcbd844384f05ce247d0",
+          "published_at": "2026-04-25T14:20:00Z",
+          "matched_tickers": [
+            "MSFT"
+          ],
+          "importance_score": 3,
+          "sentiment": null
+        }
+      ]
+    },
+    {
+      "cluster_id": "amazon_long_term_bull",
+      "representative_title": "亚马逊长期投资价值与股价上涨驱动因素",
+      "importance_score": 4,
+      "news_items": [
+        {
+          "title": "Could Amazon Be the 1 Consumer‑Tech Stock That Helps Turn $50,000 Into $1 Million by 2036?",
+          "summary": "In the past decade, this \"Magnificent Seven\" stock has seen its price rise almost 700%.",
+          "source": "Finnhub-Yahoo",
+          "source_url": "https://finnhub.io/api/news?id=502e7ed84ae880310168c28b95fc52edd16cfc988fe340a97a5c318369f6abde",
+          "published_at": "2026-04-25T21:25:00Z",
+          "matched_tickers": [
+            "AMZN"
+          ],
+          "importance_score": 3,
+          "sentiment": null
+        },
+        {
+          "title": "1 Reason I'd Still Buy Amazon Stock Hand Over Fist and Never Sell",
+          "summary": "Amazon is a top stock to buy for the long haul.",
+          "source": "Finnhub-Yahoo",
+          "source_url": "https://finnhub.io/api/news?id=7459ca3751cc944cea364ce7593a6155db62ee755fbef82d0af032d0728468e0",
+          "published_at": "2026-04-25T14:45:00Z",
+          "matched_tickers": [
+            "AMZN"
+          ],
+          "importance_score": 3,
+          "sentiment": null
+        }
+      ]
+    },
+    {
+      "cluster_id": "michael_burry_msft_buy",
+      "representative_title": "迈克尔·伯里逆势买入微软股票",
+      "importance_score": 5,
+      "news_items": [
+        {
+          "title": "Michael Burry buys beaten-down mega tech stock",
+          "summary": "When Michael Burry makes a move, people pay attention. Not because he is always right, but because he tends to act before the crowd catches on. And what he just did in the software sector is exactly the kind of contrarian bet his reputation was built on. The stock he bought is one of the biggest ...",
+          "source": "Finnhub-Yahoo",
+          "source_url": "https://finnhub.io/api/news?id=ec1ad03e53d2c32e0e48db7307a8f74375cb3f99d62cf49833023e92e31d55a3",
+          "published_at": "2026-04-25T21:03:00Z",
+          "matched_tickers": [
+            "MSFT"
+          ],
+          "importance_score": 5,
+          "sentiment": null
+        }
+      ]
+    },
+    {
+      "cluster_id": "maine_data_center_moratorium_veto",
+      "representative_title": "缅因州州长否决数据中心建设暂停法案",
+      "importance_score": 5,
+      "news_items": [
+        {
+          "title": "Maine’s governor vetoes data center moratorium",
+          "summary": "L.D. 307 would have imposed the country’s first statewide moratorium on new data centers — lasting, in this case, until November 1, 2027.",
+          "source": "TechCrunch",
+          "source_url": "https://techcrunch.com/2026/04/25/maines-governor-vetoes-data-center-moratorium/",
+          "published_at": "2026-04-25T20:57:08Z",
+          "matched_tickers": [
+            "NOV"
+          ],
+          "importance_score": 5,
+          "sentiment": null
+        }
+      ]
+    },
+    {
+      "cluster_id": "personal_finance_irrelevant",
+      "representative_title": "个人理财与继承权无关内容",
+      "importance_score": 1,
+      "news_items": [
+        {
+          "title": "Ex-Stepdad Gets $135K 401(k) But Pushes For 27-Year-Old's $419K Inheritance Too — Dave Ramsey Says, 'You Do Not Owe This Guy A Dime'",
+          "summary": "A family tie from the past resurfaced with a demand that had no clear place in the present. Karen, 27, called \"The Ramsey Show\" from Huntsville, Alabama, after inheriting $419,000 from a woman who became an important part of her...",
+          "source": "Finnhub-Yahoo",
+          "source_url": "https://finnhub.io/api/news?id=2f12498b6cd962aec64f6bc0ebfbba53378cae0b55e65aca26a809928c71c930",
+          "published_at": "2026-04-25T20:31:06Z",
+          "matched_tickers": [
+            "AMZN"
+          ],
+          "importance_score": 1,
+          "sentiment": null
+        },
+        {
+          "title": "Dave Ramsey Says Most People Will Not Save Money Even After They Get A Raise Or Pay Off Their Car. Here's Why",
+          "summary": "Getting a raise or finally paying off a car feels like a financial turning point. But according to personal finance expert Dave Ramsey, those moments rarely change anything on their own. “Most people will not save money when they get...",
+          "source": "Finnhub-Yahoo",
+          "source_url": "https://finnhub.io/api/news?id=c95f4f292545dc7f6462ab6e9b7a0dc25897d1fdee1b11b70557d5d84ff19ea0",
+          "published_at": "2026-04-25T15:46:07Z",
+          "matched_tickers": [
+            "AMZN"
+          ],
+          "importance_score": 1,
+          "sentiment": null
+        },
+        {
+          "title": "Scaramucci's 'Biggest Investing Mistake Has Always Been Selling Too Early'",
+          "summary": "Anthony Scaramucci has argued that his costliest habit in markets has been exiting positions too soon, and urged investors to stick with a simple plan: buy an S&amp;P 500 index fund and hold it for decades.",
+          "source": "Finnhub-Benzinga",
+          "source_url": "https://finnhub.io/api/news?id=4844166e0f2fba370c424faf617361606a152f5db7168e9a85a0542ced398eca",
+          "published_at": "2026-04-25T14:31:41Z",
+          "matched_tickers": [
+            "AMZN"
+          ],
+          "importance_score": 2,
+          "sentiment": null
+        }
+      ]
+    },
+    {
+      "cluster_id": "ups_surge_fee",
+      "representative_title": "UPS推出临时激增紧急附加费影响估值与收益率",
+      "importance_score": 5,
+      "news_items": [
+        {
+          "title": "UPS Surge Emergency Fee And What It Means For Valuation And Yield",
+          "summary": "UPS (NYSE:UPS) has introduced a temporary Surge Emergency Fee on a wide range of U.S. import and export shipments. The fee applies across multiple UPS services and is tied to sharply higher fuel costs linked to ongoing geopolitical tensions. The change affects businesses, e-commerce sellers, and consumers that rely on ",
+          "source": "Finnhub-Yahoo",
+          "source_url": "https://finnhub.io/api/news?id=217c90f0db502b96d8257e987956bd587bd49077ed9430f078f88a504f7abe40",
+          "published_at": "2026-04-25T20:05:27Z",
+          "matched_tickers": [
+            "UPS"
+          ],
+          "importance_score": 5,
+          "sentiment": null
+        }
+      ]
+    },
+    {
+      "cluster_id": "g7_fed_rates_hold",
+      "representative_title": "美联储及G7央行本周预计维持利率不变并关注通胀",
+      "importance_score": 8,
+      "news_items": [
+        {
+          "title": "Fed Set to Lead Uneasy G-7 With Rates Kept on Hold This Week",
+          "summary": "Policymakers in the US and across the Group of Seven will probably keep interest rates steady this week while watching nervously for signs of higher energy costs fanning inflation.",
+          "source": "Bloomberg",
+          "source_url": "https://www.bloomberg.com/news/articles/2026-04-25/fed-set-to-lead-uneasy-g-7-with-rates-kept-on-hold-this-week",
+          "published_at": "2026-04-25T20:00:00Z",
+          "matched_tickers": [],
+          "importance_score": 8,
+          "sentiment": null
+        }
+      ]
+    },
+    {
+      "cluster_id": "amazon_anthropic_partnership",
+      "representative_title": "亚马逊与Anthropic深化合作，AWS获250亿美元AI投资",
+      "importance_score": 7,
+      "news_items": [
+        {
+          "title": "Amazon's Partnership With Anthropic Keeps Deepening. Is This the Catalyst Amazon Stock Needs?",
+          "summary": "The e-commerce and cloud computing giant's recent $25 billion investment plan in Anthropic captures its aggressive push into artificial intelligence.",
+          "source": "Finnhub-Yahoo",
+          "source_url": "https://finnhub.io/api/news?id=41b64328ce185c5a613af790752c50f99cd3992b449013a441672e260208918d",
+          "published_at": "2026-04-25T19:37:00Z",
+          "matched_tickers": [
+            "AMZN"
+          ],
+          "importance_score": 7,
+          "sentiment": null
+        }
+      ]
+    },
+    {
+      "cluster_id": "oilfield_services_sector_optimism",
+      "representative_title": "油田服务板块整体乐观：BKR、SLB、NESR季报表现强劲",
+      "importance_score": 7,
+      "news_items": [
+        {
+          "title": "Why NESR (NESR) Stock Is Up Today",
+          "summary": "Shares of oilfield services provider NESR (NASDAQ:NESR) jumped 3.3% in the afternoon session after investor optimism grew for the oilfield services sector as major industry players reported strong quarterly results.",
+          "source": "Finnhub-Yahoo",
+          "source_url": "https://finnhub.io/api/news?id=330262ed43716bd50f73a76ec08778381331737458556ba98f4b54231ec39c5b",
+          "published_at": "2026-04-25T19:25:23Z",
+          "matched_tickers": [
+            "BKR"
+          ],
+          "importance_score": 6,
+          "sentiment": null
+        },
+        {
+          "title": "SLB (SLB) Stock Trades Up, Here Is Why",
+          "summary": "Shares of oilfield services provider SLB (NYSE:SLB) jumped 2.3% in the afternoon session after the company reported decent first-quarter 2026 results that saw revenue beat expectations.",
+          "source": "Finnhub-Yahoo",
+          "source_url": "https://finnhub.io/api/news?id=d487a76520951fb079a2bfa6280db8aeac7720de9564054ab4191c3ab3b874ff",
+          "published_at": "2026-04-25T18:13:23Z",
+          "matched_tickers": [
+            "SLB"
+          ],
+          "importance_score": 7,
+          "sentiment": null
+        },
+        {
+          "title": "Does Sector Optimism Around Halliburton Shift the Risk‑Reward for ProPetro’s (PUMP) Fleet Transition Strategy?",
+          "summary": "Earlier this week, ProPetro Holding drew attention after optimism spread across the oilfield services sector when Halliburton reported better‑than‑expected first‑quarter profits, highlighting resilient international demand that helped offset regional softness. This sector‑wide boost came even as ProPetro contends with ",
+          "source": "Finnhub-Yahoo",
+          "source_url": "https://finnhub.io/api/news?id=80f393c315c4f8826b176e846afd475947fd3d0ef1c68ae021289d8c7a387d8f",
+          "published_at": "2026-04-25T16:09:05Z",
+          "matched_tickers": [
+            "HAL",
+            "PUMP"
+          ],
+          "importance_score": 6,
+          "sentiment": null
+        },
+        {
+          "title": "BKR Q1 Deep Dive: Power Systems and Portfolio Actions Drive Outperformance Amid Middle East Disruption",
+          "summary": "Energy technology company Baker Hughes (NASDAQ:BKR) reported Q1 CY2026 results beating Wall Street’s revenue expectations, with sales up 2.5% year on year to $6.59 billion. Its non-GAAP profit of $0.58 per share was 17.5% above analysts’ consensus estimates.",
+          "source": "Finnhub-Yahoo",
+          "source_url": "https://finnhub.io/api/news?id=bd582669f6685b505ca35a10e0b1f8ae4358987f96f069e64f48ec8f5a43a3e0",
+          "published_at": "2026-04-25T13:41:23Z",
+          "matched_tickers": [
+            "BKR"
+          ],
+          "importance_score": 7,
+          "sentiment": null
+        }
+      ]
+    },
+    {
+      "cluster_id": "meta_amazon_aws_deal",
+      "representative_title": "Meta与亚马逊AWS达成数十亿美元AI代理合作协议",
+      "importance_score": 8,
+      "news_items": [
+        {
+          "title": "Why Amazon (AMZN) Stock Is Trading Up Today",
+          "summary": "Shares of cloud computing and online retail behemoth Amazon (NASDAQ:AMZN) jumped 3.5% in the afternoon session after Meta struck a multi-billion dollar deal with its Amazon Web Services (AWS) division and multiple analysts raised their price targets on the stock.",
+          "source": "Finnhub-Yahoo",
+          "source_url": "https://finnhub.io/api/news?id=78f06359208be073e2247222b415213eca98111a391471480c7aebb69dc7ff67",
+          "published_at": "2026-04-25T19:01:23Z",
+          "matched_tickers": [
+            "AMZN",
+            "META",
+            "TGT"
+          ],
+          "importance_score": 8,
+          "sentiment": null
+        },
+        {
+          "title": "Why Meta (META) Stock Is Up Today",
+          "summary": "Shares of social network operator Meta Platforms (NASDAQ:META) jumped 2.7% in the afternoon session after the company announced a multibillion-dollar partnership with Amazon to scale its \"agentic AI\" capabilities.",
+          "source": "Finnhub-Yahoo",
+          "source_url": "https://finnhub.io/api/news?id=06d2c605b94f0c4d7d007b76136208a069e0e856897af4128a6a42537bed8fef",
+          "published_at": "2026-04-25T18:29:23Z",
+          "matched_tickers": [
+            "AMZN",
+            "META"
+          ],
+          "importance_score": 7,
+          "sentiment": null
+        }
+      ]
+    },
+    {
+      "cluster_id": "microsoft_buyout_workforce",
+      "representative_title": "微软启动大规模自愿裁员计划聚焦AI转型",
+      "importance_score": 7,
+      "news_items": [
+        {
+          "title": "Microsoft Buyout Signals AI Focus And Generational Shift In Workforce",
+          "summary": "Microsoft (NasdaqGS:MSFT) has launched its first large scale voluntary buyout program in the U.S., targeting roughly 7% of its domestic workforce. The offer is aimed at senior director level and below employees who meet a defined age plus tenure threshold. The program is tied to the company’s push to reorient its organ",
+          "source": "Finnhub-Yahoo",
+          "source_url": "https://finnhub.io/api/news?id=7d4af4b9f3974fc0405fae93b77abf86a66ecda752ca56d97d6a9b8654542f2e",
+          "published_at": "2026-04-25T18:06:34Z",
+          "matched_tickers": [
+            "MSFT",
+            "TGT"
+          ],
+          "importance_score": 7,
+          "sentiment": null
+        }
+      ]
+    },
+    {
+      "cluster_id": "ai_vs_jobs_debate",
+      "representative_title": "AI与就业争论：Lowe's CEO与ServiceNow CEO观点分歧",
+      "importance_score": 4,
+      "news_items": [
+        {
+          "title": "'AI Can Write Code, But It Can't Climb A 12-Foot Ladder': Lowe's CEO Draws A Line — OpenAI Chair Is Not Convinced That AI Runs All Consumer Decisions",
+          "summary": "Lowe’s (NYSE:LOW) CEO Marvin Ellison is downplaying fears that AI technology would lead to huge job losses for the U.S. economy. As technology companies increase their exposure to artificial intelligence, there are fears of a huge worker displacement. U.S. ‘Big...",
+          "source": "Finnhub-Yahoo",
+          "source_url": "https://finnhub.io/api/news?id=52092589bb7f25e1d38feccd674650fc73be68713d7ac0c0226579c1ffcfab7d",
+          "published_at": "2026-04-25T17:31:16Z",
+          "matched_tickers": [
+            "AMZN"
+          ],
+          "importance_score": 4,
+          "sentiment": null
+        },
+        {
+          "title": "ServiceNow CEO Says AI Fear Is Missing Real Story: Customers Are Spending More",
+          "summary": "ServiceNow says AI is boosting demand and productivity, not cutting jobs, as enterprise spending accelerates.",
+          "source": "Finnhub-Benzinga",
+          "source_url": "https://finnhub.io/api/news?id=dc77cca880c09e94bb66ed1a0451ddb3eb8ec9dd2259e2bc081511cc1dbaad41",
+          "published_at": "2026-04-25T15:51:07Z",
+          "matched_tickers": [
+            "MSFT"
+          ],
+          "importance_score": 4,
+          "sentiment": null
+        }
+      ]
+    },
+    {
+      "cluster_id": "microsoft_earnings_preview",
+      "representative_title": "微软财报前瞻：分析师观望，股价已提前反映预期",
+      "importance_score": 6,
+      "news_items": [
+        {
+          "title": "Why I'm Staying on the Sidelines Headed Into Microsoft's Earnings Report",
+          "summary": "The software giant has rallied ahead of next week's report.",
+          "source": "Finnhub-Yahoo",
+          "source_url": "https://finnhub.io/api/news?id=9d05053378acc3c61e7985ab6053a3f93e8c170609576824cbf864cd3dfbdba4",
+          "published_at": "2026-04-25T17:21:00Z",
+          "matched_tickers": [
+            "MSFT"
+          ],
+          "importance_score": 6,
+          "sentiment": null
+        }
+      ]
+    },
+    {
+      "cluster_id": "openai_ceo_apology",
+      "representative_title": "OpenAI CEO就未报告枪击嫌疑人事件道歉",
+      "importance_score": 4,
+      "news_items": [
+        {
+          "title": "OpenAI CEO apologizes to Tumbler Ridge community",
+          "summary": "In a letter to the residents of Tumbler Ridge, Canada, OpenAI CEO Sam Altman said he is “deeply sorry” that his company failed to alert law enforcement about the suspect in a recent mass shooting.",
+          "source": "TechCrunch",
+          "source_url": "https://techcrunch.com/2026/04/25/openai-ceo-apologizes-to-tumbler-ridge-community/",
+          "published_at": "2026-04-25T17:17:56Z",
+          "matched_tickers": [],
+          "importance_score": 4,
+          "sentiment": null
+        }
+      ]
+    },
+    {
+      "cluster_id": "apple_amazon_google_earnings_wave",
+      "representative_title": "苹果、亚马逊、谷歌等科技巨头财报季来临受市场关注",
+      "importance_score": 7,
+      "news_items": [
+        {
+          "title": "Dow Jones Futures: Iran Talks Shelved; Apple, Amazon, Google Lead Earnings Wave",
+          "summary": "The stock market is at highs but results and spending for Apple, Amazon, Google and more will be key. Iran talks were called off.",
+          "source": "Finnhub-Yahoo",
+          "source_url": "https://finnhub.io/api/news?id=78c0ed323449a46a240119fc1fbb6cb0b84487d18ed0d37419c4654156c97973",
+          "published_at": "2026-04-25T17:10:41Z",
+          "matched_tickers": [
+            "AAPL"
+          ],
+          "importance_score": 7,
+          "sentiment": null
+        }
+      ]
+    },
+    {
+      "cluster_id": "apple_skyworks_device_delay",
+      "representative_title": "巴克莱上调Skyworks评级：苹果低端设备推迟或延长现有组件需求",
+      "importance_score": 5,
+      "news_items": [
+        {
+          "title": "A Look At Skyworks Solutions (SWKS) Valuation After Barclays Upgrade And Apple Device Delay",
+          "summary": "Analyst upgrade and Apple timing shift move Skyworks Solutions (SWKS) Skyworks Solutions (SWKS) shares climbed after Barclays upgraded the stock, noting expectations that a delay in new low end Apple devices could extend demand for Skyworks components in current iPhone models. See our latest analysis for Skyworks Solut",
+          "source": "Finnhub-Yahoo",
+          "source_url": "https://finnhub.io/api/news?id=af560326493368a9ea603ffa40d1de1c7de518132fa722552746d8e7a47b77c8",
+          "published_at": "2026-04-25T17:05:10Z",
+          "matched_tickers": [
+            "AAPL"
+          ],
+          "importance_score": 5,
+          "sentiment": null
+        }
+      ]
+    },
+    {
+      "cluster_id": "prediction_market_insider_trading",
+      "representative_title": "内幕交易指控威胁预测市场行业发展",
+      "importance_score": 5,
+      "news_items": [
+        {
+          "title": "Insider Trading Cases Threaten Reckoning for Prediction Markets",
+          "summary": "(Bloomberg) -- Prediction markets have quickly grown from a niche corner of finance to a multibillion-dollar industry with big Wall Street investment, but a growing list of insider trading allegations is bringing concerns about the platforms all the way to the White House. Most Read from BloombergThe Billion-Barrel Hor",
+          "source": "Finnhub-Yahoo",
+          "source_url": "https://finnhub.io/api/news?id=1d0480a457a9a9845a917b65dd04e575da35e912b6f4b2d1a1a233e1861db9d4",
+          "published_at": "2026-04-25T16:50:33Z",
+          "matched_tickers": [
+            "GOOGL"
+          ],
+          "importance_score": 5,
+          "sentiment": null
+        }
+      ]
+    },
+    {
+      "cluster_id": "climate_tech_ipo",
+      "representative_title": "气候科技IPO窗口或将开启：核能与地热初创公司上市",
+      "importance_score": 5,
+      "news_items": [
+        {
+          "title": "The climate tech IPO window could finally be cracking open",
+          "summary": "Nuclear startup X-energy went public, geothermal startup Fervo is about to. Could this be the moment that climate tech investors have been waiting for?",
+          "source": "Finnhub-Yahoo",
+          "source_url": "https://finnhub.io/api/news?id=e902ee23cda0e1c76c7aa73cd068da6043b5073404fd07d36dda5ae0f4dd61cd",
+          "published_at": "2026-04-25T16:33:00Z",
+          "matched_tickers": [
+            "AMZN"
+          ],
+          "importance_score": 5,
+          "sentiment": null
+        }
+      ]
+    },
+    {
+      "cluster_id": "hca_earnings_miss",
+      "representative_title": "HCA医疗一季度EBITDA未达预期，股价大跌逾8%",
+      "importance_score": 7,
+      "news_items": [
+        {
+          "title": "Why HCA Healthcare (HCA) Shares Are Sliding Today",
+          "summary": "Shares of hospital operator HCA Healthcare (NYSE:HCA) fell 8.7% in the afternoon session after the company reported first-quarter 2026 results where a key profitability metric, adjusted EBITDA, missed analyst expectations, overshadowing revenue and earnings per share that were in line with forecasts.",
+          "source": "Finnhub-Yahoo",
+          "source_url": "https://finnhub.io/api/news?id=df6b42492cc50f1fc00cd71e63ee51ffd7725968de849708f0fbde03fac6ecb1",
+          "published_at": "2026-04-25T16:21:23Z",
+          "matched_tickers": [
+            "HCA"
+          ],
+          "importance_score": 7,
+          "sentiment": null
+        }
+      ]
+    },
+    {
+      "cluster_id": "amazon_theft_lawsuit",
+      "representative_title": "亚马逊与沃尔玛遭遇128亿美元盗窃激增及产品安全诉讼",
+      "importance_score": 4,
+      "news_items": [
+        {
+          "title": "Amazon Camp Stove Lawsuit Puts Marketplace Safety And Margins Under Scrutiny",
+          "summary": "A new lawsuit in Washington state claims Amazon (NasdaqGS:AMZN) knowingly sold a defective camp stove that caused severe burns to a customer. The complaint alleges Amazon continued to list and promote the stove as a \"Best Seller\" despite multiple reports of gas leaks, uncontrolled flames, and construction issues. Plain",
+          "source": "Finnhub-Yahoo",
+          "source_url": "https://finnhub.io/api/news?id=e432502be8087195c428b54dabb97e0b526f902f617c8d7fc53469cc4b8f6918",
+          "published_at": "2026-04-25T17:04:30Z",
+          "matched_tickers": [
+            "AMZN"
+          ],
+          "importance_score": 4,
+          "sentiment": null
+        },
+        {
+          "title": "Amazon and Walmart hit by $12.8 billion theft surge",
+          "summary": "As someone who orders from Amazon almost daily, I lose track of which order should arrive when. Most packages come the next day, while some take an entire two days for delivery. If something went missing, it might take a few days before I noticed, if I noticed at all, because, unless it's an item I ...",
+          "source": "Finnhub-Yahoo",
+          "source_url": "https://finnhub.io/api/news?id=96b98392383a0d7c2b147d701bdba88ee27bab88fd57701234252dd2b1e0de01",
+          "published_at": "2026-04-25T16:07:00Z",
+          "matched_tickers": [
+            "AMZN"
+          ],
+          "importance_score": 3,
+          "sentiment": null
+        }
+      ]
+    },
+    {
+      "cluster_id": "cohere_aleph_alpha_merger",
+      "representative_title": "Cohere与Aleph Alpha合并打造欧洲主权AI平台",
+      "importance_score": 5,
+      "news_items": [
+        {
+          "title": "Why Cohere is merging with Aleph Alpha",
+          "summary": "Canadian AI startup Cohere is taking over Germany-based Aleph Alpha with support from Lidl’s owner, Schwarz Group. With the blessing of their governments, the companies intend to offer a sovereign alternative to enterprises in an AI landscape dominated by American players.",
+          "source": "Finnhub-Yahoo",
+          "source_url": "https://finnhub.io/api/news?id=a1fbc14852cb885fc5931508f8e4ae292744693cb928912c2edfebe3d088f021",
+          "published_at": "2026-04-25T16:00:00Z",
+          "matched_tickers": [
+            "GOOGL"
+          ],
+          "importance_score": 5,
+          "sentiment": null
+        }
+      ]
+    },
+    {
+      "cluster_id": "ppg_r&d_coating",
+      "representative_title": "PPG工业在法国研发中心安装辐射固化涂层测试线",
+      "importance_score": 4,
+      "news_items": [
+        {
+          "title": "PPG Industries (PPG) Installs Advanced Testing Line for Radiation-Curable Coatings at its R&D Center",
+          "summary": "PPG Industries, Inc. (NYSE:PPG) is one of the 10 Best Slow Growth Stocks to Buy According to Analysts. On April 20, 2026, PPG Industries, Inc. (NYSE:PPG) announced the installation of an advanced testing line for radiation-curable coatings at its R&D Center of Excellence in Marly, France. The line supports infrared, ul",
+          "source": "Finnhub-Yahoo",
+          "source_url": "https://finnhub.io/api/news?id=eefeba6f6ec7c83f42b647753b7594bd33545e1f98cd5597640f0245485a4672",
+          "published_at": "2026-04-25T15:57:36Z",
+          "matched_tickers": [
+            "PPG"
+          ],
+          "importance_score": 4,
+          "sentiment": null
+        }
+      ]
+    },
+    {
+      "cluster_id": "pepsico_google_cloud_collab",
+      "representative_title": "百事可乐与谷歌云达成多年数字化合作",
+      "importance_score": 4,
+      "news_items": [
+        {
+          "title": "PepsiCo (PEP): The Best Slow Growth Stock to Buy According to Analysts",
+          "summary": "PepsiCo, Inc. (NASDAQ:PEP) is one of the 10 Best Slow Growth Stocks to Buy According to Analysts. On April 22, 2026, PepsiCo, Inc. (NASDAQ:PEP) announced a multi-year collaboration with Google Cloud (GOOG) to enhance its digital infrastructure and use the Gemini Enterprise Agent Platform to help teams translate insight",
+          "source": "Finnhub-Yahoo",
+          "source_url": "https://finnhub.io/api/news?id=bf2986566327d5d450e354e70d5280bf17929e9ecd3b748ad0f16ff16e2eb2ce",
+          "published_at": "2026-04-25T15:57:08Z",
+          "matched_tickers": [
+            "GOOGL"
+          ],
+          "importance_score": 4,
+          "sentiment": null
+        }
+      ]
+    },
+    {
+      "cluster_id": "apple_ceo_strategy_goldman",
+      "representative_title": "苹果新任CEO Ternus硬件战略展望及高盛财报前评级分析",
+      "importance_score": 6,
+      "news_items": [
+        {
+          "title": "The Highest-Paid CEO Is a Furniture Salesman",
+          "summary": "The median annual pay of large company CEOs hit $29.4 million last year, a record high, up 23.2%. It’s still one big fat guessing game.",
+          "source": "Finnhub-Yahoo",
+          "source_url": "https://finnhub.io/api/news?id=32dfec0ae13f2953dd901ad17b77cdac0e501a0894213c9ca4d609bcf9fb2c9f",
+          "published_at": "2026-04-25T15:18:00Z",
+          "matched_tickers": [
+            "AAPL"
+          ],
+          "importance_score": 3,
+          "sentiment": null
+        },
+        {
+          "title": "Apple under Ternus: what comes next for the tech giant’s hardware strategy",
+          "summary": "John Ternus, Apple's incoming CEO, is a hardware guy, signaling Apple may be putting devices back at the center of its strategy.",
+          "source": "TechCrunch",
+          "source_url": "https://techcrunch.com/2026/04/25/apple-under-ternus-what-comes-next-for-the-tech-giants-hardware-strategy/",
+          "published_at": "2026-04-25T15:00:00Z",
+          "matched_tickers": [
+            "AAPL"
+          ],
+          "importance_score": 6,
+          "sentiment": null
+        },
+        {
+          "title": "Goldman Sachs reassesses Apple stock ahead of earnings",
+          "summary": "Apple is heading into its April 30 earnings report, with investors focused on iPhone demand, outlooks, and what’s next for its AI strategy under its upcoming new CEO. The iPhone maker's stock has lagged this year, down about 0.64% year to date compared with a 4.67% gain for the S&P 500 index, ...",
+          "source": "Finnhub-Yahoo",
+          "source_url": "https://finnhub.io/api/news?id=5787179a0f555d1849aa9069e9ff0d40caea3a36b1bb63dae6d1fff64e8d8ae4",
+          "published_at": "2026-04-25T14:07:00Z",
+          "matched_tickers": [
+            "AAPL"
+          ],
+          "importance_score": 6,
+          "sentiment": null
+        }
+      ]
+    },
+    {
+      "cluster_id": "tokyo_tech_destination",
+      "representative_title": "东京成为2026年重要科技目的地",
+      "importance_score": 2,
+      "news_items": [
+        {
+          "title": "Why Tokyo is the most important tech destination of 2026",
+          "summary": "SusHi Tech Tokyo 2026 has four tightly defined technology domains, each backed by live demonstrations, dedicated exhibit floors, and sessions featuring the people actually building and funding these technologies globally.",
+          "source": "TechCrunch",
+          "source_url": "https://techcrunch.com/2026/04/25/why-tokyo-is-the-most-important-tech-destination-of-2026/",
+          "published_at": "2026-04-25T15:03:00Z",
+          "matched_tickers": [],
+          "importance_score": 2,
+          "sentiment": null
+        }
+      ]
+    },
+    {
+      "cluster_id": "doomscrolling_apps",
+      "representative_title": "对抗刷屏成瘾的应用推荐",
+      "importance_score": 1,
+      "news_items": [
+        {
+          "title": "Apps to distract you from the endless cycle of doomscrolling",
+          "summary": "It's hard to break the cycle of doomscrolling, but there are plenty of apps that can help you spend more time on content that’s engaging and productive.",
+          "source": "TechCrunch",
+          "source_url": "https://techcrunch.com/2026/04/25/apps-to-distract-you-from-the-endless-cycle-of-doomscrolling/",
+          "published_at": "2026-04-25T15:00:07Z",
+          "matched_tickers": [],
+          "importance_score": 1,
+          "sentiment": null
+        }
+      ]
+    },
+    {
+      "cluster_id": "alkami_position_cut",
+      "representative_title": "Chicago Capital大幅削减Alkami科技持仓",
+      "importance_score": 2,
+      "news_items": [
+        {
+          "title": "Chicago Capital Slashes Its Alkami Technology Position by 1.6 Million Shares",
+          "summary": "Alkami Technology delivers cloud-based digital banking solutions to U.S. financial institutions, serving both retail and business clients.",
+          "source": "Finnhub-Yahoo",
+          "source_url": "https://finnhub.io/api/news?id=7cf5e2cf54562ed3737f5ab98606683a9afaa9023ee09a0a12accef2b7142c17",
+          "published_at": "2026-04-25T14:59:20Z",
+          "matched_tickers": [
+            "AMZN"
+          ],
+          "importance_score": 2,
+          "sentiment": null
+        }
+      ]
+    },
+    {
+      "cluster_id": "india_snabbit_funding",
+      "representative_title": "印度按需服务平台Snabbit寻求4亿美元估值融资",
+      "importance_score": 3,
+      "news_items": [
+        {
+          "title": "India’s Snabbit seeks fresh funding at a $400M valuation, sources say",
+          "summary": "Snabbit has scaled rapidly, crossing one million jobs in March, amid growing investor interest.",
+          "source": "TechCrunch",
+          "source_url": "https://techcrunch.com/2026/04/25/indias-snabbit-seeks-fresh-funding-at-a-400m-valuation-sources-say/",
+          "published_at": "2026-04-25T14:57:26Z",
+          "matched_tickers": [],
+          "importance_score": 3,
+          "sentiment": null
+        }
+      ]
+    },
+    {
+      "cluster_id": "macron_eu_covid_debt_rollover",
+      "representative_title": "马克龙呼吁欧盟延续新冠时期债务并发行新债券",
+      "importance_score": 6,
+      "news_items": [
+        {
+          "title": "Macron Says Would Be ‘Silly’ Not to Roll Over EU Covid-Era Debt",
+          "summary": "French President Emmanuel Macron said the European Union’s Covid-era debt should be rolled over and the bloc should issue new bonds, making the case for flexibility during “extraordinary times.”",
+          "source": "Bloomberg",
+          "source_url": "https://www.bloomberg.com/news/articles/2026-04-25/macron-says-would-be-silly-not-to-roll-over-eu-covid-era-debt",
+          "published_at": "2026-04-25T14:48:17Z",
+          "matched_tickers": [],
+          "importance_score": 6,
+          "sentiment": null
+        }
+      ]
+    },
+    {
+      "cluster_id": "china_us_tech_intelligence_business",
+      "representative_title": "特朗普对华经济打压催生美国私人情报行业新机遇",
+      "importance_score": 5,
+      "news_items": [
+        {
+          "title": "Private-Sector Sleuthing Becomes Big Business for US Tech Startup",
+          "summary": "Trump’s economic crackdown on China’s US interests is creating opportunities for a Utah-based intelligence firm",
+          "source": "Bloomberg",
+          "source_url": "https://www.bloomberg.com/news/features/2026-04-25/private-sector-sleuthing-becomes-big-business-for-us-tech-startup",
+          "published_at": "2026-04-25T14:00:18Z",
+          "matched_tickers": [],
+          "importance_score": 5,
+          "sentiment": null
+        }
+      ]
+    }
+  ],
+  "top_news": [
+    {
+      "title": "Beijing Warns EU After China Firms Included in Russia Sanctions",
+      "summary": "China said it will take necessary measures after the European Union added Chinese entities to its latest Russia sanctions package, warning that all consequences would be borne by the EU.",
+      "source": "Bloomberg",
+      "source_url": "https://www.bloomberg.com/news/articles/2026-04-26/beijing-warns-eu-after-china-firms-included-in-russia-sanctions",
+      "published_at": "2026-04-26T02:26:24Z",
+      "matched_tickers": [],
+      "importance_score": 8,
+      "sentiment": null
+    },
+    {
+      "title": "Trump’s Hormuz Blockade Has Deepened a Historic Shipping Crisis",
+      "summary": "In early April — after a month of disruption around one of the world’s most important energy chokepoints — US President Donald Trump wrote that with “a little ​more time, we can easily OPEN THE ​HORMUZ STRAIT, TAKE THE OIL, & MAKE A ⁠FORTUNE.”",
+      "source": "Bloomberg",
+      "source_url": "https://www.bloomberg.com/news/articles/2026-04-26/iran-war-hormuz-double-blockade-halts-ship-traffic-dims-hope-for-the-economy",
+      "published_at": "2026-04-26T00:04:49Z",
+      "matched_tickers": [],
+      "importance_score": 8,
+      "sentiment": null
+    },
+    {
+      "title": "Alphabet’s US$40b Anthropic Bet Tests AI Capex And Cloud Economics",
+      "summary": "Alphabet announces plans to invest up to $40b in Anthropic, deepening their AI partnership. As part of the deal, Anthropic will use Google Cloud as its primary AI infrastructure provider. The agreement includes long term commitments around cloud capacity and access to Alphabet’s TPU chips. Alphabet, listed as NasdaqGS:",
+      "source": "Finnhub-Yahoo",
+      "source_url": "https://finnhub.io/api/news?id=bf207cae5f1dbdc16593035f6ea77b1a9b04dccad99defa91ed867246c53a397",
+      "published_at": "2026-04-25T19:03:22Z",
+      "matched_tickers": [
+        "GOOGL"
+      ],
+      "importance_score": 8,
+      "sentiment": null
+    },
+    {
+      "title": "Fed Set to Lead Uneasy G-7 With Rates Kept on Hold This Week",
+      "summary": "Policymakers in the US and across the Group of Seven will probably keep interest rates steady this week while watching nervously for signs of higher energy costs fanning inflation.",
+      "source": "Bloomberg",
+      "source_url": "https://www.bloomberg.com/news/articles/2026-04-25/fed-set-to-lead-uneasy-g-7-with-rates-kept-on-hold-this-week",
+      "published_at": "2026-04-25T20:00:00Z",
+      "matched_tickers": [],
+      "importance_score": 8,
+      "sentiment": null
+    },
+    {
+      "title": "Why Amazon (AMZN) Stock Is Trading Up Today",
+      "summary": "Shares of cloud computing and online retail behemoth Amazon (NASDAQ:AMZN) jumped 3.5% in the afternoon session after Meta struck a multi-billion dollar deal with its Amazon Web Services (AWS) division and multiple analysts raised their price targets on the stock.",
+      "source": "Finnhub-Yahoo",
+      "source_url": "https://finnhub.io/api/news?id=78f06359208be073e2247222b415213eca98111a391471480c7aebb69dc7ff67",
+      "published_at": "2026-04-25T19:01:23Z",
+      "matched_tickers": [
+        "AMZN",
+        "META",
+        "TGT"
+      ],
+      "importance_score": 8,
+      "sentiment": null
+    },
+    {
+      "title": "The $720 Billion Capex Trap: 2 Artificial Intelligence (AI) Hyperscalers Spending on Growth While the Rest Spend on Maintenance",
+      "summary": "The big five hyperscalers plan to spend a total of more than $700 billion on artificial intelligence (AI) infrastructure this year.",
+      "source": "Finnhub-Yahoo",
+      "source_url": "https://finnhub.io/api/news?id=c8ac58b0502e488df5e5bff7173e959ca584a022939ba5ee12b437c13ab21147",
+      "published_at": "2026-04-25T22:51:00Z",
+      "matched_tickers": [
+        "AMZN"
+      ],
+      "importance_score": 7,
+      "sentiment": null
+    },
+    {
+      "title": "Amazon's Partnership With Anthropic Keeps Deepening. Is This the Catalyst Amazon Stock Needs?",
+      "summary": "The e-commerce and cloud computing giant's recent $25 billion investment plan in Anthropic captures its aggressive push into artificial intelligence.",
+      "source": "Finnhub-Yahoo",
+      "source_url": "https://finnhub.io/api/news?id=41b64328ce185c5a613af790752c50f99cd3992b449013a441672e260208918d",
+      "published_at": "2026-04-25T19:37:00Z",
+      "matched_tickers": [
+        "AMZN"
+      ],
+      "importance_score": 7,
+      "sentiment": null
+    },
+    {
+      "title": "SLB (SLB) Stock Trades Up, Here Is Why",
+      "summary": "Shares of oilfield services provider SLB (NYSE:SLB) jumped 2.3% in the afternoon session after the company reported decent first-quarter 2026 results that saw revenue beat expectations.",
+      "source": "Finnhub-Yahoo",
+      "source_url": "https://finnhub.io/api/news?id=d487a76520951fb079a2bfa6280db8aeac7720de9564054ab4191c3ab3b874ff",
+      "published_at": "2026-04-25T18:13:23Z",
+      "matched_tickers": [
+        "SLB"
+      ],
+      "importance_score": 7,
+      "sentiment": null
+    },
+    {
+      "title": "BKR Q1 Deep Dive: Power Systems and Portfolio Actions Drive Outperformance Amid Middle East Disruption",
+      "summary": "Energy technology company Baker Hughes (NASDAQ:BKR) reported Q1 CY2026 results beating Wall Street’s revenue expectations, with sales up 2.5% year on year to $6.59 billion. Its non-GAAP profit of $0.58 per share was 17.5% above analysts’ consensus estimates.",
+      "source": "Finnhub-Yahoo",
+      "source_url": "https://finnhub.io/api/news?id=bd582669f6685b505ca35a10e0b1f8ae4358987f96f069e64f48ec8f5a43a3e0",
+      "published_at": "2026-04-25T13:41:23Z",
+      "matched_tickers": [
+        "BKR"
+      ],
+      "importance_score": 7,
+      "sentiment": null
+    },
+    {
+      "title": "Why Meta (META) Stock Is Up Today",
+      "summary": "Shares of social network operator Meta Platforms (NASDAQ:META) jumped 2.7% in the afternoon session after the company announced a multibillion-dollar partnership with Amazon to scale its \"agentic AI\" capabilities.",
+      "source": "Finnhub-Yahoo",
+      "source_url": "https://finnhub.io/api/news?id=06d2c605b94f0c4d7d007b76136208a069e0e856897af4128a6a42537bed8fef",
+      "published_at": "2026-04-25T18:29:23Z",
+      "matched_tickers": [
+        "AMZN",
+        "META"
+      ],
+      "importance_score": 7,
+      "sentiment": null
+    },
+    {
+      "title": "Microsoft Buyout Signals AI Focus And Generational Shift In Workforce",
+      "summary": "Microsoft (NasdaqGS:MSFT) has launched its first large scale voluntary buyout program in the U.S., targeting roughly 7% of its domestic workforce. The offer is aimed at senior director level and below employees who meet a defined age plus tenure threshold. The program is tied to the company’s push to reorient its organ",
+      "source": "Finnhub-Yahoo",
+      "source_url": "https://finnhub.io/api/news?id=7d4af4b9f3974fc0405fae93b77abf86a66ecda752ca56d97d6a9b8654542f2e",
+      "published_at": "2026-04-25T18:06:34Z",
+      "matched_tickers": [
+        "MSFT",
+        "TGT"
+      ],
+      "importance_score": 7,
+      "sentiment": null
+    },
+    {
+      "title": "Dow Jones Futures: Iran Talks Shelved; Apple, Amazon, Google Lead Earnings Wave",
+      "summary": "The stock market is at highs but results and spending for Apple, Amazon, Google and more will be key. Iran talks were called off.",
+      "source": "Finnhub-Yahoo",
+      "source_url": "https://finnhub.io/api/news?id=78c0ed323449a46a240119fc1fbb6cb0b84487d18ed0d37419c4654156c97973",
+      "published_at": "2026-04-25T17:10:41Z",
+      "matched_tickers": [
+        "AAPL"
+      ],
+      "importance_score": 7,
+      "sentiment": null
+    },
+    {
+      "title": "Why HCA Healthcare (HCA) Shares Are Sliding Today",
+      "summary": "Shares of hospital operator HCA Healthcare (NYSE:HCA) fell 8.7% in the afternoon session after the company reported first-quarter 2026 results where a key profitability metric, adjusted EBITDA, missed analyst expectations, overshadowing revenue and earnings per share that were in line with forecasts.",
+      "source": "Finnhub-Yahoo",
+      "source_url": "https://finnhub.io/api/news?id=df6b42492cc50f1fc00cd71e63ee51ffd7725968de849708f0fbde03fac6ecb1",
+      "published_at": "2026-04-25T16:21:23Z",
+      "matched_tickers": [
+        "HCA"
+      ],
+      "importance_score": 7,
+      "sentiment": null
+    }
+  ],
+  "analyst_briefing": "本期最值得关注的主线有三：一是Meta与亚马逊AWS签署数十亿美元AI代理合作，叠加谷歌对Anthropic400亿美元投资，超大规模云厂商AI军备竞赛进一步提速，AMZN、GOOGL、META均受益；二是油田服务板块（BKR、SLB）Q1业绩超预期，国际需求韧性明显，但霍尔木兹封锁及伊核谈判搁置带来能量供应不确定性，需持续跟踪对SLB、HAL、PUMP等的传导；三是HCA Q1 EBITDA低于预期，股价单日跌逾8%，医疗板块盈利质量"
+}

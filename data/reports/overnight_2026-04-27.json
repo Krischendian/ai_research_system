@@ -1,0 +1,350 @@
+{
+  "summary": "隔夜重点关注：美联储预计本周维持利率不变，中欧因俄制裁摩擦升温、北京警告将采取反制措施，DeepSeek V4延迟发布被指向转用国产芯片，德国曾寻找白衣骑士阻拦UniCredit收购Commerzbank，UPS推出紧急附加费应对地缘政治驱动的燃油成本上涨，霍尔木兹海峡局势持续扰动全球能源运输。",
+  "news_list": [
+    {
+      "title": "Barron's Top 10 ESG Dogs Tag 4 As 'Safer' For April Dividends",
+      "summary": "Calvertâs top 10 sustainable ESG dividend stocks for 2026âtargets imply ~24% upside and highlight safer picks and entry points. Read the full analysis here.",
+      "source": "Finnhub-SeekingAlpha",
+      "source_url": "https://finnhub.io/api/news?id=bae129b71c40d12b64f2472ee4976bf6fdbfa1d0f94936dd60fd94220c17f1cc",
+      "published_at_ny": "2026-04-26T07:24:55-04:00",
+      "importance_score": 4,
+      "matched_tickers": [
+        "JLL",
+        "TGT"
+      ]
+    },
+    {
+      "title": "Germany Sounded Out Possible Commerzbank White Knights This Year",
+      "summary": "Germany sounded out European lenders to defend Commerzbank AG against UniCredit SpA’s takeover bid earlier this year, according to people familiar with the matter.",
+      "source": "RSS-Bloomberg",
+      "source_url": "https://www.bloomberg.com/news/articles/2026-04-26/germany-sounded-out-possible-commerzbank-white-knights-this-year",
+      "published_at_ny": "2026-04-26T07:18:43-04:00",
+      "importance_score": 6,
+      "matched_tickers": []
+    },
+    {
+      "title": "China Formalizes Labor Rules for Gig Workers on Online Platforms",
+      "summary": "China formalized its first comprehensive policy framework for “new employment groups,” including delivery riders and livestreamers, signaling a shift from ad-hoc regulation to normalization of the platform economy.",
+      "source": "RSS-Bloomberg",
+      "source_url": "https://www.bloomberg.com/news/articles/2026-04-26/china-formalizes-labor-rules-for-gig-workers-on-online-platforms",
+      "published_at_ny": "2026-04-26T06:27:03-04:00",
+      "importance_score": 5,
+      "matched_tickers": []
+    },
+    {
+      "title": "DeepSeek V4 Delay Shows Shift to China Chips, CCTV Account Says",
+      "summary": "DeepSeek’s delayed release of its V4 model points to a strategic shift toward deeper integration with China’s domestic chip ecosystem, according to Yuyuantantian, a social media account affiliated with the government-controlled China Central Television.",
+      "source": "RSS-Bloomberg",
+      "source_url": "https://www.bloomberg.com/news/articles/2026-04-26/deepseek-v4-delay-shows-shift-to-china-chips-cctv-account-says",
+      "published_at_ny": "2026-04-26T00:49:17-04:00",
+      "importance_score": 7,
+      "matched_tickers": []
+    },
+    {
+      "title": "A Look At United Parcel Service’s Valuation As RFID And Happy Returns Expansion Gains Attention",
+      "summary": "United Parcel Service (UPS) has drawn fresh attention after expanding its Happy Returns drop off network to 10,000 U.S. locations and deploying RFID sensing across its small package infrastructure, reshaping how returns and tracking work for shippers. See our latest analysis for United Parcel Service. These RFID and Happy Returns updates land while UPS shares trade at US$107.02, with a 30 day share price return of 12.89% and a 1 year total shareholder return of 16.78%. However, the 3 and 5...",
+      "source": "Finnhub-Yahoo",
+      "source_url": "https://finnhub.io/api/news?id=8d0e2f7d6a5edf5216ada81d3d6a10b1b56eb6c8f6cc17f379e37d8d484b3d55",
+      "published_at_ny": "2026-04-26T00:13:19-04:00",
+      "importance_score": 6,
+      "matched_tickers": [
+        "UPS"
+      ]
+    },
+    {
+      "title": "Beijing Warns EU After China Firms Included in Russia Sanctions",
+      "summary": "China said it will take necessary measures after the European Union added Chinese entities to its latest Russia sanctions package, warning that all consequences would be borne by the EU.",
+      "source": "RSS-Bloomberg",
+      "source_url": "https://www.bloomberg.com/news/articles/2026-04-26/beijing-warns-eu-after-china-firms-included-in-russia-sanctions",
+      "published_at_ny": "2026-04-25T22:26:24-04:00",
+      "importance_score": 8,
+      "matched_tickers": []
+    },
+    {
+      "title": "Trump’s Hormuz Blockade Has Deepened a Historic Shipping Crisis",
+      "summary": "In early April — after a month of disruption around one of the world’s most important energy chokepoints — US President Donald Trump wrote that with “a little ​more time, we can easily OPEN THE ​HORMUZ STRAIT, TAKE THE OIL, & MAKE A ⁠FORTUNE.”",
+      "source": "RSS-Bloomberg",
+      "source_url": "https://www.bloomberg.com/news/articles/2026-04-26/iran-war-hormuz-double-blockade-halts-ship-traffic-dims-hope-for-the-economy",
+      "published_at_ny": "2026-04-25T20:04:49-04:00",
+      "importance_score": 8,
+      "matched_tickers": []
+    },
+    {
+      "title": "Anthropic created a test marketplace for agent-on-agent commerce",
+      "summary": "In a recent experiment, Anthropic created a classified marketplace where AI agents represented both buyers and sellers, striking real deals for real goods and real money.",
+      "source": "RSS-TechCrunch",
+      "source_url": "https://techcrunch.com/2026/04/25/anthropic-created-a-test-marketplace-for-agent-on-agent-commerce/",
+      "published_at_ny": "2026-04-25T17:43:37-04:00",
+      "importance_score": 5,
+      "matched_tickers": []
+    },
+    {
+      "title": "Maine’s governor vetoes data center moratorium",
+      "summary": "L.D. 307 would have imposed the country’s first statewide moratorium on new data centers — lasting, in this case, until November 1, 2027.",
+      "source": "RSS-TechCrunch",
+      "source_url": "https://techcrunch.com/2026/04/25/maines-governor-vetoes-data-center-moratorium/",
+      "published_at_ny": "2026-04-25T16:57:08-04:00",
+      "importance_score": 5,
+      "matched_tickers": [
+        "NOV"
+      ]
+    },
+    {
+      "title": "UPS Surge Emergency Fee And What It Means For Valuation And Yield",
+      "summary": "UPS (NYSE:UPS) has introduced a temporary Surge Emergency Fee on a wide range of U.S. import and export shipments. The fee applies across multiple UPS services and is tied to sharply higher fuel costs linked to ongoing geopolitical tensions. The change affects businesses, e-commerce sellers, and consumers that rely on UPS for international shipping. UPS operates as a global parcel and logistics provider, connecting businesses and consumers through time sensitive delivery and freight...",
+      "source": "Finnhub-Yahoo",
+      "source_url": "https://finnhub.io/api/news?id=217c90f0db502b96d8257e987956bd587bd49077ed9430f078f88a504f7abe40",
+      "published_at_ny": "2026-04-25T16:05:27-04:00",
+      "importance_score": 6,
+      "matched_tickers": [
+        "UPS"
+      ]
+    },
+    {
+      "title": "Fed Set to Lead Uneasy G-7 With Rates Kept on Hold This Week",
+      "summary": "Policymakers in the US and across the Group of Seven will probably keep interest rates steady this week while watching nervously for signs of higher energy costs fanning inflation.",
+      "source": "RSS-Bloomberg",
+      "source_url": "https://www.bloomberg.com/news/articles/2026-04-25/fed-set-to-lead-uneasy-g-7-with-rates-kept-on-hold-this-week",
+      "published_at_ny": "2026-04-25T16:00:00-04:00",
+      "importance_score": 8,
+      "matched_tickers": []
+    }
+  ],
+  "window_start_ny": "2026-04-25T16:00:00-04:00",
+  "window_end_ny": "2026-04-26T08:00:00-04:00",
+  "provenance_note": "条目来自 Finnhub 公司新闻（须 FINNHUB_API_KEY）与 Reuters / Bloomberg / TechCrunch 等 RSS，合并去重；时间窗以 America/New_York 下「昨日 16:00～今日 08:00」为准，发布时间优先采用 Finnhub Unix 时间戳，否则回退 RSS。仅保留带有效发布时间的稿件。摘要由模型基于提要生成，请点原文核对。",
+  "clusters": [
+    {
+      "cluster_id": "ups_fee_valuation",
+      "representative_title": "UPS推出紧急附加费并扩展RFID/退货网络，估值与收益率影响分析",
+      "importance_score": 6,
+      "news_items": [
+        {
+          "title": "A Look At United Parcel Service’s Valuation As RFID And Happy Returns Expansion Gains Attention",
+          "summary": "United Parcel Service (UPS) has drawn fresh attention after expanding its Happy Returns drop off network to 10,000 U.S. locations and deploying RFID sensing across its small package infrastructure, reshaping how returns and tracking work for shippers. See our latest analysis for United Parcel Service. These RFID and Ha",
+          "source": "Finnhub-Yahoo",
+          "source_url": "https://finnhub.io/api/news?id=8d0e2f7d6a5edf5216ada81d3d6a10b1b56eb6c8f6cc17f379e37d8d484b3d55",
+          "published_at": "2026-04-26T00:13:19-04:00",
+          "matched_tickers": [
+            "UPS"
+          ],
+          "importance_score": 6,
+          "sentiment": null
+        },
+        {
+          "title": "UPS Surge Emergency Fee And What It Means For Valuation And Yield",
+          "summary": "UPS (NYSE:UPS) has introduced a temporary Surge Emergency Fee on a wide range of U.S. import and export shipments. The fee applies across multiple UPS services and is tied to sharply higher fuel costs linked to ongoing geopolitical tensions. The change affects businesses, e-commerce sellers, and consumers that rely on ",
+          "source": "Finnhub-Yahoo",
+          "source_url": "https://finnhub.io/api/news?id=217c90f0db502b96d8257e987956bd587bd49077ed9430f078f88a504f7abe40",
+          "published_at": "2026-04-25T16:05:27-04:00",
+          "matched_tickers": [
+            "UPS"
+          ],
+          "importance_score": 6,
+          "sentiment": null
+        }
+      ]
+    },
+    {
+      "cluster_id": "g7_fed_rates_hold",
+      "representative_title": "美联储及G7央行本周预计维持利率不变，关注能源通胀风险",
+      "importance_score": 8,
+      "news_items": [
+        {
+          "title": "Fed Set to Lead Uneasy G-7 With Rates Kept on Hold This Week",
+          "summary": "Policymakers in the US and across the Group of Seven will probably keep interest rates steady this week while watching nervously for signs of higher energy costs fanning inflation.",
+          "source": "RSS-Bloomberg",
+          "source_url": "https://www.bloomberg.com/news/articles/2026-04-25/fed-set-to-lead-uneasy-g-7-with-rates-kept-on-hold-this-week",
+          "published_at": "2026-04-25T16:00:00-04:00",
+          "matched_tickers": [],
+          "importance_score": 8,
+          "sentiment": null
+        }
+      ]
+    },
+    {
+      "cluster_id": "hormuz_shipping_crisis",
+      "representative_title": "特朗普霍尔木兹海峡封锁加剧全球航运危机",
+      "importance_score": 8,
+      "news_items": [
+        {
+          "title": "Trump’s Hormuz Blockade Has Deepened a Historic Shipping Crisis",
+          "summary": "In early April — after a month of disruption around one of the world’s most important energy chokepoints — US President Donald Trump wrote that with “a little ​more time, we can easily OPEN THE ​HORMUZ STRAIT, TAKE THE OIL, & MAKE A ⁠FORTUNE.”",
+          "source": "RSS-Bloomberg",
+          "source_url": "https://www.bloomberg.com/news/articles/2026-04-26/iran-war-hormuz-double-blockade-halts-ship-traffic-dims-hope-for-the-economy",
+          "published_at": "2026-04-25T20:04:49-04:00",
+          "matched_tickers": [],
+          "importance_score": 8,
+          "sentiment": null
+        }
+      ]
+    },
+    {
+      "cluster_id": "china_eu_russia_sanctions",
+      "representative_title": "中国就欧盟对华制裁（涉俄）发出警告，威胁反制措施",
+      "importance_score": 8,
+      "news_items": [
+        {
+          "title": "Beijing Warns EU After China Firms Included in Russia Sanctions",
+          "summary": "China said it will take necessary measures after the European Union added Chinese entities to its latest Russia sanctions package, warning that all consequences would be borne by the EU.",
+          "source": "RSS-Bloomberg",
+          "source_url": "https://www.bloomberg.com/news/articles/2026-04-26/beijing-warns-eu-after-china-firms-included-in-russia-sanctions",
+          "published_at": "2026-04-25T22:26:24-04:00",
+          "matched_tickers": [],
+          "importance_score": 8,
+          "sentiment": null
+        }
+      ]
+    },
+    {
+      "cluster_id": "deepseek_china_chips",
+      "representative_title": "DeepSeek V4延迟发布暗示向国产芯片生态系统战略转移",
+      "importance_score": 7,
+      "news_items": [
+        {
+          "title": "DeepSeek V4 Delay Shows Shift to China Chips, CCTV Account Says",
+          "summary": "DeepSeek’s delayed release of its V4 model points to a strategic shift toward deeper integration with China’s domestic chip ecosystem, according to Yuyuantantian, a social media account affiliated with the government-controlled China Central Television.",
+          "source": "RSS-Bloomberg",
+          "source_url": "https://www.bloomberg.com/news/articles/2026-04-26/deepseek-v4-delay-shows-shift-to-china-chips-cctv-account-says",
+          "published_at": "2026-04-26T00:49:17-04:00",
+          "matched_tickers": [],
+          "importance_score": 7,
+          "sentiment": null
+        }
+      ]
+    },
+    {
+      "cluster_id": "china_gig_labor_rules",
+      "representative_title": "中国正式出台平台经济新就业群体劳动法规",
+      "importance_score": 5,
+      "news_items": [
+        {
+          "title": "China Formalizes Labor Rules for Gig Workers on Online Platforms",
+          "summary": "China formalized its first comprehensive policy framework for “new employment groups,” including delivery riders and livestreamers, signaling a shift from ad-hoc regulation to normalization of the platform economy.",
+          "source": "RSS-Bloomberg",
+          "source_url": "https://www.bloomberg.com/news/articles/2026-04-26/china-formalizes-labor-rules-for-gig-workers-on-online-platforms",
+          "published_at": "2026-04-26T06:27:03-04:00",
+          "matched_tickers": [],
+          "importance_score": 5,
+          "sentiment": null
+        }
+      ]
+    },
+    {
+      "cluster_id": "commerzbank_unicredit_whiteknight",
+      "representative_title": "德国此前为Commerzbank寻求白衣骑士抵御UniCredit收购",
+      "importance_score": 6,
+      "news_items": [
+        {
+          "title": "Germany Sounded Out Possible Commerzbank White Knights This Year",
+          "summary": "Germany sounded out European lenders to defend Commerzbank AG against UniCredit SpA’s takeover bid earlier this year, according to people familiar with the matter.",
+          "source": "RSS-Bloomberg",
+          "source_url": "https://www.bloomberg.com/news/articles/2026-04-26/germany-sounded-out-possible-commerzbank-white-knights-this-year",
+          "published_at": "2026-04-26T07:18:43-04:00",
+          "matched_tickers": [],
+          "importance_score": 6,
+          "sentiment": null
+        }
+      ]
+    },
+    {
+      "cluster_id": "anthropic_agent_marketplace",
+      "representative_title": "Anthropic构建AI智能体间商业交易实验市场",
+      "importance_score": 5,
+      "news_items": [
+        {
+          "title": "Anthropic created a test marketplace for agent-on-agent commerce",
+          "summary": "In a recent experiment, Anthropic created a classified marketplace where AI agents represented both buyers and sellers, striking real deals for real goods and real money.",
+          "source": "RSS-TechCrunch",
+          "source_url": "https://techcrunch.com/2026/04/25/anthropic-created-a-test-marketplace-for-agent-on-agent-commerce/",
+          "published_at": "2026-04-25T17:43:37-04:00",
+          "matched_tickers": [],
+          "importance_score": 5,
+          "sentiment": null
+        }
+      ]
+    },
+    {
+      "cluster_id": "maine_datacenter_moratorium_veto",
+      "representative_title": "缅因州州长否决全美首个数据中心建设暂停令",
+      "importance_score": 5,
+      "news_items": [
+        {
+          "title": "Maine’s governor vetoes data center moratorium",
+          "summary": "L.D. 307 would have imposed the country’s first statewide moratorium on new data centers — lasting, in this case, until November 1, 2027.",
+          "source": "RSS-TechCrunch",
+          "source_url": "https://techcrunch.com/2026/04/25/maines-governor-vetoes-data-center-moratorium/",
+          "published_at": "2026-04-25T16:57:08-04:00",
+          "matched_tickers": [
+            "NOV"
+          ],
+          "importance_score": 5,
+          "sentiment": null
+        }
+      ]
+    },
+    {
+      "cluster_id": "esg_dividend_stocks",
+      "representative_title": "巴伦周刊ESG十大股息股筛选：含JLL等监控池标的",
+      "importance_score": 4,
+      "news_items": [
+        {
+          "title": "Barron's Top 10 ESG Dogs Tag 4 As 'Safer' For April Dividends",
+          "summary": "Calvertâs top 10 sustainable ESG dividend stocks for 2026âtargets imply ~24% upside and highlight safer picks and entry points. Read the full analysis here.",
+          "source": "Finnhub-SeekingAlpha",
+          "source_url": "https://finnhub.io/api/news?id=bae129b71c40d12b64f2472ee4976bf6fdbfa1d0f94936dd60fd94220c17f1cc",
+          "published_at": "2026-04-26T07:24:55-04:00",
+          "matched_tickers": [
+            "JLL",
+            "TGT"
+          ],
+          "importance_score": 4,
+          "sentiment": null
+        }
+      ]
+    }
+  ],
+  "top_news": [
+    {
+      "title": "Fed Set to Lead Uneasy G-7 With Rates Kept on Hold This Week",
+      "summary": "Policymakers in the US and across the Group of Seven will probably keep interest rates steady this week while watching nervously for signs of higher energy costs fanning inflation.",
+      "source": "RSS-Bloomberg",
+      "source_url": "https://www.bloomberg.com/news/articles/2026-04-25/fed-set-to-lead-uneasy-g-7-with-rates-kept-on-hold-this-week",
+      "published_at": "2026-04-25T16:00:00-04:00",
+      "matched_tickers": [],
+      "importance_score": 8,
+      "sentiment": null
+    },
+    {
+      "title": "Trump’s Hormuz Blockade Has Deepened a Historic Shipping Crisis",
+      "summary": "In early April — after a month of disruption around one of the world’s most important energy chokepoints — US President Donald Trump wrote that with “a little ​more time, we can easily OPEN THE ​HORMUZ STRAIT, TAKE THE OIL, & MAKE A ⁠FORTUNE.”",
+      "source": "RSS-Bloomberg",
+      "source_url": "https://www.bloomberg.com/news/articles/2026-04-26/iran-war-hormuz-double-blockade-halts-ship-traffic-dims-hope-for-the-economy",
+      "published_at": "2026-04-25T20:04:49-04:00",
+      "matched_tickers": [],
+      "importance_score": 8,
+      "sentiment": null
+    },
+    {
+      "title": "Beijing Warns EU After China Firms Included in Russia Sanctions",
+      "summary": "China said it will take necessary measures after the European Union added Chinese entities to its latest Russia sanctions package, warning that all consequences would be borne by the EU.",
+      "source": "RSS-Bloomberg",
+      "source_url": "https://www.bloomberg.com/news/articles/2026-04-26/beijing-warns-eu-after-china-firms-included-in-russia-sanctions",
+      "published_at": "2026-04-25T22:26:24-04:00",
+      "matched_tickers": [],
+      "importance_score": 8,
+      "sentiment": null
+    },
+    {
+      "title": "DeepSeek V4 Delay Shows Shift to China Chips, CCTV Account Says",
+      "summary": "DeepSeek’s delayed release of its V4 model points to a strategic shift toward deeper integration with China’s domestic chip ecosystem, according to Yuyuantantian, a social media account affiliated with the government-controlled China Central Television.",
+      "source": "RSS-Bloomberg",
+      "source_url": "https://www.bloomberg.com/news/articles/2026-04-26/deepseek-v4-delay-shows-shift-to-china-chips-cctv-account-says",
+      "published_at": "2026-04-26T00:49:17-04:00",
+      "matched_tickers": [],
+      "importance_score": 7,
+      "sentiment": null
+    }
+  ],
+  "analyst_briefing": "本批次最值得关注的宏观主线有三：其一，美联储及G7本周料按兵不动，但霍尔木兹危机推高能源成本，构成通胀二次抬头风险，需密切跟踪货币政策路径变化；其二，中欧关系因涉俄制裁进一步趋紧，中国明确警告反制，叠加DeepSeek转向国产芯片信号，科技供应链与贸易格局压力上升；其三，UPS连续两则报道（RFID扩张与紧急附加费）反映物流成本转嫁逻辑，短期或受能源及地缘因素压制估值，但中长期科技投入具积极意义。监控池标的JLL出现于ESG股息筛选，信"
+}

@@ -1,10 +1,15 @@
 """LLM 封装：优先 Claude（Anthropic），回退 OpenAI。"""
 from __future__ import annotations
 
+import logging
 import os
+import time
 from pathlib import Path
+from typing import Any
 
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 _ROOT = Path(__file__).resolve().parents[3]
 _PLACEHOLDER_KEYS = frozenset({"", "你的key", "your-api-key-here", "sk-placeholder"})
@@ -57,6 +62,105 @@ def chat(
     raise ValueError(
         "未配置有效的 LLM API Key：请在 .env 中设置 ANTHROPIC_API_KEY 或 OPENAI_API_KEY。"
     )
+
+
+def _is_retryable_llm_transport_error(exc: BaseException) -> bool:
+    """连接/传输类失败：可对 Claude 或 OpenAI 路径做有限次退避重试。"""
+    try:
+        import anthropic
+
+        if isinstance(exc, anthropic.APIConnectionError):
+            return True
+    except ImportError:
+        pass
+
+    _ename = type(exc).__name__
+    if any(
+        x in _ename
+        for x in (
+            "RemoteProtocolError",
+            "ConnectError",
+            "ReadTimeout",
+            "WriteTimeout",
+            "PoolTimeout",
+        )
+    ):
+        return True
+
+    if isinstance(exc, RuntimeError):
+        msg = str(exc)
+        low = msg.lower()
+        cause = exc.__cause__
+        try:
+            import anthropic
+
+            if isinstance(cause, anthropic.APIConnectionError):
+                return True
+        except ImportError:
+            pass
+        if "Claude API 调用失败" in msg:
+            if cause is not None and _is_retryable_llm_transport_error(cause):
+                return True
+            return any(
+                x in low
+                for x in (
+                    "connection error",
+                    "apiconnectionerror",
+                    "remoteprotocol",
+                    "disconnected",
+                    "server disconnected",
+                    "timeout",
+                    "timed out",
+                    "read timeout",
+                    "connecterror",
+                    "broken pipe",
+                    "connection reset",
+                )
+            )
+        if "OpenAI 请求超时" in msg:
+            return True
+        if "OpenAI API 返回错误" in msg and "timeout" in low:
+            return True
+    return False
+
+
+_RETRY_BACKOFF_SEC = (10, 30, 60)
+
+
+def chat_with_retry(
+    prompt: str,
+    *,
+    max_retries: int = 5,
+    **kwargs: Any,
+) -> str:
+    """
+    对 ``chat`` 做有限次重试（默认最多 5 次调用），主要针对连接类错误。
+    相邻重试间隔为 10s / 30s / 60s；若仍需继续等待，之后固定为 60s。
+    其余参数与 :func:`chat` 相同（如 ``timeout``、``max_tokens``、``response_format``）。
+    """
+    last: BaseException | None = None
+    for attempt in range(max_retries):
+        try:
+            return chat(prompt, **kwargs)
+        except Exception as e:
+            last = e
+            if attempt >= max_retries - 1 or not _is_retryable_llm_transport_error(e):
+                raise
+            wait = (
+                _RETRY_BACKOFF_SEC[attempt]
+                if attempt < len(_RETRY_BACKOFF_SEC)
+                else _RETRY_BACKOFF_SEC[-1]
+            )
+            logger.warning(
+                "LLM 连接/传输失败，第 %s/%s 次重试，等待 %ss：%s",
+                attempt + 1,
+                max_retries,
+                wait,
+                e,
+            )
+            time.sleep(wait)
+    assert last is not None
+    raise last
 
 
 def _chat_claude(

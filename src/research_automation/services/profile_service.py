@@ -8,7 +8,11 @@ import re
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
-from research_automation.core.database import replace_document_paragraphs
+from research_automation.core.database import (
+    get_step_cache,
+    replace_document_paragraphs,
+    set_step_cache,
+)
 from research_automation.core.paragraph_refs import normalize_paragraph_ref_list
 from research_automation.core.paragraph_text import (
     all_paragraph_id_set,
@@ -54,6 +58,7 @@ _PROFILE_SECTION_CHAR_LIMITS: dict[str, int] = {
 
 _FMP_SEGMENT_PCT_WARN_THRESHOLD = 10.0
 _FMP_SEGMENT_VALIDATION_WARNING = "业务线占比与财报披露偏差较大，请人工复核"
+_PROFILE_CACHE_VERSION = 1
 
 _PROFILE_SECTION_HEADERS: tuple[tuple[str, str], ...] = (
     ("ITEM_1_BUSINESS", "item1"),
@@ -154,6 +159,22 @@ def _normalize_verbatim_field(raw: Any) -> str:
     """将 LLM 返回的前景/行业字段规范为字符串；空或仅空白则占位。"""
     if raw is None:
         return "原文未明确提及"
+
+    # 如果是列表（LLM返回结构化数组），提取item字段拼成文字
+    if isinstance(raw, list):
+        items = []
+        for entry in raw:
+            if isinstance(entry, dict):
+                text = entry.get("item") or entry.get("text") or entry.get("content") or ""
+                if text:
+                    items.append(str(text).strip())
+            elif isinstance(entry, str) and entry.strip():
+                items.append(entry.strip())
+        if items:
+            return "；".join(items)
+        return "原文未明确提及"
+
+    # 如果是字符串但内容是列表格式，尝试解析
     s = str(raw).strip()
     if not s:
         return "原文未明确提及"
@@ -161,6 +182,15 @@ def _normalize_verbatim_field(raw: Any) -> str:
         return "原文未明确提及"
     if s.upper() in ("NOT_FOUND", "NOT FOUND"):
         return "NOT_FOUND"
+    if s.startswith("[") and s.endswith("]"):
+        try:
+            import ast
+
+            parsed = ast.literal_eval(s)
+            if isinstance(parsed, list):
+                return _normalize_verbatim_field(parsed)
+        except Exception:
+            pass
     return s
 
 
@@ -1038,6 +1068,20 @@ def get_profile(ticker: str) -> BusinessProfile:
     """
     symbol = normalize_equity_ticker(ticker) or "UNKNOWN"
     filing_year = datetime.now(timezone.utc).year - 1
+    _cached = get_step_cache(
+        sector="__profile__",
+        year=0,
+        quarter=0,
+        step="business_profile",
+        ticker=symbol,
+        cache_version=_PROFILE_CACHE_VERSION,
+    )
+    if _cached:
+        try:
+            return BusinessProfile.model_validate_json(_cached)
+        except Exception:
+            pass  # 缓存损坏，继续走原流程
+
     try:
         sections = get_10k_sections(symbol, filing_year)
     except SecEdgarError as e:
@@ -1118,6 +1162,60 @@ def get_profile(ticker: str) -> BusinessProfile:
             + " 若 Item 1 无散文式占比，则自 Item 7/8 中「Net sales by … (dollars in millions)」首列表格按金额推算占比。"
         )
         _normalize_mix_lists(payload, idx_to_full=idx_to_full, allowed=allowed)
+    _apply_fmp_segment_validation(
+        payload,
+        symbol,
+        filing_year,
+        idx_to_full=idx_to_full,
+        allowed=allowed,
+    )
+    # core_business FMP fallback：当10-K提取失败时，与 revenue_by_segment 同源（已由 FMP 校验/填充）
+    cb = (payload.get("core_business") or "").strip()
+    _cb_invalid_keywords = (
+        "无法", "未提供", "未包含", "未见", "不可用", "原文未明确提及",
+        "NOT_FOUND", "高管", "履历", "组织架构", "注册", "子公司运营",
+    )
+    _cb_is_invalid = (
+        not cb
+        or len(cb) < 30
+        or any(kw in cb for kw in _cb_invalid_keywords)
+    )
+    if _cb_is_invalid:
+        try:
+            segs = payload.get("revenue_by_segment")
+            if isinstance(segs, list) and segs:
+                parts: list[str] = []
+                for it in segs[:3]:
+                    if not isinstance(it, dict):
+                        continue
+                    nm = str(it.get("segment_name") or "").strip()
+                    if not nm:
+                        continue
+                    pct_raw = it.get("percentage")
+                    pct_disp = ""
+                    if pct_raw is not None:
+                        p = str(pct_raw).strip()
+                        if p.endswith("%"):
+                            try:
+                                num = float(p.replace("%", "").strip())
+                                pct_disp = f"{num:.1f}%"
+                            except ValueError:
+                                pct_disp = p
+                        else:
+                            try:
+                                num = float(p)
+                                pct_disp = f"{num:.1f}%"
+                            except (TypeError, ValueError):
+                                pct_disp = p
+                    parts.append(f"{nm}（{pct_disp}）" if pct_disp else nm)
+                if parts:
+                    seg_desc = "、".join(parts)
+                    payload["core_business"] = (
+                        f"{symbol} 主要业务分部包括：{seg_desc}等"
+                        f"（数据来源：FMP Revenue Segmentation，10-K文本提取不可用）"
+                    )
+        except Exception:
+            pass
     _strip_optional_supporting_quotes(payload)
     _apply_profile_text_fields(payload)
     check_profile_fields(payload, source_text=merged_excerpt)
@@ -1138,13 +1236,6 @@ def get_profile(ticker: str) -> BusinessProfile:
         allowed=allowed,
     )
     _append_news_corporate_actions_to_profile(payload, symbol)
-    _apply_fmp_segment_validation(
-        payload,
-        symbol,
-        filing_year,
-        idx_to_full=idx_to_full,
-        allowed=allowed,
-    )
     payload["document_uid"] = doc_uid
     cited = _collect_profile_cited_ids(payload)
     payload["source_paragraphs"] = {
@@ -1155,7 +1246,17 @@ def get_profile(ticker: str) -> BusinessProfile:
             payload["source_paragraphs"][pid] = txt
 
     try:
-        return BusinessProfile.model_validate(payload)
+        _profile_obj = BusinessProfile.model_validate(payload)
+        set_step_cache(
+            sector="__profile__",
+            year=0,
+            quarter=0,
+            step="business_profile",
+            ticker=symbol,
+            content=_profile_obj.model_dump_json(),
+            cache_version=_PROFILE_CACHE_VERSION,
+        )
+        return _profile_obj
     except Exception as e:
         raise ProfileGenerationError(
             f"业务画像字段未通过校验（占比须含 % 等）：{e}"

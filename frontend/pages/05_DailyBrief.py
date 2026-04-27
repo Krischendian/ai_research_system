@@ -25,7 +25,7 @@ st.caption("宏观：Bloomberg RSS（sector相关过滤）｜公司：Benzinga A
 force_refresh = st.sidebar.checkbox("强制刷新简报（忽略缓存）", value=False)
 use_custom_date = st.sidebar.checkbox("指定日期（测试用）", value=False)
 if use_custom_date:
-    target_date = st.sidebar.date_input(
+    target_date = st.date_input(
         "选择纽约日期",
         value=date.today() - timedelta(days=1),
         max_value=date.today(),

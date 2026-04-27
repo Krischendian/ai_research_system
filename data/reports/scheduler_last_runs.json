@@ -2,16 +2,16 @@
   "last_runs": {
     "batch_fetch_financials": {},
     "overnight_report": {
-      "at": "2026-04-06T14:03:48.493540+08:00",
+      "at": "2026-04-27T06:31:03.704785+08:00",
       "ok": true,
-      "detail": "/Users/krisfan/Desktop/ai_research_system/data/reports/overnight_2026-04-06.json"
+      "detail": "/Users/krisfan/Desktop/untitled folder/data/reports/overnight_2026-04-27.json"
     },
     "daily_summary_report": {
-      "at": "2026-04-06T14:03:58.033903+08:00",
+      "at": "2026-04-27T06:33:10.199387+08:00",
       "ok": true,
-      "detail": "/Users/krisfan/Desktop/ai_research_system/data/reports/daily_2026-04-06.json"
+      "detail": "/Users/krisfan/Desktop/untitled folder/data/reports/daily_2026-04-27.json"
     }
   },
-  "scheduler_started_at": "2026-04-15T01:03:15.676624+08:00",
-  "updated_at": "2026-04-14T17:03:15.677260+00:00"
+  "scheduler_started_at": "2026-04-28T01:33:17.325500+08:00",
+  "updated_at": "2026-04-27T17:33:17.326260+00:00"
 }

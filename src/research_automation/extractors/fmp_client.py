@@ -28,6 +28,15 @@ _REQUEST_HEADERS = {
     "User-Agent": "research-automation/1.0 (+https://financialmodelingprep.com/developer/docs/)",
 }
 
+FIELD_MAP: dict[str, str] = {
+    "revenue": "revenue",
+    "net_income": "netIncome",
+    "gross_profit": "grossProfit",
+    "ebitda": "ebitda",
+    "capex": "capitalExpenditure",
+}
+_DISALLOWED_FIELD_TOKENS = ("nongaap", "adjusted", "normalized")
+
 
 def _api_key() -> str | None:
     k = (os.getenv("FMP_API_KEY") or "").strip()
@@ -68,6 +77,26 @@ def _year_from_row(row: dict[str, Any]) -> int | None:
         except ValueError:
             pass
     return None
+
+
+def _field_name_is_disallowed(name: str) -> bool:
+    low = (name or "").strip().lower().replace("_", "")
+    return any(tok in low for tok in _DISALLOWED_FIELD_TOKENS)
+
+
+def _mapped_num(row: dict[str, Any] | None, metric: str) -> float | None:
+    """
+    严格字段白名单读取：每个指标仅允许一个字段名。
+    包含 NonGaap/Adjusted/Normalized 的字段名会被拒绝。
+    """
+    if not isinstance(row, dict):
+        return None
+    field = FIELD_MAP.get(metric)
+    if not field:
+        return None
+    if _field_name_is_disallowed(field):
+        return None
+    return _num(row.get(field))
 
 
 def _normalize_margin_ratio(raw: float | None) -> float | None:
@@ -144,40 +173,29 @@ def _index_by_year(rows: list[dict[str, Any]]) -> dict[int, dict[str, Any]]:
 
 
 def _ebitda(inc: dict[str, Any], cf: dict[str, Any] | None) -> float | None:
-    e = _num(inc.get("ebitda"))
-    if e is not None:
-        return e
-    op = _num(inc.get("operatingIncome"))
-    if op is None or cf is None:
-        return None
-    da = _num(cf.get("depreciationAndAmortization"))
-    if da is None:
-        da = _num(cf.get("depreciationDepletionAndAmortization"))
-    if da is None:
-        return None
-    return op + da
+    _ = cf  # keep signature for existing call sites
+    return _mapped_num(inc, "ebitda")
 
 
 def _gross_margin(
     inc: dict[str, Any], metrics: dict[str, Any] | None
 ) -> float | None:
-    rev = _num(inc.get("revenue"))
-    gp = _num(inc.get("grossProfit"))
+    _ = metrics  # strict mode: do not backfill from ratio fields
+    rev = _mapped_num(inc, "revenue")
+    gp = _mapped_num(inc, "gross_profit")
+    cost = _num(inc.get("costOfRevenue"))
     if rev is not None and rev != 0 and gp is not None:
-        return gp / rev
-    if metrics:
-        m = _num(
-            metrics.get("grossProfitMargin")
-            or metrics.get("grossProfitMarginRatio")
-        )
-        return _normalize_margin_ratio(m)
+        gm = gp / rev
+        # 合理性检查：若costOfRevenue极低（<2%收入），FMP可能错误分类科目
+        # 此时gross margin不可信，返回None
+        if cost is not None and cost / rev < 0.02 and gm > 0.95:
+            return None
+        return gm
     return None
 
 
 def _capex(cf: dict[str, Any] | None) -> float | None:
-    if not cf:
-        return None
-    raw = _num(cf.get("capitalExpenditure"))
+    raw = _mapped_num(cf, "capex")
     if raw is None:
         return None
     return abs(raw)
@@ -251,11 +269,12 @@ def get_financials(ticker: str, years: int = 3) -> list[AnnualFinancials]:
         bal = by_b.get(y)
         met = by_m.get(y)
 
-        revenue = _num(inc.get("revenue"))
+        revenue = _mapped_num(inc, "revenue")
         ebitda = _ebitda(inc, cf)
         gross_margin = _gross_margin(inc, met)
         capex = _capex(cf)
         nd_eq = _net_debt_to_equity(bal, met)
+        net_income = _mapped_num(inc, "net_income")
 
         result.append(
             AnnualFinancials(
@@ -265,10 +284,136 @@ def get_financials(ticker: str, years: int = 3) -> list[AnnualFinancials]:
                 capex=capex,
                 gross_margin=gross_margin,
                 net_debt_to_equity=nd_eq,
+                net_income=net_income,
             )
         )
 
     return result
+
+
+def get_income_statement_year_fields(ticker: str, year: int) -> dict[str, float | None]:
+    """
+    读取指定财年利润表关键字段（白名单）供双源核验使用。
+    返回键：revenue / gross_profit / net_income / ebitda。
+    """
+    sym = (ticker or "").strip().upper()
+    if not sym or not _api_key():
+        return {
+            "revenue": None,
+            "gross_profit": None,
+            "net_income": None,
+            "ebitda": None,
+        }
+    try:
+        y = int(year)
+    except (TypeError, ValueError):
+        return {
+            "revenue": None,
+            "gross_profit": None,
+            "net_income": None,
+            "ebitda": None,
+        }
+
+    rows = _fetch_statement("income-statement", sym, 6)
+    by_i = _index_by_year(rows)
+    inc = by_i.get(y)
+    if not inc:
+        return {
+            "revenue": None,
+            "gross_profit": None,
+            "net_income": None,
+            "ebitda": None,
+        }
+    return {
+        "revenue": _mapped_num(inc, "revenue"),
+        "gross_profit": _mapped_num(inc, "gross_profit"),
+        "net_income": _mapped_num(inc, "net_income"),
+        "ebitda": _mapped_num(inc, "ebitda"),
+    }
+
+
+def get_quarterly_financials(ticker: str, quarters: int = 8) -> list["QuarterlyFinancials"]:
+    """
+    拉取最近N个季度的财务数据。
+    来源：income-statement?period=quarter + cash-flow-statement?period=quarter
+    返回按季度降序排列的 QuarterlyFinancials 列表。
+    """
+    from research_automation.models.financial import QuarterlyFinancials
+
+    sym = (ticker or "").strip().upper()
+    if not sym or not _api_key():
+        return []
+
+    lim = quarters + 2
+
+    def _fetch_q(endpoint: str) -> list[dict]:
+        url = f"{BASE_URL}/{endpoint}"
+        params = {
+            "symbol": sym,
+            "period": "quarter",
+            "limit": lim,
+            "apikey": _api_key(),
+        }
+        try:
+            resp = requests.get(
+                url,
+                params=params,
+                headers=_REQUEST_HEADERS,
+                timeout=15,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return data if isinstance(data, list) else []
+        except Exception:
+            logger.warning("FMP季度数据拉取失败 ticker=%s endpoint=%s", sym, endpoint)
+            return []
+
+    income_rows = _fetch_q("income-statement")
+    cash_rows = _fetch_q("cash-flow-statement")
+
+    # 用date做索引对齐
+    cash_by_date = {r.get("date"): r for r in cash_rows if r.get("date")}
+
+    result: list[QuarterlyFinancials] = []
+    for inc in income_rows[:quarters]:
+        date = inc.get("date", "")
+        year = int(inc.get("fiscalYear") or date[:4] or 0)
+        period = str(inc.get("period") or "")
+        if not period or not year:
+            continue
+
+        quarter_label = f"{year}{period}"  # "2024Q1"
+
+        revenue = _mapped_num(inc, "revenue")
+        gross_profit = _mapped_num(inc, "gross_profit")
+        gross_margin = (
+            (gross_profit / revenue)
+            if (revenue and gross_profit and revenue != 0)
+            else None
+        )
+        net_income = _mapped_num(inc, "net_income")
+        ebitda = _mapped_num(inc, "ebitda")
+
+        cf = cash_by_date.get(date, {})
+        capex = _mapped_num(cf, "capex")
+
+        result.append(
+            QuarterlyFinancials(
+                ticker=sym,
+                year=year,
+                period=period,
+                quarter_label=quarter_label,
+                date=date,
+                revenue=revenue,
+                gross_profit=gross_profit,
+                gross_margin=gross_margin,
+                net_income=net_income,
+                ebitda=ebitda,
+                capex=capex,
+            )
+        )
+
+    return sorted(result, key=lambda r: r.date)  # 升序，方便画图
 
 
 class FMPClient:
@@ -278,12 +423,61 @@ class FMPClient:
         return get_financials(ticker, years=years)
 
 
+_SEGMENT_BAD_KEYWORDS: tuple[str, ...] = (
+    "advertising",
+    "credit card",
+    "other revenue",
+    "other product",
+    "profit sharing",
+)
+
+
+def _segment_name_is_bad_product_line(name: str) -> bool:
+    """非产品线 / 杂项关键词过滤（大小写不敏感）。"""
+    n = (name or "").strip().lower()
+    if not n:
+        return True
+    if n in ("other", "others"):
+        return True
+    return any(kw in n for kw in _SEGMENT_BAD_KEYWORDS)
+
+
+def _segment_names_substring_similar(a: str, b: str, *, min_shorter: int = 4) -> bool:
+    """一名称是否为另一名称的子串且较短名足够长，用于去重相似分部。"""
+    a = (a or "").strip().lower()
+    b = (b or "").strip().lower()
+    if not a or not b or a == b:
+        return False
+    shorter, longer = (a, b) if len(a) <= len(b) else (b, a)
+    if len(shorter) < min_shorter:
+        return False
+    return shorter in longer
+
+
+def _dedupe_substring_segments(rows: list[tuple[str, float]]) -> list[tuple[str, float]]:
+    """子串相似时只保留 absolute 较大者（按金额降序扫描）。"""
+    if len(rows) <= 1:
+        return rows
+    sorted_rows = sorted(rows, key=lambda x: -x[1])
+    kept: list[tuple[str, float]] = []
+    for name, amt in sorted_rows:
+        conflict = False
+        for kn, _ in kept:
+            if _segment_names_substring_similar(name, kn):
+                conflict = True
+                break
+        if not conflict:
+            kept.append((name, amt))
+    return kept
+
+
 def get_segment_revenue(ticker: str, year: int) -> list[dict[str, Any]] | None:
     """
     获取公司指定财年的产品/业务线营收拆分（FMP stable ``revenue-product-segmentation``）。
 
     返回 ``[{"segment": "iPhone", "percentage": 52.3, "absolute": 2e10}, ...]``（``percentage`` 为占当期
     披露分部营收合计的百分比）；无密钥、HTTP 非 200、无对应财年或分部数据时返回 ``None``。
+    清洗后若仅剩一条且名称含 segment/reportable/total 等占位关键词，返回空列表 ``[]``（无有效拆分）。
     """
     key = _api_key()
     if not key:
@@ -376,13 +570,20 @@ def get_segment_revenue(ticker: str, year: int) -> list[dict[str, Any]] | None:
     if len(absolutes) < 1:
         return None
 
-    total = sum(a for _, a in absolutes)
+    cleaned = [(n, a) for n, a in absolutes if not _segment_name_is_bad_product_line(n)]
+    if not cleaned:
+        return None
+    cleaned = _dedupe_substring_segments(cleaned)
+    if not cleaned:
+        return None
+
+    total = sum(a for _, a in cleaned)
     if total <= 0:
         return None
 
     out: list[dict[str, Any]] = []
-    for name, amt in sorted(absolutes, key=lambda x: -x[1]):
-        pct = round(amt / total * 100.0, 2)
+    for name, amt in sorted(cleaned, key=lambda x: -x[1]):
+        pct = round(amt / total * 100.0, 1)
         out.append(
             {
                 "segment": name,
@@ -390,7 +591,86 @@ def get_segment_revenue(ticker: str, year: int) -> list[dict[str, Any]] | None:
                 "absolute": amt,
             }
         )
+    # 仅剩一条时的两种无效情形：
+    # 1. 名称含占位关键词（segment/total等）
+    # 2. 占比>=98%（FMP只返回了一个大类，非真实业务线拆分，如JLL只返回LaSalle 100%）
+    if len(out) == 1:
+        only_name = (str(out[0].get("segment") or "")).strip().lower()
+        _pseudo = (
+            "segment",
+            "reportable",
+            "total",
+            "consolidated",
+            "overall",
+        )
+        if any(kw in only_name for kw in _pseudo):
+            return []
+        if out[0].get("percentage", 0) >= 98.0:
+            logger.debug(
+                "get_segment_revenue: 单一分部占比%.1f%%，判定为无有效分部拆分"
+                " ticker=%s year=%s segment=%s",
+                out[0].get("percentage", 0),
+                sym,
+                y,
+                out[0].get("segment", ""),
+            )
+            return []
     return out
+
+
+def _normalize_revenue_label(s: str) -> str:
+    """用于比对地理分部与产品线名称是否实为同一套披露。"""
+    t = (s or "").strip().lower()
+    t = re.sub(r"[^\w\s&]", " ", t)
+    t = re.sub(r"\s+", " ", t).strip()
+    return t
+
+
+def _region_label_looks_like_product_line(name: str) -> bool:
+    """明显为业务线/产品分部用语，不应当地理收入展示（如 UPS 的 Package / Supply Chain）。"""
+    if not (name or "").strip():
+        return False
+    low = name.strip().lower()
+    if "supply chain" in low:
+        return True
+    if re.search(r"\bfreight\b", low):
+        return True
+    if "package" in low and any(
+        x in low for x in ("domestic", "international", "u.s.", "u.s ", " us ")
+    ):
+        return True
+    if "domestic package" in low or "international package" in low:
+        return True
+    return False
+
+
+def _geographic_rows_likely_duplicate_product_segments(
+    sym: str,
+    fiscal_year: int,
+    geo_rows: list[dict[str, Any]],
+) -> bool:
+    """FMP geographic 接口有时返回与 revenue-product-segmentation 相同的键，非真正地理拆分。"""
+    if len(geo_rows) < 2:
+        return False
+    geo_norms = {_normalize_revenue_label(str(r.get("region") or "")) for r in geo_rows}
+    geo_norms.discard("")
+    if len(geo_norms) < 2:
+        return False
+    seg_rows = get_segment_revenue(sym, fiscal_year)
+    if not seg_rows:
+        return False
+    seg_norms = {
+        _normalize_revenue_label(str(r.get("segment") or "")) for r in seg_rows
+    }
+    seg_norms.discard("")
+    if not seg_norms:
+        return False
+    inter = geo_norms & seg_norms
+    union = geo_norms | seg_norms
+    if not union:
+        return False
+    jacc = len(inter) / len(union)
+    return jacc >= 0.85 or geo_norms == seg_norms
 
 
 def get_geographic_revenue(ticker: str, year: int) -> list[dict[str, Any]] | None:
@@ -482,10 +762,48 @@ def get_geographic_revenue(ticker: str, year: int) -> list[dict[str, Any]] | Non
     if total <= 0:
         return None
 
-    return [
+    try:
+        fiscal_year_row = int(target.get("fiscalYear") or y)
+    except (TypeError, ValueError):
+        fiscal_year_row = y
+
+    out: list[dict[str, Any]] = [
         {"region": name, "percentage": round(amt / total * 100.0, 2), "absolute": amt}
         for name, amt in sorted(absolutes, key=lambda x: -x[1])
     ]
+
+    # FMP 地理接口偶发混入业务线名称（如 UPS 的 Supply Chain & Freight），剔除后按剩余绝对额重算占比
+    filtered = [
+        r
+        for r in out
+        if not _region_label_looks_like_product_line(str(r.get("region") or ""))
+    ]
+    if not filtered:
+        logger.debug(
+            "get_geographic_revenue: 去除业务线特征地区名后无剩余 ticker=%s fy=%s",
+            sym,
+            fiscal_year_row,
+        )
+        return None
+    if len(filtered) < len(out):
+        total_f = sum(float(r["absolute"]) for r in filtered)
+        if total_f <= 0:
+            return None
+        for r in filtered:
+            r["percentage"] = round(float(r["absolute"]) / total_f * 100.0, 2)
+        out = filtered
+    else:
+        out = filtered
+
+    if _geographic_rows_likely_duplicate_product_segments(sym, fiscal_year_row, out):
+        logger.debug(
+            "get_geographic_revenue: 与产品线分部名称高度重合，视为非地理拆分 ticker=%s fy=%s",
+            sym,
+            fiscal_year_row,
+        )
+        return None
+
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -960,7 +1278,7 @@ def get_quarterly_financials(ticker: str, quarters: int = 6) -> list[dict[str, A
         cf = cf_by_date.get(d)
         revenue = _num(inc.get("revenue"))
         gp = _num(inc.get("grossProfit"))
-        gross_margin = (gp / revenue) if (revenue and gp is not None) else None
+        gross_margin = _gross_margin(inc, None)
         ebitda = _ebitda(inc, cf)
         capex = _capex(cf)
         raw_records.append(

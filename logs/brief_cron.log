@@ -1,0 +1,93 @@
+2026-04-21 12:05:09,470 INFO scheduled_brief: === 每日简报定时任务启动 纽约时间=2026-04-21 12:05 EDT ===
+2026-04-21 12:05:10,292 INFO scheduled_brief: 共 3 个 sector：['AI_Job_Replacement', 'Natural_Gas', 'Technology']
+2026-04-21 12:05:10,292 INFO scheduled_brief: 生成简报 sector=AI_Job_Replacement tickers=19 个
+2026-04-21 12:05:26,402 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-21 12:05:42,428 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-21 12:05:52,025 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-21 12:06:07,180 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-21 12:06:07,198 INFO scheduled_brief: sector=AI_Job_Replacement 完成，简报长度=7574 字符
+2026-04-21 12:06:07,198 INFO scheduled_brief: 生成简报 sector=Natural_Gas tickers=12 个
+2026-04-21 12:06:24,223 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-21 12:06:35,047 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-21 12:06:44,115 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-21 12:06:53,423 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-21 12:06:53,436 INFO scheduled_brief: sector=Natural_Gas 完成，简报长度=6105 字符
+2026-04-21 12:06:53,436 INFO scheduled_brief: 生成简报 sector=Technology tickers=5 个
+2026-04-21 12:07:09,550 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-21 12:07:23,247 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-21 12:07:32,770 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-21 12:07:44,464 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-21 12:07:44,491 INFO scheduled_brief: sector=Technology 完成，简报长度=11694 字符
+2026-04-21 12:07:44,499 INFO scheduled_brief: === 定时任务完成 成功=3 失败=0 ===
+2026-04-22 12:05:01,939 INFO scheduled_brief: === 每日简报定时任务启动 纽约时间=2026-04-22 12:05 EDT ===
+2026-04-22 12:05:02,388 INFO scheduled_brief: 共 3 个 sector：['AI_Job_Replacement', 'Natural_Gas', 'Technology']
+2026-04-22 12:05:02,388 INFO scheduled_brief: 生成简报 sector=AI_Job_Replacement tickers=19 个
+2026-04-22 12:05:18,792 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-22 12:05:31,793 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-22 12:05:37,630 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-22 12:05:55,096 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-22 12:05:55,119 INFO scheduled_brief: sector=AI_Job_Replacement 完成，简报长度=9712 字符
+2026-04-22 12:05:55,119 INFO scheduled_brief: 生成简报 sector=Natural_Gas tickers=12 个
+2026-04-22 12:06:11,295 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-22 12:06:33,574 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-22 12:06:40,260 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-22 12:06:50,233 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-22 12:06:50,254 INFO scheduled_brief: sector=Natural_Gas 完成，简报长度=6723 字符
+2026-04-22 12:06:50,255 INFO scheduled_brief: 生成简报 sector=Technology tickers=5 个
+2026-04-22 12:07:07,561 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-22 12:07:26,192 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-22 12:07:34,165 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-22 12:07:48,706 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-22 12:07:48,725 INFO scheduled_brief: sector=Technology 完成，简报长度=12276 字符
+2026-04-22 12:07:48,726 INFO scheduled_brief: === 定时任务完成 成功=3 失败=0 ===
+2026-04-23 12:05:00,439 INFO scheduled_brief: === 每日简报定时任务启动 纽约时间=2026-04-23 12:05 EDT ===
+2026-04-23 12:05:01,069 INFO scheduled_brief: 共 3 个 sector：['AI_Job_Replacement', 'Natural_Gas', 'Technology']
+2026-04-23 12:05:01,070 INFO scheduled_brief: 生成简报 sector=AI_Job_Replacement tickers=19 个
+2026-04-23 12:05:21,256 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-23 12:05:35,455 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-23 12:05:45,434 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-23 12:06:06,830 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-23 12:06:06,882 INFO scheduled_brief: sector=AI_Job_Replacement 完成，简报长度=11459 字符
+2026-04-23 12:06:06,882 INFO scheduled_brief: 生成简报 sector=Natural_Gas tickers=12 个
+2026-04-23 12:06:26,228 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-23 12:06:35,359 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-23 12:06:46,198 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-23 12:06:57,637 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-23 12:06:57,658 INFO scheduled_brief: sector=Natural_Gas 完成，简报长度=7137 字符
+2026-04-23 12:06:57,658 INFO scheduled_brief: 生成简报 sector=Technology tickers=5 个
+2026-04-23 12:07:14,454 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-23 12:07:28,580 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-23 12:07:41,665 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-23 12:07:55,125 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-23 12:07:55,140 INFO scheduled_brief: sector=Technology 完成，简报长度=11063 字符
+2026-04-23 12:07:55,141 INFO scheduled_brief: === 定时任务完成 成功=3 失败=0 ===
+Fatal Python error: init_import_site: Failed to import the site module
+Python runtime state: initialized
+Traceback (most recent call last):
+  File "<frozen importlib._bootstrap>", line 1360, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1331, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 935, in _load_unlocked
+  File "<frozen importlib._bootstrap>", line 1176, in exec_module
+  File "<frozen site>", line 624, in <module>
+  File "<frozen site>", line 607, in main
+  File "<frozen site>", line 526, in venv
+OSError: [Errno 11] Resource deadlock avoided
+2026-04-27 12:05:00,661 INFO scheduled_brief: === 每日简报定时任务启动 纽约时间=2026-04-27 12:05 EDT ===
+2026-04-27 12:05:01,045 INFO scheduled_brief: 共 3 个 sector：['AI_Job_Replacement', 'Natural_Gas', 'Technology']
+2026-04-27 12:05:01,045 INFO scheduled_brief: 生成简报 sector=AI_Job_Replacement tickers=16 个
+2026-04-27 12:05:19,497 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-27 12:05:32,866 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-27 12:05:41,786 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-27 12:05:52,007 INFO scheduled_brief: sector=AI_Job_Replacement 完成，简报长度=4902 字符
+2026-04-27 12:05:52,007 INFO scheduled_brief: 生成简报 sector=Natural_Gas tickers=12 个
+2026-04-27 12:06:10,273 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-27 12:06:19,225 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-27 12:06:27,789 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-27 12:06:37,236 INFO scheduled_brief: sector=Natural_Gas 完成，简报长度=4442 字符
+2026-04-27 12:06:37,236 INFO scheduled_brief: 生成简报 sector=Technology tickers=5 个
+2026-04-27 12:06:54,365 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-27 12:07:09,723 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-27 12:07:18,372 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-27 12:07:37,843 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-27 12:07:37,893 INFO scheduled_brief: sector=Technology 完成，简报长度=8634 字符
+2026-04-27 12:07:37,900 INFO scheduled_brief: === 定时任务完成 成功=3 失败=0 ===

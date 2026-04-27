@@ -1,0 +1,1113 @@
+# 行业报告（六步结构）：AI_Job_Replacement
+**生成时间**：2026-04-20 06:22 UTC
+**新闻窗口**：最近 7 个 UTC 日历日
+
+## 📋 执行摘要
+
+### 📊 财务快照
+> 数据来源：FMP Annual Financials | 评判标准：最新财年Revenue YoY增速中位数及分布
+
+本sector Revenue YoY增速中位数为+7.0%，整体增长温和但分化明显。增速领先者包括BAH（+12.4%）、CTSH（+7.4%）、ACN（+7.4%），均受益于AI服务需求扩张；而UPS（-2.5%）、TGT（-1.7%）呈现收入收缩，宏观消费压力显著。Gross Margin层面，EL以73.9%、BAH以54.8%居前，AVY（28.8%）、CTSH（33.7%）则处于区间低端，sector中位Gross Margin约35.9%，盈利能力结构性分化持续。
+
+---
+
+### 🔑 本季核心主题
+> 数据来源：Earning Call 逐字稿（FMP/SEC EDGAR）| 评判标准：跨3家以上公司出现的共同表述
+
+**主题一：劳动力重组加速，员工成本削减成为战略共识**
+AVY披露2025年重组费用4,700万美元，其中薪酬相关裁员成本4,320万美元（占比约92%），全年实现超6,000万美元税前节省；EL累计确认PRGP重组费用6.97亿美元，主要为员工相关成本，并以"非消费者端费用削减3%、消费者端投资增加4%"的双轨逻辑推进；CTSH大型交易TCV同比增长近50%，核心叙事之一即帮助客户以AI重构劳动力密集型流程。
+
+**主题二：AI货币化从承诺向实收转化，进展出现明显分化**
+IBM AI预订总额累计超50亿美元，watsonx形成约5-6倍收入乘数效应；ZM的AI Companion月活跃用户环比增长近40%，Revenue Accelerator授权数同比增长72%；CTSH签署28个大型AI-led交易，TCV同比增长近50%。
+
+---
+
+### ⚡ 重要事件
+> 数据来源：Earning Call逐字稿 + Benzinga公司新闻
+
+1. **[CTSH]** 收购3Cloud（最大独立Microsoft Azure服务商之一），并扩大与微软多年战略合作协议，联合构建行业级agentic AI解决方案
+2. **[AVY]** 以约4.02亿美元完成对Taylor Adhesives战略收购，同期向股东返还约8.61亿美元现金
+3. **[EL]** PRGP重组累计费用达6.
+
+---
+
+## 个股快速扫描（最新财年）
+
+| Ticker | Revenue | YoY | Gross Margin | EBITDA | Net Debt/Eq | 本周关键信号 |
+|--------|---------|-----|--------------|--------|-------------|------------|
+| ACN | $69.7B | +7.4% | 31.9% | $12.9B | -0.1x | What's Going On With Accenture… |
+| AVY | $8.9B | +1.1% | 28.8% | $1.3B | 1.6x |  |
+| BAH | $12.0B | +12.4% | 54.8% | $1.6B | 3.3x |  |
+| BT/A LN | — | — | — | — | — | — |
+| CTSH | $21.1B | +7.0% | 33.7% | $4.2B | -0.0x |  |
+| DG | $42.7B | +5.2% | 30.7% | $3.2B | 1.7x | Dollar General Plans To Launch… |
+| DHL GY | — | — | — | — | — | — |
+| EL | $14.3B | -8.5% | 73.9% | $193M | 1.7x |  |
+| FRE GY | — | — | — | — | — | — |
+| HCA | $75.6B | +7.1% | 41.5% | $15.6B | -8.2x |  |
+| IBM | $67.5B | +7.6% | 59.5% | $17.3B | 1.6x | IBM Introduces New Cybersecuri… |
+| JLL | $26.1B | +11.4% | — | $1.3B | 0.4x |  |
+| KBX GY | — | — | — | — | — | — |
+| MDB | $2.5B | +22.8% | 71.7% | $-29M | -0.8x |  |
+| PPG | $15.9B | +0.2% | 38.0% | $2.8B | -1.5x | PPG Industries Announces Globa… |
+| RTO | $6.9B | +27.2% | 13.7% | $1.5B | 0.7x |  |
+| TGT | $104.8B | -1.7% | 27.9% | $8.0B | 0.0x |  |
+| UPS | $88.6B | -2.5% | 18.5% | $12.2B | 1.6x |  |
+| ZM | $4.9B | +4.4% | 77.0% | $2.6B | -0.8x | Why Is Zoom Stock Surging On W… |
+
+*数据来源：FMP Annual Financials（最新财年）。本周关键信号来自 Benzinga。*
+
+## Step 2｜业务占比（产品线 + 地理收入）
+
+> **数据来源**：FMP Revenue Segmentation | **覆盖**：13/19 家公司 | **合计收入**：$445.4B
+
+**板块收入结构（产品线 Top 5，按绝对收入排序）：**
+
+- Managed Care And Other Insurers：7.8%（$35.0B）
+- Consumables：7.5%（$33.4B）
+- Software：6.1%（$27.1B）
+- Food and Beverage：5.3%（$23.8B）
+- Consulting：4.6%（$20.7B）
+
+**板块地理收入分布（Top 5）：**
+
+- UNITED STATES：25.2%（$89.0B）
+- North America：14.3%（$50.3B）
+- Americas：11.9%（$41.9B）
+- Europe：7.8%（$27.5B）
+- E M E A：7.3%（$25.6B）
+
+---
+
+**以下为各公司详情：**
+
+### ACN — Accenture
+
+**财年2024 revenue breakdown**（总计 $64.90B）：
+
+| 业务线 | 占比 | 收入 |
+|--------|------|------|
+| Products | 30.1% | $19.55B |
+| Health & Public Service | 21.3% | $13.84B |
+| Financial Services | 17.9% | $11.61B |
+| Communications, Media & Technology | 16.7% | $10.84B |
+| Resources | 13.9% | $9.05B |
+
+**地理收入拆分（FY2024）：**
+
+| 地区 | 占比 | 收入 |
+|------|------|------|
+| North America | 47.2% | $30.30B |
+| Europe | 33.2% | $21.29B |
+| Growth Markets | 19.6% | $12.53B |
+
+### AVY — Avery Dennison
+
+**财年2024 revenue breakdown**（总计 $8.76B）：
+
+| 业务线 | 占比 | 收入 |
+|--------|------|------|
+| Label And Graphic Materials Segment | 68.7% | $6.01B |
+| Retail Branding And Information Solutions Segment | 31.3% | $2.74B |
+
+**地理收入拆分（FY2024）：**
+
+| 地区 | 占比 | 收入 |
+|------|------|------|
+| Asia | 31.6% | $2.76B |
+| UNITED STATES | 29.9% | $2.61B |
+| Europe | 27.6% | $2.42B |
+| Latin America | 6.8% | $0.60B |
+| Other International | 4.1% | $0.36B |
+
+### BAH — Booz Allen Hamilton
+
+**财年2024 revenue breakdown**（总计 $10.66B）：
+
+| 业务线 | 占比 | 收入 |
+|--------|------|------|
+| Cost Reimbursable Contract | 55.1% | $5.87B |
+| Time-and-materials Contract | 23.7% | $2.53B |
+| Fixed-price Contract | 21.2% | $2.26B |
+
+**地理收入拆分（FY2024）：**
+
+| 地区 | 占比 | 收入 |
+|------|------|------|
+| UNITED STATES | 100.0% | $10.49B |
+
+### BT/A LN — BT Group
+
+*暂无revenue breakdown数据（FMP未收录或非美股）*
+
+### CTSH — Cognizant Technology Solutions
+
+**财年2024 revenue breakdown**（总计 $19.74B）：
+
+| 业务线 | 占比 | 收入 |
+|--------|------|------|
+| Healthcare Segment | 30.1% | $5.93B |
+| Financial Services | 29.1% | $5.75B |
+| Products and Resources | 24.2% | $4.78B |
+| Communication, Media and Technology | 16.6% | $3.27B |
+
+**地理收入拆分（FY2024）：**
+
+| 地区 | 占比 | 收入 |
+|------|------|------|
+| North America | 74.5% | $14.70B |
+| Europe | 19.1% | $3.76B |
+| Other Regions | 6.5% | $1.28B |
+
+### DG — Dollar General
+
+**财年2024 revenue breakdown**（总计 $40.61B）：
+
+| 业务线 | 占比 | 收入 |
+|--------|------|------|
+| Consumables | 82.2% | $33.37B |
+| Seasonal | 10.0% | $4.07B |
+| Home Products | 5.1% | $2.07B |
+| Apparel | 2.7% | $1.09B |
+
+### DHL GY — Deutsche Post DHL
+
+*暂无revenue breakdown数据（FMP未收录或非美股）*
+
+### EL — Estee Lauder
+
+**财年2024 revenue breakdown**（总计 $15.49B）：
+
+| 业务线 | 占比 | 收入 |
+|--------|------|------|
+| Skin Care | 51.0% | $7.91B |
+| Makeup | 28.9% | $4.47B |
+| Fragrance | 16.1% | $2.49B |
+| Hair Care | 4.1% | $0.63B |
+
+**地理收入拆分（FY2024）：**
+
+| 地区 | 占比 | 收入 |
+|------|------|------|
+| E M E A | 39.3% | $6.14B |
+| Asia Pacific | 31.3% | $4.89B |
+| UNITED STATES | 29.4% | $4.58B |
+
+### FRE GY — Fresenius SE
+
+*暂无revenue breakdown数据（FMP未收录或非美股）*
+
+### HCA — HCA Healthcare
+
+**财年2024 revenue breakdown**（总计 $68.06B）：
+
+| 业务线 | 占比 | 收入 |
+|--------|------|------|
+| Managed Care And Other Insurers | 51.4% | $34.95B |
+| Managed Medicare | 17.6% | $11.99B |
+| Medicare | 15.8% | $10.78B |
+| Medicaid | 6.9% | $4.68B |
+| Managed Medicaid | 5.8% | $3.98B |
+| International | 2.5% | $1.68B |
+
+**地理收入拆分（FY2024）：**
+
+| 地区 | 占比 | 收入 |
+|------|------|------|
+| American Group | 36.5% | $24.60B |
+| Atlantic Group | 34.4% | $23.17B |
+| National Group | 29.1% | $19.61B |
+
+### IBM — IBM
+
+**财年2024 revenue breakdown**（总计 $62.75B）：
+
+| 业务线 | 占比 | 收入 |
+|--------|------|------|
+| Software | 43.2% | $27.09B |
+| Consulting | 33.0% | $20.69B |
+| Infrastructure Services | 22.3% | $14.02B |
+| Financing | 1.1% | $0.71B |
+| Segment Reconciling Items | 0.4% | $0.24B |
+
+**地理收入拆分（FY2024）：**
+
+| 地区 | 占比 | 收入 |
+|------|------|------|
+| Americas | 49.8% | $31.27B |
+| E M E A | 31.0% | $19.43B |
+| Asia Pacific | 19.2% | $12.06B |
+
+### JLL — Jones Lang LaSalle
+
+**财年2024 revenue breakdown**（总计 $23.43B）：
+
+| 业务线 | 占比 | 收入 |
+|--------|------|------|
+| Work Dynamics | 69.1% | $16.20B |
+| Markets Advisory | 19.2% | $4.50B |
+| Capital Markets | 8.7% | $2.04B |
+| LaSalle Investment Management | 2.0% | $0.47B |
+| JLL Technologies | 1.0% | $0.23B |
+
+**地理收入拆分（FY2024）：**
+
+| 地区 | 占比 | 收入 |
+|------|------|------|
+| Americas | 62.4% | $6.38B |
+| Asia Pacific | 22.9% | $2.34B |
+| EMEA | 14.7% | $1.50B |
+
+### KBX GY — Knorr-Bremse
+
+*暂无revenue breakdown数据（FMP未收录或非美股）*
+
+### MDB — MongoDB
+
+**财年2024 revenue breakdown**（总计 $1.68B）：
+
+| 业务线 | 占比 | 收入 |
+|--------|------|------|
+| MongoDB Atlas Related | 65.7% | $1.11B |
+| Other Subscription | 31.0% | $0.52B |
+| Service | 3.3% | $0.06B |
+
+**地理收入拆分（FY2024）：**
+
+| 地区 | 占比 | 收入 |
+|------|------|------|
+| Americas | 60.4% | $1.02B |
+| EMEA | 27.9% | $0.47B |
+| Asia Pacific | 11.7% | $0.20B |
+
+### PPG — PPG Industries
+
+**财年2023 revenue breakdown**（总计 $18.25B）：
+
+| 业务线 | 占比 | 收入 |
+|--------|------|------|
+| Performance Coatings Segment | 61.2% | $11.16B |
+| Industrial Coatings Segment | 38.8% | $7.08B |
+
+**地理收入拆分（FY2023）：**
+
+| 地区 | 占比 | 收入 |
+|------|------|------|
+| North America | 41.0% | $7.49B |
+| EMEA | 30.8% | $5.62B |
+| Asia Pacific | 15.8% | $2.87B |
+| Latin America | 12.4% | $2.27B |
+
+### RTO — Rentokil Initial
+
+*暂无revenue breakdown数据（FMP未收录或非美股）*
+
+### TGT — Target Corporation
+
+**财年2024 revenue breakdown**（总计 $106.57B）：
+
+| 业务线 | 占比 | 收入 |
+|--------|------|------|
+| Food and Beverage | 22.4% | $23.83B |
+| Beauty and Household Essentials | 17.5% | $18.61B |
+| Home Furnishings and Decor | 15.7% | $16.70B |
+| Apparel and Accessories | 15.5% | $16.50B |
+| Hardlines | 14.8% | $15.78B |
+| Beauty | 12.4% | $13.17B |
+| Advertising Revenue | 0.6% | $0.65B |
+| Credit Card Profit Sharing | 0.5% | $0.58B |
+| Other, Other Revenue | 0.5% | $0.52B |
+| Other Product | 0.2% | $0.22B |
+
+**地理收入拆分（FY2024）：**
+
+| 地区 | 占比 | 收入 |
+|------|------|------|
+| UNITED STATES | 100.0% | $71.28B |
+
+### UPS — United Parcel Service
+
+*暂无revenue breakdown数据（FMP未收录或非美股）*
+
+### ZM — Zoom Video Communications
+
+**财年2023 revenue breakdown**（总计 $4.53B）：
+
+| 业务线 | 占比 | 收入 |
+|--------|------|------|
+| Unified Communications and Collaboration Platform | 100.0% | $4.53B |
+
+**地理收入拆分（FY2023）：**
+
+| 地区 | 占比 | 收入 |
+|------|------|------|
+| Americas | 71.3% | $3.23B |
+| EMEA | 16.1% | $0.73B |
+| Asia Pacific | 12.6% | $0.57B |
+
+## Step 3｜展望与战略重心
+
+> **数据来源**：各公司 10-K 及 Earning Call（SEC EDGAR / FMP）｜**评判标准**：至少2家公司共同提及的战略方向或行业判断
+
+# 板块整体展望总结
+
+---
+
+## 【行业判断】宏观经济逆风与需求疲软成为多行业共同压力
+
+**CTSH**、**MDB**、**PPG** 均明确指出宏观经济环境持续对收入增长或客户需求产生负面影响。PPG 预计2025年初欧洲及全球工业终端市场需求起步缓慢；MDB 预计短期内宏观经济逆风将继续压制 Atlas 应用增长率；CTSH 则指出国际贸易政策、地缘政治及宏观因素已影响并将继续影响客户服务需求。
+
+---
+
+## 【行业判断】消费者信心不足拖累零售与消费品板块需求
+
+**EL** 与 **TGT** 均反映消费者信心疲弱对业务构成实质压力。EL 指出中国消费者信心受压、北美消费者信心不足导致库存积压与渠道去库存；TGT 虽未明确点名消费者信心，但其资本支出规划侧重翻新而非大规模扩张，整体扩张节奏保守，与消费环境谨慎判断一致。
+
+---
+
+## 【战略方向】AI 能力投资成为科技与服务类企业共同战略优先项
+
+**CTSH** 与 **ZM** 均明确将 AI 能力建设列为核心战略投入。CTSH 计划对 AI 能力进行重大投资，以帮助客户转型为 AI 就绪的差异化企业；ZM 则计划推出 AI Companion 自定义附加组件、面向一线员工和临床医生的 AI 工作场景产品，预计2025年上半年正式上市。**ACN** 虽在本次摘录中未直接论述 AI，但其持续并购战略隐含对技术能力的持续资本投入。
+
+---
+
+## 【战略方向】成本效率与结构重组成为多家
+
+---
+
+**以下为各公司详情（点击展开）：**
+
+### ACN — Accenture
+
+**未来展望与指引：**
+
+公司拟在2026财年继续将运营产生现金流的大部分用于股票回购。最终回购股份数量可能因股价及其他市场条件、持续的资本分配规划、现金及债务余额水平、并购活动等其他现金需求、一般经济及/或业务状况以及董事会和管理层的判断等众多因素而有所不同。回购计划可能随时被加速、暂停、推迟或终止，且不另行通知。
+
+**行业判断（管理层视角）：** *原文未明确提及*
+
+### AVY — Avery Dennison
+
+**未来展望与指引：**
+
+[{'item': '净销售额预计增长，由Solutions Group和Materials Group两个可报告分部的销量增长驱动', 'modality': 'forward_looking', 'source_paragraph_ids': ['AVY_10K_2025_ProfileSections_para_7']}, {'item': '基于近期汇率，预计外币折算对全年净销售额和营业利润产生不利影响', 'modality': 'forward_looking', 'source_paragraph_ids': ['AVY_10K_2025_ProfileSections_para_7']}, {'item': '预计来自重组行动的增量节省（扣除过渡成本）', 'modality': 'forward_looking', 'source_paragraph_ids': ['AVY_10K_2025_ProfileSections_para_7']}, {'item': '预计全年有效税率在二十几个百分点中段范围', 'modality': 'forward_looking', 'source_paragraph_ids': ['AVY_10K_2025_ProfileSections_para_7']}]
+
+**行业判断（管理层视角）：**
+
+贸易紧张局势持续，美国拟对加拿大、墨西哥、中国等国商品加征关税，相关国已宣布反制措施；俄乌战争及以哈冲突带来地缘不确定性；通胀、原材料成本及汇率波动可能对业务造成不利影响。
+*原文依据：AVY_10K_2025_ProfileSections_para_16: 'Tensions remain in trade relations between the U.S. and certain other regions and countries, including Canada, Mexico, China, India and the European Union. The U.S. recently announced intentions to impose a significant tariff on certain goods from Canada and Mexico and a smaller tariff on certain goods from China.'*
+
+### BAH — Booz Allen Hamilton
+
+**未来展望与指引：**
+
+管理层表示，美国持续面临不确定且不断变化的政治、预算和监管环境，预计这种不确定性将持续。公司的业务表现受美国政府整体支出水平及其产品与服务与政府支出优先事项的契合程度影响。公司已经历、未来也可能继续经历部分合同受到影响、削减或取消的情况，以及在合同选项行使前发生价格调整和重新谈判的情况。此外，公司可能在未来继续面临客户要求制定提高服务效率的新方法，并与多个政府部门和机构就降低成本及其他潜在合同修改保持持续讨论。就税务事项而言，预计将在五年摊销期内逐年摊销研发成本，相关影响预计在第六年降至不重大金额。
+
+**行业判断（管理层视角）：**
+
+美国政治、预算及监管环境持续不确定，政府正审查各机构支出以符合新政府优先事项；政府承包商负面舆论明显增加，采购环境趋于迟缓，新合同授予、付款处理及安全许可审批均出现延迟。
+*原文依据：BAH_10K_2025_ProfileSections_para_14: 'The U.S. continues to face an uncertain and evolving political, budget and regulatory environment, and we expect this uncertainty will continue. Our business performance is affected by the overall level of U.S. government spending and the alignment of our offerings and capabilities with the spending priorities of the U.S. government.' and 'These reductions in personnel, along with the changing political and regulatory environment, has led to a slower procurement environment, with delays in the granting of new contract awards, delays in the processing of payments by government payment offices, as well as increased processing times for security clearances and other governmental consents, each of which could result in negative impacts to our business and financial performance.'*
+
+### BT/A LN — BT Group
+
+*（画像生成失败：无法获取 SEC 10-K 文本：未在 SEC company_tickers 中找到 ticker：BT/A LN）*
+
+### CTSH — Cognizant Technology Solutions
+
+**未来展望与指引：**
+
+公司预计客户将继续专注于转型为AI就绪、技术驱动、数据赋能、以客户为中心的差异化企业；预计客户将继续需求能够提升生产力和实现成本节约的服务与解决方案。公司预计客户将继续面临行业特定变化，包括数字技术演进、监管环境不确定性、行业整合与融合，以及国际贸易政策和其他宏观经济与地缘政治因素，这些因素已影响并可能继续影响客户对公司服务的需求。公司计划对AI能力进行重大投资，以满足客户需求并以灵活、安全、可扩展和负责任的方式利用AI价值。随着AI技术或其他自动化形式的演进，公司预计客户对其目前所提供的部分服务的需求可能减少，且获得有利定价或其他服务条款的能力可能降低。潜在税法及其他监管变化（包括可能的美国企业所得税改革及印度《2020年社会保障法典》等）可能影响公司未来业绩。公司预计若《2020年社会保障法典》按现行条款颁布，可能导致历史服务的离职后负债出现重大一次性增加，并将适度增加未来的就业和离职后福利成本。印度-毛里求斯所得税条约修订协议正在评估中，视其最终条款，可能提高公司有效所得税税率。Belcan收购预计将对2025年营业利润率产生适度的近期摊薄影响，主要由于整合相关费用及收购无形资产摊销。
+
+**行业判断（管理层视角）：**
+
+AI技术与服务市场竞争激烈、快速演进；客户面临数字技术演进、监管不确定性、行业整合及宏观/地缘政治等多重挑战，全球经济不确定性已影响且可能继续影响客户服务需求；可自由支配支出需求下降对多个业务板块造成负面影响。
+*原文依据：CTSH_10K_2025_ProfileSections_para_5: 'AI technologies and services are part of a highly competitive and rapidly evolving market.' and CTSH_10K_2025_ProfileSections_para_5: 'We believe clients will continue to contend with industry-specific changes driven by evolving digital technologies, uncertainty in the regulatory environment, industry consolidation and convergence as well as international trade policies and other macroeconomic and geopolitical factors, including the uncertainty related to the global economy, which has affected and may continue to affect their demand for our services.' and CTSH_10K_2025_ProfileSections_para_9: 'Reduced demand for discretionary work negatively impacted revenues across all segments.'*
+
+### DG — Dollar General
+
+**未来展望与指引：**
+
+管理层预计2025年促销环境将与2024年相似；预计2025年收缩损耗与货损仍将高于2023财年之前水平，但相信将取得改善进展。计划2025年新开约575家门店（另加墨西哥最多15家），通过Project Renovate全面改造约2,000家门店，通过Project Elevate部分改造2,250家门店，并迁址约45家门店，合计4,885个房地产项目。计划关闭96家Dollar General门店及45家pOpshelf门店，并将6家pOpshelf门店转换为Dollar General门店（于2025年第一季度执行）。预计2025年显著多数新开门店将采用8,500平方英尺格式。相信同日到家配送服务可在2025年大幅扩展至更多门店。预计将继续支付季度现金股息；2025年不计划回购股份。预计持续的通胀压力可能继续影响经营业绩。
+
+**行业判断（管理层视角）：**
+
+核心客户（低收入及固定收入群体）在当前宏观环境下持续承压，租金、医疗、能源及食品成本通胀压缩可支配支出，促销竞争环境在2024年下半年加剧，预计2025年维持类似促销水平；通胀及利率上升增加开店成本并拖累新店回报。
+*原文依据：DG_10K_2025_ProfileSections_para_38: 'Our customers continue to feel constrained in the current macroeconomic environment and to experience elevated expenses that generally comprise a large portion of their household budgets, such as rent, healthcare, energy and fuel prices, as well as cost inflation in frequently purchased household products (including food), which we expect will continue to pressure our customers' spending overall and particularly in our non-consumables categories. This pressure contributed to a heavier promotional environment in the second half of 2024 compared to the prior year, and we expect a promotional environment in 2025 similar to that in 2024.'*
+
+### DHL GY — Deutsche Post DHL
+
+*（画像生成失败：无法获取 SEC 10-K 文本：未在 SEC company_tickers 中找到 ticker：DHL GY）*
+
+### EL — Estee Lauder
+
+**未来展望与指引：** *原文未明确提及*
+
+**行业判断（管理层视角）：**
+
+亚洲旅游零售情绪持续低迷、中国消费者转化率下降；中国大陆整体零售环境具挑战性、消费者信心受压；北美部分品牌零售疲软，消费者信心不足导致库存积压与渠道去库存。
+*原文依据：EL_10K_2025_ProfileSections_para_5: 'The decrease in net sales from our travel retail business reflected ongoing subdued sentiment and lower conversion from Chinese consumers' / 'the overall challenging retail environment, including subdued consumer sentiment' / 'pressure from subdued consumer confidence and sentiment in the second half of fiscal 2025, which led to elevated inventory levels and destocking at certain retailers'*
+
+### FRE GY — Fresenius SE
+
+*（画像生成失败：无法获取 SEC 10-K 文本：未在 SEC company_tickers 中找到 ticker：FRE GY）*
+
+### HCA — HCA Healthcare
+
+**未来展望与指引：**
+
+计划资本支出预计约在50亿至52亿美元之间（2025年）。截至2024年12月31日，在建项目未来五年预计还需追加约47亿美元成本。公司预计将以内部产生资金及借款方式为资本支出提供资金。管理层认为，来自运营的现金流、高级担保信贷额度下的可用金额及预期的公开和私募债务市场融资渠道，将足以满足可预见未来的预期流动性需求。2025年1月，董事会授权100亿美元用于股票回购。董事会于2025年1月23日宣布每股0.72美元的季度股息，将于2025年3月31日支付。
+
+**行业判断（管理层视角）：** *原文未明确提及*
+
+### IBM — IBM
+
+**未来展望与指引：** *原文未明确提及*
+
+**行业判断（管理层视角）：** *原文未明确提及*
+
+### JLL — Jones Lang LaSalle
+
+**未来展望与指引：** *原文未明确提及*
+
+**行业判断（管理层视角）：**
+
+管理层表示，宏观经济趋势、地缘政治环境、全球及区域房地产市场以及金融与信贷市场对公司经营业绩及其波动性有重大影响，且预计将继续产生重大影响。
+*原文依据：JLL_10K_2025_ProfileSections_para_6: 'Our results of operations and the variability of these results are significantly influenced by (i) macroeconomic trends, (ii) geopolitical environment, (iii) global and regional real estate markets and (iv) financial and credit markets. These macroeconomic and other conditions have had, and we expect will continue to have, a significant impact on the variability of our results of operations.'*
+
+### KBX GY — Knorr-Bremse
+
+*（画像生成失败：无法获取 SEC 10-K 文本：未在 SEC company_tickers 中找到 ticker：KBX GY）*
+
+### MDB — MongoDB
+
+**未来展望与指引：**
+
+管理层预计将继续看到更高比例的MongoDB Atlas合同以基于使用量的月度后付费方式计费，而不要求预付承诺。管理层预计在短期内宏观经济逆风将继续对现有MongoDB Atlas应用的增长率产生不利影响，并预计宏观经济环境将继续对收入增长产生负面影响。管理层计划继续投资于销售与营销及客户成功人员和活动，以实现来自现有客户的额外收入增长。管理层计划继续投资于服务组织，认为其在加速客户实现平台价值方面发挥重要作用，有助于推动客户留存和扩张。管理层拟继续投资于工程能力和营销活动，以维持在开发者社区中的强势地位。管理层拟继续投资于产品产品，目标是扩展开发者数据平台的功能和采用度。
+
+**行业判断（管理层视角）：**
+
+全球数据管理软件市场2023年规模为940亿美元，预计2028年增至约1700亿美元，复合年增长率约13%。生成式AI及代码助手工具的兴起被认为将进一步推动该市场增长。
+*原文依据：MDB_10K_2025_ProfileSections_para_2: 'According to IDC, the worldwide Data Management Software market, was $94 billion in 2023 growing to approximately $170 billion in 2028. This represents a 13% compound annual growth rate. Over the last two years, a number of companies launched code assistant tools, which leverage generative AI to help developers write and test their code faster, thereby accelerating application development. We believe these developments in coding assistant technology will further benefit the data management software market.'*
+
+### PPG — PPG Industries
+
+**未来展望与指引：**
+
+管理层预计2025年初需求起步缓慢，欧洲及全球工业终端市场仍面临挑战。尽管如此，预计全年有机销售额可实现低个位数百分比增长。预计中国、印度和墨西哥需求将增长，航空航天涂料及防护和船舶涂料持续强劲，汽车修复涂料增长有望超越行业水平。基础设施支出动能增强预计将助力2025年交通解决方案业务。全球工业生产预计在第一季度仍将是逆风并维持低水平，其中亚太和拉丁美洲地区有所改善，但欧洲和美国仍较疲软。公司预计2025年原材料成本将小幅（低个位数百分比）上涨，主要源于已实施的关税政策。
+
+**行业判断（管理层视角）：**
+
+2024年工业宏观环境充满挑战，汽车OEM、工业涂料及欧洲建筑涂料需求下滑；航空航天涂料创历史销售记录；欧洲需求疲软影响最大；全球汽车OEM产量同比下降约1%。
+*原文依据：PPG_10K_2025_ProfileSections_para_5: 'Despite decreased sales due to lower industry demand in automotive OEM coatings, industrial coatings and architectural coatings in Europe, results were supported by record sales in aerospace coatings and growth in several other key technology-driven businesses.' and 'Global automotive OEM manufacturers' production decreased by about 1% versus 2023 due to lower demand and extended maintenance periods in the U.S. and Europe. ... Demand was soft in Europe with the largest impact on the automotive OEM coatings business and the architectural coatings business.'*
+
+### RTO — Rentokil Initial
+
+*（画像生成失败：无法获取 SEC 10-K 文本：未找到 2025 年前后可匹配的 10-K 申报（form=10-K）。）*
+
+### TGT — Target Corporation
+
+**未来展望与指引：**
+
+公司预计2025年资本支出约为40亿至50亿美元，重点投向门店资产（含新店及翻新门店）以及持续的供应链与技术项目投资。预计2025年新开约20家门店，并计划恢复较2024年更快的翻新节奏。公司不预计已颁布的OECD Pillar Two规则（将于2025年适用）对其2025年财务业绩产生重大影响。公司相信其流动性来源（包括经营现金流、信贷额度及资本市场渠道）在可预见的未来将继续足以满足合同义务、营运资金及资本支出需求、为预期扩张和战略举措提供资金、偿还到期债务、支付股息并执行股票回购计划。
+
+**行业判断（管理层视角）：**
+
+原文指出，宏观、竞争及消费者行为等因素的综合交互使进一步分析销售指标不可行；消费者持续向数字渠道迁移并寻求多种履单选项，影响了公司差异化方式。
+*原文依据：TGT_10K_2025_ProfileSections_para_19: 'The collective interaction of a broad array of macroeconomic, competitive, and consumer behavioral factors, as well as sales mix, and transfer of sales to new stores makes further analysis of sales metrics infeasible.' TGT_10K_2025_ProfileSections_para_194: 'Consumers continue to migrate to digital channels and seek out multiple fulfillment options, which has affected the ways we attempt to differentiate ourselves.'*
+
+### UPS — United Parcel Service
+
+**未来展望与指引：**
+
+（1）网络重组与Efficiency Reimagined计划：2025年1月30日，公司宣布网络重组计划，预计将导致设施整合与劳动力削减，以及端到端流程再设计（2025至2027年推进）。网络重组预计将导致2025年关闭最多10%的建筑、缩减车辆和飞机机队规模，并减少劳动力规模。Efficiency Reimagined举措预计自2025年起每年实现约10亿美元的节省。预计2025年将产生约3亿至4亿美元的相关费用，2026年和2027年将产生额外费用。（2）Transformation 2.0预计于2025年结束，预计剩余费用约9000万美元，主要与技术举措完工相关；技术投资预计将提升内外部报告质量，并预计于2025年开始实现收益。（3）Fit to Serve计划预计于2025年完成，预计剩余费用约4500万美元。（4）与最大客户（Amazon）的协议预计将使该客户的配送量于2026年6月前减少逾50%；公司正进行业务和运营调整，以匹配劳动力与业务量并消除沉没成本。（5）UPS SurePost产品自2025年1月1日起已内部化，以更好地控制为客户提供行业领先服务的能力。（6）2025年1月收购了Frigo-Trans及Biotech & Pharma Logistics，持续扩展医疗冷链物流能力。
+
+**行业判断（管理层视角）：**
+
+原文描述行业快速演变，对更快配送、货物可视化及其他服务需求持续增加；竞争者包括邮政、快递公司、电商及零售商，同时面临初创企业通过众包等灵活劳动力模式的新型竞争；新兴技术亦带来额外竞争来源。
+*原文依据：UPS_10K_2025_ProfileSections_para_196: 'Our industry continues to rapidly evolve, including demands for faster deliveries, increased visibility into shipments and development of other services. We expect to continue to face significant local, regional, national and international competition. Competitors include the U.S. and international postal services, various motor carriers, express companies, freight forwarders, air couriers, large transportation companies, e-commerce companies and other retailers that continue to make significant investments in their own technology and logistics capabilities, some of whom are currently our customers. We also face competition from start-ups and other smaller companies that combine technologies with flexible labor solutions such as crowdsourcing. New and emerging technologies are also creating additional sources of competition.'*
+
+### ZM — Zoom Video Communications
+
+**未来展望与指引：**
+
+管理层在ITEM_7_MD_AND_A中披露以下前瞻性内容：（1）计划近期推出数款新产品，包括Zoom Tasks、自定义AI Companion附加组件、Zoom Workplace for Frontline Workers及Zoom Workplace for Clinicians，这些产品预计于2025年上半年正式上市；（2）自定义AI Companion附加组件旨在通过整合来自多个来源（包括第三方应用）的数据来处理复杂任务；（3）Zoom Workplace for Frontline Workers为AI驱动的移动端解决方案，旨在提升一线员工的在岗通信、任务管理及洞察能力；（4）Zoom Workplace for Clinicians旨在自动化临床工作流程，利用医疗AI精简临床记录；（5）管理层表示，宏观经济环境对订阅需求的影响仍存在不确定性，多项因素（包括市场渗透率提升、竞争加剧及业务成熟化）可能继续影响增长率；（6）管理层表示将需要继续投入销售与营销资源以吸引新客户，并需要维持平台可靠性以支持现有客户扩展。
+
+**行业判断（管理层视角）：**
+
+宏观环境包括地缘政治冲突、关税与贸易紧张、通胀压力、利率波动及汇率波动，持续为统一通信与协作平台订阅需求带来不确定性，导致销售周期延长及IT预算审查趋严；同时面临市场渗透率提升、竞争加剧等挑战。
+*原文依据：ZM_10K_2025_ProfileSections_para_5: 'The macroeconomic environment including geopolitical conflicts, tariffs and trade tensions, inflationary pressures, interest rate fluctuations, and foreign currency exchange rate volatility continues to create uncertainty in demand for subscriptions to our unified communications and collaboration platform. These factors, along with responses by central banks and government policies, have placed pressure on consumer and business behavior, leading to elongated sales cycles and increased scrutiny of IT budgets among existing and potential customers.'*
+
+## Step 4｜Earning Call 内容
+
+**本sector关注项**：layoffs and headcount reduction, workforce restructuring, employees affected, AI replacing workers, automation replacing jobs, AI deployment and adoption, AI monetization progress, digital transformation investment, AI裁员态度与人员规划, AI替代方向与落地进展, 管理层指引变化（与上季度对比）, 宏观环境影响
+
+> **数据来源**：各公司 Earning Call 逐字稿（FMP / SEC EDGAR）｜**评判标准**：跨3家以上公司出现的共同表述，每条结论附具体数字
+
+# AI_Job_Replacement板块本季度Earning Call总结
+
+---
+
+## 一、跨公司共同趋势
+
+---
+
+**【趋势一：劳动力重组与裁员成本并行释放，多家公司将人员精简列为战略优先项】**
+
+本季度至少三家公司明确披露了与人员削减相关的重组成本或薪酬优化行动，且均将其定性为主动战略选择而非被动应对：
+
+- **AVY**：2025全年通过重组行动实现超6,000万美元税前节省，承担约4,700万美元税前重组费用，其中薪酬相关裁员成本4,320万美元（占重组费用总额约92%），资产减值费用400万美元。管理层明确将此定性为"积极的劳动力结构优化"。
+- **EL**：截至9月30日，PRGP（利润恢复与增长计划）累计确认重组费用6.97亿美元，主要构成为员工相关成本；同期非消费者端费用削减3%，同时将消费者端投资增加4%，体现"裁员+再投资"的双轨并行逻辑。
+- **CTSH**：过去12个月签署28个大型交易（TCV≥1亿美元），大型交易TCV同比增长近50%，其AI-led战略的核心叙事之一即为帮助客户以AI替代或重构现有劳动力密集型流程；公司自身员工超350,000人，管理层未披露裁员数字，但大型交易增长背后隐含客户端的人力替代诉求。
+
+**共同信号**：重组费用中员工相关成本占绝对主导地位，企业正在将AI与自动化投资带来的效率提升转化为实质性的人员结构调整，且该过程正在加速。
+
+---
+
+**【趋势二：AI货币化从"预订承诺"向"实际收入"转化，落地进展出现明显分化】**
+
+多家公司本季度均披露了AI相关的具体商业化数据，但货币化成熟度存在显著差异：
+
+- **IBM**：AI预订总额（inception to date，含软件约10亿美元、咨询超40亿美元）合计超过50亿美元；watsonx平台形成约5-6倍的乘数效应，即每1美元watsonx销售可带动5-6美元整体Software与Consulting收入，AI已成为咨询业务的核心增长杠杆。
+- **ZM**：AI Companion月活跃用户环比增长近40%，Zoom Revenue Accelerator授权数同比增长72%；Custom AI Companion已
+
+---
+
+**以下为各公司详情（点击展开）：**
+
+### ACN — Accenture
+
+*（逐字稿不可用：模型返回内容无法解析为 JSON，请稍后重试。）*
+
+### AVY — Avery Dennison
+
+**概括：**
+
+Avery Dennison（AVY）公布2025全年及第四季度业绩，全年净销售额达88.55亿美元，同比增长1.1%，调整后EPS为9.53美元，同比增长1%；第四季度净销售额22.71亿美元，同比增长3.9%，调整后EPS为2.45美元，同比增长2.9%。全年调整后EBITDA利润率维持在16.4%，调整后自由现金流超7亿美元（707.1百万美元）。2025年公司通过重组行动实现超6000万美元税前节省，并承担约4700万美元重组费用，显示持续推进成本优化。高价值品类约占总收入45%，Intelligent Labels季度同比增长高个位数，Solutions Group中Vestcom增长超10%。公司指引2026年第一季度调整后EPS为2.40至2.46美元，较2025年第四季度调整后EPS 2.45美元基本持平。
+
+**管理层核心观点：**
+
+- 2025年全年调整后EPS为9.53美元，同比增长1%；调整后EBITDA利润率维持16.4%，调整后自由现金流超7亿美元（707.1百万美元），体现了商业模式的韧性。
+- 高价值品类约占总收入45%，成为增长核心驱动力；其中Intelligent Labels第四季度同比增长高个位数，Solutions Group中Vestcom增长超过10%，Embelex增长高个位数。
+- 2025年全年通过重组行动实现超6000万美元税前节省，同时承担约4700万美元税前重组费用，包括薪酬相关裁员成本4320万美元及资产减值费用400万美元，体现积极的劳动力结构优化。
+- 2025年全年向股东返还约8.61亿美元现金（含股息和回购），回购股份320万股，净稀释后股份数量同比减少290万股，同时完成对Taylor Adhesives的战略收购（收购净支出约4.02亿美元）。
+- 第四季度Materials Group报告销售额增长5.1%至15.47亿美元，但有机销售额下降0.9%，调整后营业利润率为14.2%，同比下降60个基点，主要受通缩相关价格下调及员工成本上升影响。
+- 公司资产负债表保持稳健，净债务与调整后EBITDA比率（非GAAP）为2.4倍；指引2026年第一季度调整后EPS为2.40至2.46美元，重组费用等项目预计影响每股0.13美元。
+- 全球约35,000名员工分布在近60个国家；宏观环境中关税相关影响和消费者需求疲软对业绩构成压力，但公司通过经过验证的生产率提升策略成功对冲部分负面影响。
+
+**关键原话：**
+
+> **Deon Stander**："We delivered solid full-year results in 2025, with adjusted EPS of $9.53, reflecting the durability of our business model in a dynamic environment. Despite tariff-related impacts and softer consumer volumes, our team successfully leveraged our proven productivity playbook to maintain an adjusted EBITDA margin of 16.4% and generate over $700 million in adjusted free cash flow"
+> *主题：Full Year Results*
+
+> **Deon Stander**："Throughout the year, we made consistent progress advancing our key strategies, notably driving outsized growth in high-value categories, which now represent approximately 45% of our total revenue, as well as continuing to advance our differentiation by accelerating innovation outcomes across the enterprise."
+> *主题：High-Value Categories*
+
+> **Deon Stander**："We continued to demonstrate disciplined capital allocation, balancing organic investments and the strategic acquisition of Taylor Adhesives with the return of roughly $860 million to our shareholders."
+> *主题：Capital Allocation*
+
+> **Deon Stander**："Once again, I extend my gratitude to our agile and talented team. Their unwavering commitment to excellence and focus on our strategic priorities have positioned us well to deliver GDP-plus growth and top-quartile returns through the cycle."
+> *主题：Strategic Outlook*
+
+> **Avery Dennison Corporation**："During 2025, the company realized more than $60 million in pre-tax savings from restructuring actions and incurred approximately $47 million in pre-tax restructuring charges."
+> *主题：Restructuring Cost Reduction*
+
+> **Avery Dennison Corporation**："Excluding the estimated $0.13 per share impact of restructuring charges and other items, the company expects first quarter 2026 adjusted earnings per share of $2.40 to $2.46."
+> *主题：1Q26 EPS Guidance*
+
+**新业务 / 战略动向：**
+
+- 完成对Taylor Adhesives的战略收购，全年收购相关净支出约4.018亿美元，扩大Materials Group在高性能粘合剂领域的产品布局；该收购已计入2025年全年财务结果。
+- Intelligent Labels（智能标签，含RFID）在第四季度实现高个位数增长，全年高价值品类约占总收入45%，是公司数字化识别解决方案战略落地的核心体现，也是连接物理与数字世界的关键产品线。
+- Solutions Group旗下Vestcom业务第四季度增长超过10%，Embelex增长高个位数，显示品牌包装增强及零售数字化解决方案需求持续扩大；公司正通过加速企业内部创新成果落地推进差异化竞争。
+
+### BAH — Booz Allen Hamilton
+
+*（逐字稿不可用：模型返回内容无法解析为 JSON，请稍后重试。）*
+
+### BT/A LN — BT Group
+
+*（逐字稿不可用：No earnings call transcript available：FMP、EDGAR 8-K 与 sec-api.io（SEC_API_KEY）均未返回该季度可用逐字稿；请换季度或检查网络与密钥配置。）*
+
+### CTSH — Cognizant Technology Solutions
+
+**概括：**
+
+Cognizant 2025年全年营收达211亿美元，同比增长7.0%（固定汇率增长6.4%），超出全年指引上限；第四季度营收53.3亿美元，同比增长4.9%。全年调整后运营利润率为15.8%，同比扩大50个基点；调整后每股摊薄收益5.28美元，同比增长11%。过去12个月订单总额达284亿美元（同比增长5%），2025年签署28个大型交易，大型交易TCV同比增长近50%。公司2026年指引显示全年营收预计为221.4亿至226.6亿美元（固定汇率增长4.0%至6.5%），调整后运营利润率预计为15.9%至16.1%，调整后每股摊薄收益预计为5.56至5.70美元（增长5%至8%）。截至2025年12月31日，总员工人数为351,600人，较上年同期净增约14,800人，显示公司在推进AI战略的同时仍保持积极的人员扩张。
+
+**管理层核心观点：**
+
+- 2025年全年营收211亿美元，同比增长7.0%，超过全年指引高端；调整后运营利润率15.8%，同比扩大50个基点；调整后EPS为5.28美元，同比增长11%，全面超越指引。
+- 2025年签署28个大型交易（TCV≥1亿美元），其中第四季度签署12个，过去12个月大型交易TCV同比增长近50%，体现AI-led战略落地成效。
+- 2026年全年营收指引为221.4亿至226.6亿美元，固定汇率增长4.0%至6.5%；Q1 2026营收指引为53.6亿至54.4亿美元，同比增长4.8%至6.3%，管理层指引体现持续的经营动能。
+- 2026年全年调整后运营利润率指引为15.9%至16.1%（扩大10至30个基点），调整后每股收益指引为5.56至5.70美元（同比增长5%至8%），利润率扩张趋势持续。
+- 2025年全年自由现金流转换率超过净利润的100%（自由现金流约26.65亿美元），全年向股东返还约20亿美元；2026年计划向股东返还16亿美元，包括10亿美元股票回购及分红。
+- 截至2025年12月31日，总员工人数为351,600人，较2024年12月31日净增14,800人；过去12个月自愿离职率降至13.9%，低于上年同期的15.9%，人才保留改善明显，人员规模持续增长而非收缩。
+- Belcan收购对2025年全年营收增长贡献约260个基点，对Products & Resources业务板块贡献约960个基点，是全年营收增长的重要驱动力之一。
+- 金融服务板块第四季度营收同比增长10.5%（固定汇率9.3%），是表现最强的业务板块；通信、媒体和技术板块同比下降0.4%，是唯一出现收入下滑的板块。
+
+**关键原话：**
+
+> **Ravi Kumar S**："I am deeply grateful to our over 350,000 employees who helped make 2025 a defining year for Cognizant in which we put our AI builder strategy in motion and returned to the 'winner's circle' two years ahead of the target we set at our Investor Day."
+> *主题：AI Strategy*
+
+> **Ravi Kumar S**："We have invested in our talent, strengthened our partnership ecosystem and advanced our AI platforms to help clients scale AI across the enterprise. These investments helped us sign 28 large deals in 2025 with large deal TCV growth of nearly 50% year-over-year."
+> *主题：AI Monetization*
+
+> **Ravi Kumar S**："We are confident that the foundation we built over the last three years positions us well to carry this momentum in the years ahead."
+> *主题：Growth Outlook*
+
+> **Jatin Dalal**："In 2025, we outperformed the high end of our guidance ranges, combining top-tier revenue growth with 50 basis points of expanded adjusted operating margin and 11% adjusted EPS growth."
+> *主题：Financial Performance*
+
+> **Jatin Dalal**："Our operational rigor allowed us to maintain a robust free cash flow conversion of more than 100% of net income and return $2 billion to shareholders. Our initial 2026 guidance reflects sustained momentum, backed by our commitment to advancing our strategic investments aimed at accelerating our AI-led growth strategy."
+> *主题：2026 Guidance*
+
+**新业务 / 战略动向：**
+
+- 完成对3Cloud的收购，3Cloud是最大的独立Microsoft Azure服务提供商之一，擅长Azure专属AI赋能。此次收购将强化Cognizant在Azure、数据与AI及应用创新领域的深度能力，加速企业AI转型。
+- 扩大与微软的多年战略合作协议，双方将共同构建行业级AI解决方案并在全球联合销售，重点覆盖金融服务、医疗健康与生命科学、零售及制造业，并将嵌入agentic AI和Copilot能力（Work IQ、Foundry IQ、Fabric IQ）至关键业务工作流，同时扩展Cognizant Neuro® AI Suite产品线。
+- 采用Anthropic的Claude大语言模型家族，帮助企业客户和内部团队从AI实验走向规模化业务成果；同时与Cognition（Devin AI创造者）建立合作，将自主AI工程师能力与Cognizant交付模型结合，推进企业软件开发的AI化。
+- 推出Cognizant® Resilient IT Operations平台化解决方案，结合自动化、AI代理和高级分析，帮助客户现代化IT运营、减少运营债务；同时在班加罗尔揭幕AI实验室和Cognizant Moment™ Studio创新中心，推进多代理系统、AI决策及负责任AI研发。
+- 宣布为Bupa香港交付首个AI驱动的业务流程即服务（BPaaS）理赔现代化解决方案，为期五年，是Cognizant香港区最大的智能运营与自动化（IOA）服务交易；同时与Adobe扩大全球战略合作，帮助企业利用生成式AI转型内容创作、治理与规模化运营。
+
+### DG — Dollar General
+
+*（逐字稿不可用：模型返回内容无法解析为 JSON，请稍后重试。）*
+
+### DHL GY — Deutsche Post DHL
+
+*（逐字稿不可用：No earnings call transcript available：FMP、EDGAR 8-K 与 sec-api.io（SEC_API_KEY）均未返回该季度可用逐字稿；请换季度或检查网络与密钥配置。）*
+
+### EL — Estee Lauder
+
+**概括：**
+
+雅诗兰黛2026财年第一季度实现有机销售增长3%，较上季度13%下滑显著反弹。毛利率扩大60个基点至73.3%，经营利润率扩大300个基点至7.3%（去年同期4.3%），稀释每股收益从$0.14翻倍至$0.32。中国大陆市场表现亮眼，零售额双位数增长且显著跑赢精品美妆行业，7个品牌实现双位数增长；全球线上有机销售增长加速至双位数。公司重申全年有机销售增长0%~3%、经营利润率9.4%~9.9%的指引，同时预计关税相关逆风对盈利影响约$1亿美元，并通过PRGP持续推进重组，截至9月30日累计确认重组费用$6.97亿美元。
+
+**管理层核心观点：**
+
+- 第一季度有机销售增长3%，较上季度13%下滑大幅反转；毛利率73.3%（扩大60个基点），经营利润率7.3%（扩大300个基点），稀释每股收益$0.32（同比翻番）。
+- PRGP（利润恢复与增长计划）驱动非消费者端费用削减3%，消费者端投资增加4%，截至9月30日累计确认重组费用$6.97亿美元，主要为员工相关成本。
+- 中国大陆市场零售额双位数增长，跑赢行业高个位数增幅；过去6个季度中有5个季度实现精品美妆市场份额提升，在砖墙门店与线上渠道均有斩获，为同类最大品牌中唯一。
+- 全球线上有机销售增速从上季度中个位数加速至双位数；新开Amazon店面（墨西哥、英国），并在美国TikTok Shop上线Clinique、M·A·C和Dr. Jart，M·A·C荣获TikTok Shop 2025年个护类顶级品牌活动奖。
+- 重申全年有机销售增长0%~3%、经营利润率9.4%~9.9%指引；预计关税相关逆风对盈利影响约$1亿美元（基于10月24日前已知信息及已计划的缓解措施），并继续评估额外缓解策略（含PRGP举措和潜在定价行动）。
+- 第一季度资本支出$9,600万美元，同比下降32%；全年CapEx目标约占预期销售额的4%；运营活动净现金流出$3.4亿美元，较去年同期$6.7亿美元显著改善。
+- 有效税率40.5%（去年同期38.8%），当前税率由地理盈利结构及历史股权激励负面影响驱动；公司承诺全年指引约36%，并正通过PRGP结构调整评估税务筹划机会，预计后续会议提供更多信息。
+- 宏观环境持续波动：大陆中国消费者信心虽有所回升但仍低于历史峰值，西欧部分市场精品美妆出现负增长，贸易政策仍高度不确定；全年指引前提为行业增长2%~3%，公司目标是在关键市场领先行业。
+
+**关键原话：**
+
+> **Stephane de la Faverie**："We delivered organic sales growth of 3%, a significant sequential acceleration from the 13% decline in the fourth quarter. We are pleased by the diversity of our performance. As Mainland China contributed nicely to return to growth, the rest of our markets in total improved sequentially, including high single-digit growth in our priority emerging markets, led by Mexico, Turkey and India's double-digit growth."
+> *主题：Organic Sales Growth*
+
+> **Akhil Shrivastava**："Through September 30, we recorded $697 million of total cumulative charges, primarily in employee-related costs."
+> *主题：Restructuring Charges*
+
+> **Akhil Shrivastava**："Based on information available and net of our planned mitigation actions through October 24, we continue to expect tariff-related headwinds to impact profitability by approximately $100 million. This does not include any subsequent or future changes. We continue to evaluate additional strategies to further mitigate these impacts, including more PRGP initiatives and potential pricing actions."
+> *主题：Tariff Headwinds*
+
+> **Akhil Shrivastava**："In terms of operating margin, we expanded 300 basis points to 7.3% compared to 4.3% last year. This expansion reflects net benefits from our PRGP. Specifically, they drove a 3% reduction in nonconsumer-facing expenses, even with the normalization of employee incentive costs. As a result, we were able to fund consumer-facing investments, which increased by 4%."
+> *主题：Operating Margin Expansion*
+
+> **Akhil Shrivastava**："On tax rate, we have commented on our high tax rate. We gave a guidance for 36% this year, which should be lower than last year, so it should start to move in the right direction, but there is significant -- we are not happy with this tax rate. It is driven by our geographical mix of earnings. We are looking through our PRGP restructuring to look at tax planning opportunities."
+> *主题：Tax Rate Planning*
+
+> **Stephane de la Faverie**："We are, therefore, thrilled to announce our new partnership with Shopify to modernize and scale our direct-to-consumer business in a phased approach, creating a best-in-class omnichannel consumer experience globally."
+> *主题：Shopify Partnership*
+
+> **Stephane de la Faverie**："We are thrilled to have opened our new France atelier in Paris, where our team will blend state-of-the-art technology, data-driven intelligence, leveraging AI and olfactory expertise to craft the next generation of extraordinary scents, all while innovating much quicker than we have in the past."
+> *主题：AI Innovation*
+
+> **Akhil Shrivastava**："The company has built a cost muscle in a way that it never had before beyond the growth work -- the points we talked. So the cost muscle that we have built is allowing us to look at COGS area, allowing us to look at OpEx area through the enterprise business services work we have set, procurement work, continued restructuring. So we continue to believe the significant long-term opportunity on SG&A."
+> *主题：Cost Structure*
+
+**新业务 / 战略动向：**
+
+- 宣布与Shopify建立战略合作伙伴关系，分阶段推进直接面向消费者业务的现代化与规模化，目标是在全球打造最佳全渠道消费体验。
+- 在巴黎开设全新法兰西香水工坊（France Atelier），融合前沿技术、数据驱动智能及AI应用与嗅觉专业知识，旨在更快速地研发下一代香水产品。
+- M·A·C品牌宣布进驻美国Sephora（含部分实体门店及线上）和Sephora at Kohl's，以触达更年轻消费者并加速M·A·C在美国的复苏。
+- 在美国TikTok Shop上线Clinique、M·A·C和Dr. Jart，并在马来西亚和新加坡上线The Ordinary；M·A·C荣获TikTok Shop 2025年个护与生活类顶级品牌活动奖，TikTok Shop被定位为消费者发现、互动和交易的完整生态系统而非单一渠道。
+- 在墨西哥开设Amazon店面（Clinique、The Ordinary和Estée Lauder），在英国开设The Ordinary Amazon店面，借助此前在美国、加拿大和日本积累的经验持续拓展Amazon渠道覆盖。
+- 承诺向支持女性及女童健康、教育、领导力和创业的项目贡献$5,000万美元，作为2030年新社会影响目标的核心内容，已在2025财年社会影响与可持续发展报告中发布。
+
+### FRE GY — Fresenius SE
+
+*（逐字稿不可用：No earnings call transcript available：FMP、EDGAR 8-K 与 sec-api.io（SEC_API_KEY）均未返回该季度可用逐字稿；请换季度或检查网络与密钥配置。）*
+
+### HCA — HCA Healthcare
+
+*（逐字稿不可用：No earnings call transcript available：FMP、EDGAR 8-K 与 sec-api.io（SEC_API_KEY）均未返回该季度可用逐字稿；请换季度或检查网络与密钥配置。）*
+
+### IBM — IBM
+
+**概括：**
+
+本次为IBM 2025年投资者日演示（对应2026Q1季度标注），IBM展示了其混合云与AI双轮驱动战略：2024年全年收入达630亿美元，自由现金流达127亿美元，创历史最高FCF利润率20%。软件业务收入达270亿美元，2024年增长9%（固定汇率），AI预订总额（含咨询与软件）超50亿美元（inception to date）。Red Hat收入从收购前约30亿美元增长至64亿美元，OpenShift ARR突破14亿美元，实现超13倍增长。公司2025年指引为收入增长5%以上，自由现金流约135亿美元，调整后EBITDA实现两位数增长，软件板块目标接近两位数增长，基础设施板块目标中个位数增长。IBM量子业务自成立以来累计签约额接近10亿美元，凸显新兴技术布局的长期价值。
+
+**管理层核心观点：**
+
+- IBM 2024年全年收入达630亿美元，自由现金流达127亿美元，FCF利润率20%为公司历史最高水平，较2020年的15%显著提升；过税前利润率从2020年10%提升至2024年18%。
+- AI预订总额（inception to date，含软件约10亿美元、咨询超40亿美元）合计超过50亿美元，watsonx平台形成约5-6倍的Software与Consulting乘数效应，每1美元watsonx销售可带动5-6美元整体收入。
+- Red Hat 2024年收入达64亿美元，较收购前约30亿美元实现显著增长；OpenShift ARR增长超13倍至约14亿美元，Ansible ARR增长约8倍至约5亿美元，体现混合云平台的强劲商业化进展。
+- 软件业务2024年收入达270亿美元，固定汇率增长9%，Rule of 40达41%（GAAP口径40%）；2025年指引目标接近两位数增长，软件占IBM总收入比例接近45%，长期目标提升至约50%。
+- IBM在2022年至2024年期间累计实现年化35亿美元生产率节约（exit run rate），超出初始目标20亿美元，主要通过AI自动化工作流、优化人才利用率、精简供应链和数字化转型等举措落地；IBM Consulting Advantage AI平台使部分项目生产率提升高达50%。
+- 2025年全公司收入指引为固定汇率增长5%以上（预计汇率影响约负2个百分点），自由现金流约135亿美元，调整后EBITDA实现两位数增长，运营税前利润率扩张超0.5个百分点；咨询业务指引为低个位数增长，基础设施为中个位数增长。
+- IBM量子业务自2017年一季度以来累计签约额接近10亿美元，目前运营13台公用规模量子计算机（100+量子比特），IBM量子网络拥有280+成员，2026年路线图目标是实现量子优势（quantum advantage）演示。
+- IBM Consulting拥有75,000名顾问获得GenAI技能认证，咨询业务GenAI签约额inception to date超过40亿美元，大额交易（超5000万美元）数量较2021年增长2倍，顶级客户收入增速约为咨询整体的2.5倍。
+- 并购战略方面，约75%收购资金集中于软件，每年可带来1-2个百分点的持续营收增长；并购整合通常在第2年实现FCF正贡献，第5年运营税前利润率可从-10%提升至20%，协同效应倍数达3.5倍。
+- IBM过去三年总股东回报达119%，领先标普500指数约75个百分点，三年内为股东创造超过1300亿美元价值，并已连续29年保持股息增长。
+
+**关键原话：**
+
+> **Arvind Krishna**："93% of all Fortune 500 companies leverage IBM's hybrid cloud products and solutions >$5B AI book of business across Software and Consulting ~80% of IBM's revenue from clients who purchase across Software, Consulting, and Infrastructure"
+> *主题：AI monetization progress*
+
+> **Rob Thomas**："~80% recurring revenue in 2024 ~6pts organic growth in 2024 ~$1B GenAI book of business inception to date across Software"
+> *主题：AI monetization progress*
+
+> **Ric Lewis**："~30% increase in development investment in growth areas Revamp of Business Model ~3pts margin expansion through rigorous product management Optimization of the Value Chain $1B+ in productivity savings from transformation of go-to-market, supply chain and operations"
+> *主题：digital transformation investment*
+
+**新业务 / 战略动向：**
+
+- watsonx平台全面整合GenAI能力，推出watsonx Orchestrate with Agents（含AI代理）、watsonx.data（下一代开放数据湖仓）、watsonx.governance（AI治理）等新产品线，并通过IBM Consulting Advantage实现AI驱动的咨询交付，部分项目生产率提升高达50%；watsonx已实现在AWS和Azure上部署，进一步扩大市场触达。
+- Red Hat推出RHEL AI和OpenShift AI，整合Neural Magic先进模型优化能力，以Granite小型开源模型为核心构建成本效率领先的企业AI栈（Granite 7B相比ChatGPT 4 Turbo成本降低98%，性能提升4%），并通过InstructLab加速模型训练与部署；OpenShift虚拟化（OpenShift Virtualization）抓住VMware替代市场机遇，实现显著市场份额增长。
+- IBM量子计算业务加速商业化：目前全球运营13台公用规模量子计算机，Qiskit成为全球最流行量子开源SDK，量子网络拥有280+成员；2026年路线图目标演示量子优势，2028年目标实现首台纠错量子计算机，累计签约额接近10亿美元，BCG预测量子计算成熟后可创造超5000亿美元价值。
+- IBM通过持续并购加速AI与混合云战略落地：收购Neural Magic（提升模型推理优化能力）、Apptio/Turbonomic（FinOps与IT优化）、Neudesic（微软生态系统咨询）等，75%并购资金集中于软件板块，每年贡献约1-2个百分点的可持续营收增长；软件内部研发投入占收入比从2020年9%提升至2024年12%。
+- IBM Consulting正从传统人力套利模式向'人+数字劳动力'（Human + Digital Labor）模式转型，推出全球首个AI驱动咨询交付平台IBM Consulting Advantage，实现Agents、Applications、Methods三层整合，并将定价模式从人力计时转向与客户价值挂钩，推动'Service as Software'战略落地；GenAI咨询签约额inception to date超40亿美元。
+
+### JLL — Jones Lang LaSalle
+
+*（逐字稿不可用：模型返回内容无法解析为 JSON，请稍后重试。）*
+
+### KBX GY — Knorr-Bremse
+
+*（逐字稿不可用：No earnings call transcript available：FMP、EDGAR 8-K 与 sec-api.io（SEC_API_KEY）均未返回该季度可用逐字稿；请换季度或检查网络与密钥配置。）*
+
+### MDB — MongoDB
+
+**概括：**
+
+MongoDB FY2026 Q1表现强劲，总收入达5.49亿美元，同比增长22%，超出指引上限。Atlas收入同比增长26%，占总收入的72%，客户总数超过57,100家，环比净增约2,600家，创六年多来新高。非GAAP运营利润达8,700万美元，运营利润率16%，同比大幅提升（去年同期为7%）。公司将全年收入指引上调1,000万美元至22.5亿～22.9亿美元，并将全年非GAAP运营利润率目标上调200个基点至12%。董事会批准扩大股票回购计划，总授权金额达10亿美元，彰显管理层对长期业务前景的信心。宏观环境方面，4月因市场波动出现短暂消费疲软，但5月已健康反弹。
+
+**管理层核心观点：**
+
+- Q1总收入5.49亿美元，同比增长22%，超出指引上限；Atlas收入同比增长26%，占总收入72%；非GAAP运营利润率达16%（去年同期为7%），显示盈利能力大幅改善。
+- 客户总数超过57,100家，环比净增约2,600家，创六年以上最高季度净增记录；其中Atlas客户超过55,800家；超过100,000美元ARR的客户达2,506家，同比增长17%；净ARR扩张率约为119%。
+- 全年收入指引上调1,000万美元至22.5亿～22.9亿美元；全年非GAAP运营利润指引上调5,700万美元至2.67亿～2.87亿美元；全年非GAAP运营利润率目标上调200个基点至12%（初始指引为10%），反映管理层对利润率改善的更强承诺。
+- 董事会批准额外8亿美元股票回购授权，加上上季度2亿美元授权，总回购授权金额达10亿美元；Q1未回购（因CFO招聘流程限制），计划Q2开始执行回购。
+- 宏观层面，Atlas消费月度趋势显示：2月和3月增长良好，4月因宏观波动出现软化，5月健康反弹；CFO表示May月份消费水平与2月、3月基本一致，公司将宏观不确定性纳入全年指引保守假设。
+- 人员招聘方面，Q1实际招聘进度慢于计划，属于全公司范围内的普遍现象，并非主动缩减，但这一节奏助推了运营利润率的超预期表现；管理层表示人员节奏适度放缓将延续并被纳入全年OPEX预期，不影响销售产能。
+- 上移市场战略持续推进：75%的财富100强和50%的财富500强已是MongoDB客户，管理层正在推动更大规模战略合作；自助服务渠道同步发力，补充直销团队覆盖中端市场，实现客户获取效率提升。
+- AI落地方面，企业仍处于早期采用阶段，主要障碍包括AI技能不足、对AI概率性输出（幻觉风险）的信任度不足；现阶段AI应用多集中于运营效率、聊天机器人、代码生成及垂直行业ISV等场景，真正大规模定制AI应用落地预计需要更长时间。
+- Non-Atlas业务Q1表现优于预期，但部分系时间性因素；全年Non-Atlas订阅收入预计高单位数百分比下降，并面临约5,000万美元多年期许可收入逆风（主要集中于下半年）；Non-Atlas ARR仍预期同比增长。
+
+**关键原话：**
+
+> **Dev Ittycheria**："We generated revenue of $549 million, a 22% year-over-year increase and above the high end of our guidance. Atlas revenue grew 26% year-over-year, representing 72% of revenue. We generated non-GAAP operating income of $87 million for a 16% non-GAAP operating margin, and we ended the quarter with over 57,100 customers."
+> *主题：Q1 Financial Results*
+
+> **Mike Gordon**："Specifically, we saw good consumption growth in February and March, some softness in April as macroeconomic volatility increased, followed by a healthy rebound in May."
+> *主题：Atlas Consumption Trends*
+
+> **Mike Gordon**："We are raising our non-GAAP income from operations expectations by $57 million and are now targeting a range of $267 million to $287 million and non-GAAP net income per share to be in the range of $2.94 to $3.12 based on 87.6 million estimated diluted shares outstanding."
+> *主题：Full-Year Guidance Raise*
+
+> **Dev Ittycheria**："The barriers include this, you know, limited set of skills, experience with AI. Trust with AI systems that are probabilistic, which is another way of saying the risk of hallucinations. And so we see, obviously, some early use cases around operating efficiency, chatbots, codegen, and domain-specific ISVs like Harvey."
+> *主题：AI Adoption Barriers*
+
+> **Dev Ittycheria**："With the release of Voyage 3.5, we've taken another step forward, meaningfully outperforming the next best embedding models while reducing storage costs by more than 80%. This makes it not only powerful but also cost-effective at scale."
+> *主题：Voyage AI Capability*
+
+> **Mike Gordon**："So it was really broad-based across the whole team. In terms of slower headcount additions. There was nothing that we didn't pull back or say don't hire. It just takes longer. So nothing there. Also don't have any concerns around does that mean lower, for instance, sales capacity largely due to what Dev talked about on the go-to-market."
+> *主题：Headcount & Hiring Pace*
+
+> **Dev Ittycheria**："I think the moves by both Databricks and Snowflake, I think validate one thing, that OLTP or the operational data store is the strategic high ground, especially for AI. That's where inference happens. Inference is the big market. That's where everyone wants to go. And you need to have an operational data store to do that."
+> *主题：Competitive Positioning*
+
+> **Mike Gordon**："Hey, there are few companies that are greater than $2 billion of revenue where their main business is growing 20% plus. The total business growing double-digit with 70% plus gross margin. So stop there. That's a scaled business that has a lot of leverage built in."
+> *主题：Business Model Leverage*
+
+**新业务 / 战略动向：**
+
+- 收购Voyage AI并快速整合：Voyage 3.5嵌入模型显著优于次优竞品，同时将存储成本降低逾80%；计划于本月内实现用户可无缝为MongoDB内部数据生成嵌入向量（私密预览），距收购完成仅约四个月，展现出快速产品化能力。
+- MongoDB平台AI能力三合一整合：实时数据、强大搜索（关键词搜索+向量搜索）与Voyage智能检索（嵌入与重排序模型）整合为单一平台，显著降低开发者构建AI应用的复杂度与成本，相比Postgres+Elastic+Pinecone+Cohere等多工具拼凑方案具备明显竞争优势。
+- 应用现代化（App Modernization）战略提速：本季度引进近30年技术转型经验的新负责人主导该项目；持续投资自动化工具以标准化、规模化推进遗留应用迁移，吸引传统关系型数据库用户（Oracle、SQL Server、MySQL）转型，管理层视其为推动FY2027及以后增长的重要战略引擎。
+- 自助服务渠道显著加速：Q1自助服务客户新增表现特别强劲，本季度总客户净增约2,600家创六年新高，由新晋CMO May Petrie领导的自助服务团队通过精细化实验和数字化增长营销体系驱动，成为覆盖中端市场的高效获客引擎。
+- MongoDB 8.0发布并获最快版本采纳速度，客户采用速度是上一主要版本的两倍；即将推出的8.1版本进一步提升性能；文档扩展至普通话、葡萄牙语、韩语和日语，强化全球开发者触达能力。
+
+### PPG — PPG Industries
+
+*（逐字稿不可用：模型返回内容无法解析为 JSON，请稍后重试。）*
+
+### RTO — Rentokil Initial
+
+*（逐字稿不可用：No earnings call transcript available：FMP、EDGAR 8-K 与 sec-api.io（SEC_API_KEY）均未返回该季度可用逐字稿；请换季度或检查网络与密钥配置。）*
+
+### TGT — Target Corporation
+
+*（逐字稿不可用：模型返回内容无法解析为 JSON，请稍后重试。）*
+
+### UPS — United Parcel Service
+
+*（逐字稿不可用：No earnings call transcript available：FMP、EDGAR 8-K 与 sec-api.io（SEC_API_KEY）均未返回该季度可用逐字稿；请换季度或检查网络与密钥配置。）*
+
+### ZM — Zoom Video Communications
+
+**概括：**
+
+Zoom FY2026 Q1总收入同比增长约3%至11.75亿美元，超出指引上限800万美元；企业业务收入同比增长约6%，占总收入60%。AI Companion月活跃用户环比增长近40%，Zoom Contact Center客户数同比增长65%，Zoom Revenue Accelerator授权数同比增长72%，Workvivo客户数同比增长106%。管理层将全年收入指引上调1500万美元至48亿至48.1亿美元区间，同时上调非GAAP运营利润及EPS指引。宏观环境方面，部分大型美国企业客户出现交易延迟和更严格的合同审查，导致企业业务展望趋于审慎，但在线业务未见明显宏观冲击。公司在本季度首次由CEO通过AI虚拟形象（Custom Avatar）参与财报电话会，体现其在AI落地和产品创新方面的实质进展，并开始通过Custom AI Companion推进AI货币化。
+
+**管理层核心观点：**
+
+- Q1总收入同比增长约3%至11.75亿美元，超出指引上限800万美元；非GAAP摊薄每股收益1.43美元，超出指引上限0.12美元；非GAAP运营利润同比增长2%至4.67亿美元，超出指引上限2200万美元。
+- AI Companion月活跃用户环比增长近40%，正从会议总结扩展到答疑、日程安排、内容创建等多场景；Custom AI Companion已面向Global 2000试用客户推出，具备企业数据索引集成、自定义会议摘要模板及Jira集成等功能，AI货币化进程正式启动。
+- Zoom Contact Center客户数同比增长65%，整体客户体验业务ARR已达三位数百万美元级别且保持高双位数增长；Elite SKU授权占比较去年提升约10个百分点，显示高价AI套餐获客户广泛认可。
+- 宏观环境方面，部分大型美国企业客户出现合同审查更严格、销售周期延长的情况，但无交易损失；企业NRR维持98%稳定不变，在线业务未见宏观冲击，创历史最低月均流失率2.8%（同比改善40个基点）。
+- 管理层将FY2026全年收入指引上调1500万美元至48亿至48.1亿美元（中位数同比增长约3%），全年非GAAP EPS指引上调至5.56至5.59美元（约3.12亿股），同时将全年自由现金流指引维持在16.8亿至17.2亿美元区间。
+- Q1加速执行27亿美元股票回购计划，购入560万股、耗资4.18亿美元，较上季度增加130万股；剩余约12亿美元回购额度预计将在FY2026财年内完成，彰显管理层、CEO及董事会对公司业务的强烈信心。
+- Zoom Phone收入保持中双位数增长，市场仍有约1.5亿本地座机席位待迁移至云端；新增与Bell Canada的战略合作伙伴关系，并与Mitel在本地解决方案领域合作，渠道系统改造使报价到收款时间从数小时缩短至数分钟。
+- Workvivo客户数同比增长106%，较前两个季度加速，90%的Workvivo客户为Zoom新客户；Meta迁移带动效应预计在下半年趋于正常化，但平台自身新客获取动能依然强劲。
+
+**关键原话：**
+
+> **Eric Yuan**："Adoption of Zoom AI Companion continues to grow, with monthly active users up nearly 40% quarter over quarter. Just last week, Raymond James shared in a press release how they are rolling out AI Companion meeting summaries firm wide."
+> *主题：AI Companion adoption*
+
+> **Michelle Chang**："In Q1, total revenue grew approximately 3% year-over-year to $1.175 billion. This result was $8 million above the high end of our guidance. As a reminder, Q1 of FY '26 had one fewer day than Q1 of FY '25."
+> *主题：Revenue results*
+
+> **Michelle Chang**："What we saw in terms of my comments about primarily prudence going forward. But we saw in Q1, in a couple of customer scenarios in larger U.S. customers, where there was just more prudent sales elongation more scrutiny on deal terms, no losses, but just, again, a bit of a sales elongation and more scrutiny."
+> *主题：Macro impact Enterprise*
+
+> **Michelle Chang**："We are pleased to raise our full year revenue guidance by $15 million, or $5 million on a constant currency basis. We now expect revenue to be in the range of $4.8 billion to $4.81 billion, which represents approximately 3% year-over-year growth at the midpoint, or 3.2% year-over-year growth on a constant currency basis."
+> *主题：Full year guidance raise*
+
+> **Eric Yuan**："We also deploy our Contact Center for a long time. When our team enabled Zoom Virtual Agent, we do see the huge value because we use the two metrics merit, how successful that is, one is the CCaaS (ph), another one is a self-service rate. Operate (ph) deploy Zoom Virtual Agent, it does help us a lot because CCaaS number 70. And guess what, the self-service rate is 97%, meaning 97% of those tickets resolved very well without any human agent involved, right?"
+> *主题：Virtual Agent self-service*
+
+> **Michelle Chang**："80% of the workers in the world are frontline workers and yet only 1% of the SaaS spend is on them. And so what that tells us, what our customers tell us is, there's a lot of value that they need. And so this product was really born out of that."
+> *主题：Frontline worker opportunity*
+
+> **Eric Yuan**："We would like to transform our business from being collaboration a communication company to be a system of actions like after this meeting is over, right, we have -- not only have a summary, but also we have tasks items and AR agent will automatically less created a general ticket and to follow to track, right? It's kind of become an entire business workflow."
+> *主题：AI agentic transformation*
+
+> **Michelle Chang**："In Q1, we accelerated execution of our existing $2.7 billion share buyback plan, purchasing 5.6 million shares for $418 million, an increase of 1.3 million shares quarter-over-quarter."
+> *主题：Share buyback acceleration*
+
+**新业务 / 战略动向：**
+
+- Custom AI Companion正式推出并开启货币化：支持企业自有数据索引集成（Bring Your Own Dictionary and Index）、自定义会议摘要模板及Jira/ServiceNow集成，多家Global 2000客户已进入试用阶段；管理层预计该功能在FY2026下半年贡献可测量但尚不足以显著移动整体营收的收入。
+- Zoom Workplace for Frontline（前线员工版）在Q1正式GA，覆盖班次沟通、劳动力管理和AI助手三大场景，重点面向医疗、零售和制造行业；产品上市仅数周已成功交付首批订单，瞄准全球80%前线劳动者仅占SaaS支出1%的巨大市场空白。
+- Zoom Virtual Agent迎来新版本发布（月底推出），集成更多AI功能并纳入Virtual Agent能力；Q1 Zoom Virtual Agent拿下史上最大单笔追加销售订单，自助解决率达97%（接入后CCaaS指标大幅改善），成为Contact Center平台差异化核心竞争力。
+- Custom Avatars for Zoom Clips正式推出：支持用AI生成的个人虚拟形象录制Clips视频，Eric Yuan成为全球首位在财报电话会上使用AI虚拟形象的CEO；公司内置防滥用安全机制保护用户身份，该功能将持续迭代并深度整合进Zoom Workplace平台。
+- Zoom与Bell Canada建立新战略合作伙伴关系，同时完成渠道系统和流程的重大改造（报价到收款时间从数小时缩短至数分钟），Contact Center和Phone业务中渠道主导或重度参与的交易比例显著提升，Q1 Contact Center前10大交易中6至7笔由渠道完成。
+
+## Step 5｜新业务 / 收购 / Insider 异动
+
+> **数据来源**：Benzinga 公司新闻 + FMP Insider 交易申报（Form 4）｜**评判标准**：收购/战略合作/异常 Insider 交易（买入>$1M 或卖出>$5M）
+
+## 板块新业务与Insider动态周报
+
+---
+
+### 📌 新业务与收购并购
+
+- **[PPG]** 以全现金方式收购 Ozark Materials（来自 Ingevity），交易金额 **$65M**，进一步扩展材料业务版图。
+
+- **[ACN]** 战略投资 General Robotics，布局通用机器人智能领域，强化 AI 与自动化服务能力。
+
+- **[DG]** 与 QSIC 合作，计划在全美逾 **6,000 家门店**推出 AI 赋能的店内音频网络，探索零售媒体新变现渠道。
+
+---
+
+### 📌 Insider 交易异常信号
+
+- **[ZM]** 内部人士本周净卖出 **$7.6M**，卖出笔数（13笔）显著高于买入（2笔），卖出规模超过阈值，值得关注。
+
+> ⚠️ 其余公司（MDB 卖出 $2.9M、PPG 买入/卖出金额极低）均未触发异常阈值，不作标注。
+
+---
+
+### 📝 小结
+
+本周板块信号整体偏少。实质性动作主要集中在 **PPG 的小额收购** 和 **DG 的 AI 零售战略落地**；Insider
+
+---
+
+**以下为各公司详情（点击展开）：**
+
+### ACN — Accenture
+
+**新业务 / 收购信号：**
+- What's Going On With Accenture Stock Tuesday? [📎 原文](https://www.benzinga.com/markets/large-cap/26/04/51803424/whats-going-on-with-accenture-stock-tuesday-2)
+- Accenture Invests In General Robotics, A Provider Of General-Purpose Robotic Intelligence For Deployment And Continuous Adaptation Of Robots Of Any Form With Any AI For Any Task; Terms Not Disclosed [📎 原文](https://www.benzinga.com/news/26/04/51828701/accenture-invests-in-general-robotics-a-provider-of-general-purpose-robotic-intelligence-for-deploym)
+- $100 Invested In Accenture 20 Years Ago Would Be Worth This Much Today [📎 原文](https://www.benzinga.com/insights/news/26/04/51794211/100-invested-in-accenture-20-years-ago-would-be-worth-this-much-today)
+
+#### 💼 内部交易（FMP）
+
+*暂无*
+
+### DG — Dollar General
+
+**新业务 / 收购信号：**
+- Dollar General Plans To Launch AI-Enabled In-Store Audio Network Across 6,000 Stores To Deliver More Relevant, Localized And Measurable Experiences To Customers And Give Brand Partners Accountable, D… [📎 原文](https://www.benzinga.com/news/26/04/51774814/dollar-general-plans-to-launch-ai-enabled-in-store-audio-network-across-6-000-stores-to-deliver-more)
+- Dollar General Partners With QSIC For AI Audio Rollout [📎 原文](https://www.benzinga.com/markets/equities/26/04/51840823/dollar-general-partners-with-qsic-for-ai-audio-rollout)
+
+#### 💼 内部交易（FMP）
+
+*暂无*
+
+### MDB — MongoDB
+
+#### 💼 内部交易（FMP）
+
+- 买入：**0** 笔，总价值 **—**
+- 卖出：**6** 笔，总价值 **$2.90M**
+
+### PPG — PPG Industries
+
+**新业务 / 收购信号：**
+- PPG Acquires Ozark Materials From Ingevity; All-Cash Transaction Includes Purchase Price Of $65M [📎 原文](https://www.benzinga.com/m-a/26/04/51845744/ppg-acquires-ozark-materials-from-ingevity-all-cash-transaction-includes-purchase-price-of-65m)
+
+#### 💼 内部交易（FMP）
+
+- 买入：**31** 笔，总价值 **$0**
+- 卖出：**13** 笔，总价值 **$862**
+
+### ZM — Zoom Video Communications
+
+#### 💼 内部交易（FMP）
+
+- 买入：**2** 笔，总价值 **$0**
+- 卖出：**13** 笔，总价值 **$7.59M**
+
+## Step 6｜财务数据（年度）
+
+### Revenue
+
+| Ticker | FY2026 | FY2025 | FY2024 |
+|--------|--------|--------|--------|
+| ACN | — | $69.67B | $64.90B |
+| AVY | — | $8.86B | $8.76B |
+| BAH | — | $11.98B | $10.66B |
+| BT/A LN | — | — | — |
+| CTSH | — | $21.11B | $19.74B |
+| DG | — | $42.72B | $40.61B |
+| DHL GY | — | — | — |
+| EL | — | $14.29B | $15.61B |
+| FRE GY | — | — | — |
+| HCA | — | $75.60B | $70.60B |
+| IBM | — | $67.53B | $62.75B |
+| JLL | — | $26.12B | $23.43B |
+| KBX GY | — | — | — |
+| MDB | $2.46B | $2.01B | $1.68B |
+| PPG | — | $15.88B | $15.85B |
+| RTO | — | $6.91B | $5.44B |
+| TGT | — | $104.78B | $106.57B |
+| UPS | — | $88.64B | $90.89B |
+| ZM | $4.87B | $4.67B | $4.53B |
+
+### Gross Margin
+
+| Ticker | FY2026 | FY2025 | FY2024 |
+|--------|--------|--------|--------|
+| ACN | — | 31.9% | 32.6% |
+| AVY | — | 28.8% | 28.9% |
+| BAH | — | 54.8% | 53.8% |
+| BT/A LN | — | — | — |
+| CTSH | — | 33.7% | 34.3% |
+| DG | — | 30.7% | 29.6% |
+| DHL GY | — | — | — |
+| EL | — | 73.9% | 71.7% |
+| FRE GY | — | — | — |
+| HCA | — | 41.5% | 40.6% |
+| IBM | — | 59.5% | 56.7% |
+| JLL | — | 99.0% | 51.8% |
+| KBX GY | — | — | — |
+| MDB | 71.7% | 73.3% | 74.8% |
+| PPG | — | 38.0% | 41.6% |
+| RTO | — | 13.7% | 13.4% |
+| TGT | — | 27.9% | 28.2% |
+| UPS | — | 18.5% | 18.8% |
+| ZM | 77.0% | 75.8% | 76.2% |
+
+### EBITDA
+
+| Ticker | FY2026 | FY2025 | FY2024 |
+|--------|--------|--------|--------|
+| ACN | — | $12.94B | $10.84B |
+| AVY | — | $1.30B | $1.38B |
+| BAH | — | $1.57B | $1.20B |
+| BT/A LN | — | — | — |
+| CTSH | — | $4.17B | $3.53B |
+| DG | — | $3.25B | $2.69B |
+| DHL GY | — | — | — |
+| EL | — | $0.19B | $1.98B |
+| FRE GY | — | — | — |
+| HCA | — | $15.60B | $13.90B |
+| IBM | — | $17.28B | $12.18B |
+| JLL | — | $1.34B | $1.25B |
+| KBX GY | — | — | — |
+| MDB | $-0.03B | $-0.10B | $-0.12B |
+| PPG | — | $2.81B | $2.58B |
+| RTO | — | $1.51B | $0.99B |
+| TGT | — | $8.01B | $8.65B |
+| UPS | — | $12.22B | $11.91B |
+| ZM | $2.56B | $0.94B | $0.63B |
+
+### CAPEX
+
+| Ticker | FY2026 | FY2025 | FY2024 |
+|--------|--------|--------|--------|
+| ACN | — | $0.60B | $0.52B |
+| AVY | — | $0.17B | $0.21B |
+| BAH | — | $0.10B | $0.07B |
+| BT/A LN | — | — | — |
+| CTSH | — | $0.29B | $0.30B |
+| DG | — | $1.24B | $1.31B |
+| DHL GY | — | — | — |
+| EL | — | $0.60B | $0.92B |
+| FRE GY | — | — | — |
+| HCA | — | $4.94B | $4.88B |
+| IBM | — | $1.62B | $1.69B |
+| JLL | — | $0.22B | $0.19B |
+| KBX GY | — | — | — |
+| MDB | $0.00B | $0.03B | $0.01B |
+| PPG | — | $0.78B | $0.72B |
+| RTO | — | $0.21B | $0.17B |
+| TGT | — | $3.73B | $2.89B |
+| UPS | — | $3.69B | $3.91B |
+| ZM | $0.06B | $0.14B | $0.13B |
+
+### Net Debt/Equity
+
+| Ticker | FY2026 | FY2025 | FY2024 |
+|--------|--------|--------|--------|
+| ACN | — | -0.11x | -0.03x |
+| AVY | — | 1.57x | 1.20x |
+| BAH | — | 3.32x | 2.94x |
+| BT/A LN | — | — | — |
+| CTSH | — | -0.02x | -0.05x |
+| DG | — | 1.71x | 2.23x |
+| DHL GY | — | — | — |
+| EL | — | 1.69x | 1.21x |
+| FRE GY | — | — | — |
+| HCA | — | -8.16x | -17.29x |
+| IBM | — | 1.61x | 1.60x |
+| JLL | — | 0.37x | 0.37x |
+| KBX GY | — | — | — |
+| MDB | -0.80x | -0.83x | -0.78x |
+| PPG | — | -1.48x | 0.74x |
+| RTO | — | 0.69x | 0.76x |
+| TGT | — | 0.01x | 1.03x |
+| UPS | — | 1.63x | 1.16x |
+| ZM | -0.79x | -0.86x | -0.86x |
+
+### Sector 汇总
+
+| 指标 | FY2026 | FY2025 | FY2024 |
+|--------|--------|--------|--------|
+| **Total Revenue** | $7.33B | $560.76B | $542.01B |
+| **Total CAPEX** | $0.07B | $18.34B | $17.89B |
+
+*数据来源：FMP Annual Financials。Net Debt/Equity = (总债务-现金)/股东权益。*

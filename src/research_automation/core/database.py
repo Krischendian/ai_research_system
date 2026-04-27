@@ -85,6 +85,21 @@ def init_db(conn: sqlite3.Connection) -> None:
         ON document_paragraphs(doc_uid)
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS step_cache (
+            sector TEXT NOT NULL,
+            year INTEGER NOT NULL,
+            quarter INTEGER NOT NULL,
+            step TEXT NOT NULL,
+            ticker TEXT NOT NULL DEFAULT '',
+            content TEXT NOT NULL,
+            generated_at TEXT NOT NULL,
+            cache_version INTEGER NOT NULL DEFAULT 1,
+            PRIMARY KEY (sector, year, quarter, step, ticker)
+        )
+        """
+    )
     conn.commit()
 
 
@@ -247,5 +262,102 @@ def read_financials(ticker: str) -> list[AnnualFinancials]:
             )
         _financials_cache[symbol] = (now, out)
         return [AnnualFinancials.model_validate(r.model_dump()) for r in out]
+    finally:
+        conn.close()
+
+
+def get_step_cache(
+    sector: str,
+    year: int,
+    quarter: int,
+    step: str,
+    ticker: str = "",
+    cache_version: int = 1,
+) -> str | None:
+    """读取step级别缓存，返回content字符串，没有则返回None。"""
+    conn = get_connection()
+    try:
+        init_db(conn)
+        cur = conn.execute(
+            """
+            SELECT content FROM step_cache
+            WHERE sector=? AND year=? AND quarter=? AND step=? AND ticker=? AND cache_version=?
+            """,
+            (sector, year, quarter, step, ticker, cache_version),
+        )
+        row = cur.fetchone()
+        return str(row["content"]) if row else None
+    finally:
+        conn.close()
+
+
+def set_step_cache(
+    sector: str,
+    year: int,
+    quarter: int,
+    step: str,
+    content: str,
+    ticker: str = "",
+    cache_version: int = 1,
+) -> None:
+    """写入step级别缓存。"""
+    from datetime import datetime, timezone
+
+    conn = get_connection()
+    try:
+        init_db(conn)
+        conn.execute(
+            """
+            INSERT INTO step_cache (sector, year, quarter, step, ticker, content, generated_at, cache_version)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(sector, year, quarter, step, ticker) DO UPDATE SET
+                content = excluded.content,
+                generated_at = excluded.generated_at,
+                cache_version = excluded.cache_version
+            """,
+            (
+                sector,
+                year,
+                quarter,
+                step,
+                ticker,
+                content,
+                datetime.now(timezone.utc).isoformat(),
+                cache_version,
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def clear_step_cache(
+    sector: str,
+    year: int | None = None,
+    quarter: int | None = None,
+    step: str | None = None,
+    ticker: str | None = None,
+) -> int:
+    """清除step缓存，返回删除行数。支持按sector/step/ticker筛选。"""
+    conn = get_connection()
+    try:
+        init_db(conn)
+        query = "DELETE FROM step_cache WHERE sector=?"
+        params: list = [sector]
+        if year is not None:
+            query += " AND year=?"
+            params.append(year)
+        if quarter is not None:
+            query += " AND quarter=?"
+            params.append(quarter)
+        if step is not None:
+            query += " AND step=?"
+            params.append(step)
+        if ticker is not None:
+            query += " AND ticker=?"
+            params.append(ticker)
+        cur = conn.execute(query, params)
+        conn.commit()
+        return cur.rowcount
     finally:
         conn.close()

@@ -866,6 +866,20 @@ def get_financial_statements(ticker: str, year: int) -> AnnualFinancials | None:
         ["total net sales", "total revenue", "net revenue"],
         exclude=("cost",),
     )
+    net_income = _get_line_value(
+        income,
+        cg_i,
+        fiscal_year,
+        [
+            "net income attributable to common",
+            "net income attributable to shareholders",
+            "net income attributable to",
+            "net earnings attributable to",
+            "net income",
+            "net earnings",
+        ],
+        exclude=("per share", "eps", "ratio", "margin"),
+    )
     gross_margin = _gross_margin_ratio(income, cg_i, fiscal_year, revenue)
 
     cg_c = _column_groups_by_fiscal_year(cashflow) if cashflow is not None else None
@@ -888,4 +902,5 @@ def get_financial_statements(ticker: str, year: int) -> AnnualFinancials | None:
         gross_margin=gross_margin,
         capex=capex,
         net_debt_to_equity=net_de,
+        net_income=net_income,
     )
