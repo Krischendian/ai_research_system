@@ -46,11 +46,9 @@ DEFAULT_HEADERS = {
 
 # 晨报宏观：按可靠性顺序尝试，先成功先返回（见 ``fetch_macro_news_with_fallback``）
 MACRO_RSS_FEEDS: list[tuple[str, str]] = [
-    ("http://feeds.reuters.com/reuters/MarketsNews", "Reuters"),
     ("http://feeds.bloomberg.com/markets/news.rss", "Bloomberg"),
-    ("http://feeds.wsj.com/wsj/rss/markets", "WSJ"),
-    ("http://www.ft.com/rss/markets", "FT"),
-    ("https://finance.yahoo.com/news/rssindex", "Yahoo Finance"),
+    ("https://feeds.bloomberg.com/economics/news.rss", "Bloomberg"),
+    ("https://feeds.bloomberg.com/politics/news.rss", "Bloomberg"),
 ]
 
 _MACRO_CACHE_TTL_SEC = 6 * 3600
@@ -58,12 +56,9 @@ _MACRO_CACHE_TTL_SEC = 6 * 3600
 # （URL, 在 source 字段中展示的标签）
 # 科技/行业类源置前，便于「公司新闻」命中 ticker；地缘类仍在列表后部。
 RSS_FEEDS: list[tuple[str, str]] = [
+    ("https://feeds.bloomberg.com/markets/news.rss", "Bloomberg"),
     ("https://feeds.bloomberg.com/technology/news.rss", "Bloomberg"),
     ("https://feeds.bloomberg.com/industries/news.rss", "Bloomberg"),
-    ("https://techcrunch.com/feed/", "TechCrunch"),
-    ("https://www.reuters.com/rssfeed/businessNews", "Reuters"),
-    ("https://feeds.bloomberg.com/markets/news.rss", "Bloomberg"),
-    ("https://www.reuters.com/rssfeed/worldNews", "Reuters"),
     ("https://feeds.bloomberg.com/economics/news.rss", "Bloomberg"),
     ("https://feeds.bloomberg.com/politics/news.rss", "Bloomberg"),
 ]

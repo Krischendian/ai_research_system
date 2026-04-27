@@ -27,6 +27,25 @@ from frontend.streamlit_helpers import format_api_error, notify_api_failure
 BACKEND_BASE = "http://127.0.0.1:8000"
 _PROJECT_ROOT = _fe_root
 
+REGION_COLOR = {
+    "North America": "#1a73e8",
+    "Europe": "#34a853",
+    "Middle East": "#fbbc04",
+    "Asia": "#ea4335",
+    "Global": "#9e9e9e",
+}
+
+EVENT_TYPE_LABEL = {
+    "earnings": "📊 财务业绩",
+    "partnership": "🤝 新合作",
+    "ma": "🔀 并购",
+    "buyback": "💰 回购",
+    "insider_trade": "👤 Insider交易",
+    "management": "🎙️ 管理层",
+    "research": "🔬 研究/评级",
+    "other": "📌 其他",
+}
+
 if "brief_cache_key" not in st.session_state:
     st.session_state.brief_cache_key = 0
 
@@ -175,6 +194,74 @@ def _render_overnight_item(item: dict, key_prefix: str) -> None:
     st.write(summary)
 
 
+def _render_region_badge(region: str) -> str:
+    region_txt = (region or "Global").strip() or "Global"
+    color = REGION_COLOR.get(region_txt, REGION_COLOR["Global"])
+    return (
+        f'<span style="display:inline-block;padding:2px 8px;border-radius:999px;'
+        f'background:{color};color:white;font-size:0.78rem;margin-right:6px;">'
+        f'{_escape_html(region_txt)}</span>'
+    )
+
+
+def _render_event_badge(event_type: str) -> str:
+    key = (event_type or "other").strip()
+    label = EVENT_TYPE_LABEL.get(key, EVENT_TYPE_LABEL["other"])
+    return (
+        '<span style="display:inline-block;padding:2px 8px;border-radius:999px;'
+        'background:#5f6368;color:white;font-size:0.78rem;margin-right:6px;">'
+        f'{_escape_html(label)}</span>'
+    )
+
+
+def _render_structured_macro_item(item: dict, key_prefix: str) -> None:
+    title = item.get("title") or "—"
+    summary = item.get("summary") or "—"
+    source = item.get("source") or "—"
+    source_url = (item.get("source_url") or "").strip()
+    published = (item.get("published_at_ny") or "").strip()
+    region = item.get("region") or "Global"
+    imp = item.get("importance_score")
+    st.markdown(title_html_block(title, "#f3f7ff"), unsafe_allow_html=True)
+    st.markdown(_render_region_badge(region), unsafe_allow_html=True)
+    cap = f"来源：{source}"
+    if isinstance(imp, int):
+        cap = f"★{imp} · {cap}"
+    if published:
+        cap = f"{format_ny_badge(published)} · {cap}"
+    st.caption(cap)
+    if source_url:
+        st.markdown(f"[→ 阅读原文]({source_url})")
+    st.write(summary)
+
+
+def _render_structured_company_item(item: dict, key_prefix: str) -> None:
+    ticker = (item.get("ticker") or "").strip().upper() or "—"
+    title = item.get("title") or "—"
+    summary = item.get("summary") or "—"
+    source = item.get("source") or "—"
+    source_url = (item.get("source_url") or "").strip()
+    published = (item.get("published_at_ny") or "").strip()
+    event_type = item.get("event_type") or "other"
+    imp = item.get("importance_score")
+    st.markdown(title_html_block(title, "#fff7f2"), unsafe_allow_html=True)
+    st.markdown(
+        f'<span style="display:inline-block;padding:2px 8px;border-radius:999px;'
+        f'background:#202124;color:white;font-size:0.78rem;margin-right:6px;">'
+        f'{_escape_html(ticker)}</span>' + _render_event_badge(event_type),
+        unsafe_allow_html=True,
+    )
+    cap = f"来源：{source}"
+    if isinstance(imp, int):
+        cap = f"★{imp} · {cap}"
+    if published:
+        cap = f"{format_ny_badge(published)} · {cap}"
+    st.caption(cap)
+    if source_url:
+        st.markdown(f"[→ 阅读原文]({source_url})")
+    st.write(summary)
+
+
 def _render_cluster_block(
     cl: dict,
     backend: str,
@@ -303,7 +390,7 @@ st.subheader("隔夜速递")
 if not overnight:
     st.caption("隔夜速递未加载（若上方有警告，多为网络或 OpenAI 配置问题）。")
 else:
-    ows = (overnight.get("summary") or "").strip()
+    ows = (overnight.get("overnight_summary") or "").strip()
     if ows:
         st.success(ows)
     wns = overnight.get("window_start_ny")
@@ -313,47 +400,61 @@ else:
     opn = (overnight.get("provenance_note") or "").strip()
     if opn:
         st.caption(opn)
-    onews = overnight.get("news_list") or []
-    if not onews:
-        st.caption("本窗口内暂无带有效发布时间的 RSS 条目（或当前批次未命中）。")
+    o_macro = overnight.get("macro_news") or []
+    o_company = overnight.get("company_news") or []
+    st.markdown("#### 🌍 宏观")
+    if not o_macro:
+        st.caption("暂无宏观隔夜重点。")
     else:
-        with st.expander(f"本窗口内 RSS 条目（{len(onews)} 条）", expanded=False):
-            for j, item in enumerate(onews):
-                if isinstance(item, dict):
-                    _render_overnight_item(item, f"ov_{j}")
-                if j < len(onews) - 1:
-                    st.divider()
+        for j, item in enumerate(o_macro):
+            if isinstance(item, dict):
+                _render_structured_macro_item(item, f"ovm_{j}")
+            if j < len(o_macro) - 1:
+                st.divider()
+    st.markdown("#### 🏢 公司")
+    if not o_company:
+        st.caption("暂无公司隔夜重点。")
+    else:
+        for j, item in enumerate(o_company):
+            if isinstance(item, dict):
+                _render_structured_company_item(item, f"ovc_{j}")
+            if j < len(o_company) - 1:
+                st.divider()
 
 with st.expander("昨日总结", expanded=False):
     if not yesterday_doc:
         st.caption("昨日总结未加载（见上方警告）。")
     else:
-        ymd = (yesterday_doc.get("markdown") or "").strip()
-        if ymd:
-            st.markdown(ymd)
         yws = yesterday_doc.get("window_start_ny")
         ywe = yesterday_doc.get("window_end_ny")
         if yws and ywe:
             st.caption(f"时间窗（NY，昨日全天）：{yws} → {ywe}")
         yn = yesterday_doc.get("articles_in_window")
         if isinstance(yn, int):
-            st.caption(f"本窗口内用于归类的 RSS 条数：**{yn}**")
+            st.caption(f"本窗口内用于筛选的新闻条数：**{yn}**")
         ypn = (yesterday_doc.get("provenance_note") or "").strip()
         if ypn:
             st.caption(ypn)
-        yclusters = yesterday_doc.get("clusters") or []
-        if yclusters:
-            st.divider()
-            st.markdown("**昨日主题聚类**")
-            for yci, ycl in enumerate(yclusters):
-                if isinstance(ycl, dict):
-                    _render_cluster_block(
-                        ycl,
-                        BACKEND_BASE,
-                        "ycluster",
-                        yci,
-                        show_financial_in_sources=False,
-                    )
+        y_macro = yesterday_doc.get("macro_news") or []
+        y_company = yesterday_doc.get("company_news") or []
+        st.markdown("#### 🌍 宏观")
+        if not y_macro:
+            st.caption("昨日暂无宏观重点。")
+        else:
+            for yi, item in enumerate(y_macro):
+                if isinstance(item, dict):
+                    _render_structured_macro_item(item, f"ym_{yi}")
+                if yi < len(y_macro) - 1:
+                    st.divider()
+        st.markdown("#### 🏢 公司")
+        if not y_company:
+            st.caption("昨日暂无公司重点。")
+        else:
+            for yi, item in enumerate(y_company):
+                if isinstance(item, dict):
+                    _render_structured_company_item(item, f"yc_{yi}")
+                if yi < len(y_company) - 1:
+                    st.divider()
 
 st.divider()
 

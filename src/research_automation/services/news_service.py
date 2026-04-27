@@ -305,6 +305,8 @@ def get_morning_brief(
     merged = merge_finnhub_and_rss(company_raw, macro_feed)
     macro_articles = [a for a in merged if not _is_finnhub_article(a)]
     company_articles = [a for a in merged if _is_finnhub_article(a)]
+    macro_articles = macro_articles[:25]
+    company_articles = company_articles[:25]
     company_articles = _prioritize_articles_with_tickers(company_articles)
 
     body = _build_split_prompt(macro_articles, company_articles)
@@ -328,6 +330,7 @@ def get_morning_brief(
             prompt,
             response_format={"type": "json_object"},
             timeout=120.0,
+            max_tokens=4000,
         )
     except ValueError as e:
         raise NewsBriefError(f"语言模型未就绪：{e}") from e

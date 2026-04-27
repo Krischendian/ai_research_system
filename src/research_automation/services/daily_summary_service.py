@@ -14,11 +14,15 @@ from research_automation.core.news_time import (
 from research_automation.core.company_manager import get_active_tickers
 from research_automation.extractors.finnhub_news import merge_finnhub_and_rss
 from research_automation.extractors.llm_client import chat
-from research_automation.extractors.news_client import RawArticle, fetch_rss_articles
-from research_automation.models.news import YesterdaySummaryResponse, YesterdayThemeGroup
-from research_automation.services.news_insights import (
-    compute_news_insights,
-    raw_articles_with_tickers_to_flat,
+from research_automation.extractors.news_client import (
+    RawArticle,
+    extract_tickers_from_text,
+    fetch_rss_articles,
+)
+from research_automation.models.news import (
+    CompanyNewsItem,
+    MacroNewsItem,
+    YesterdaySummaryResponse,
 )
 from research_automation.services.news_service import (
     NewsBriefError,
@@ -57,118 +61,33 @@ def _safe_json_obj(raw: str) -> dict[str, Any]:
     return data
 
 
-def _normalize_groups(
-    macro_raw: Any,
-    company_raw: Any,
-    n: int,
-) -> tuple[list[YesterdayThemeGroup], list[YesterdayThemeGroup]]:
-    """将模型输出的主题合并去重编号，避免重复/漏号；漏号并入「其他要闻」。"""
-    used: set[int] = set()
-    macro_out: list[YesterdayThemeGroup] = []
-    company_out: list[YesterdayThemeGroup] = []
-
-    def _take_indices(idxs: Any) -> list[int]:
-        if not isinstance(idxs, list):
-            return []
-        out: list[int] = []
-        for x in idxs:
-            try:
-                i = int(x)
-            except (TypeError, ValueError):
-                continue
-            if 1 <= i <= n and i not in used:
-                out.append(i)
-                used.add(i)
-        return out
-
-    for it in macro_raw if isinstance(macro_raw, list) else []:
-        if not isinstance(it, dict):
-            continue
-        topic = str(it.get("topic", "")).strip()
-        idxs = _take_indices(it.get("article_indices"))
-        if topic and idxs:
-            macro_out.append(
-                YesterdayThemeGroup(
-                    topic=topic, count=len(idxs), article_indices=idxs, tickers=[]
-                )
-            )
-
-    for it in company_raw if isinstance(company_raw, list) else []:
-        if not isinstance(it, dict):
-            continue
-        topic = str(it.get("topic", "")).strip()
-        idxs = _take_indices(it.get("article_indices"))
-        tickers_raw = it.get("tickers") or []
-        tickers: list[str] = []
-        if isinstance(tickers_raw, list):
-            tickers = sorted(
-                {str(t).strip().upper() for t in tickers_raw if str(t).strip()}
-            )
-        if topic and idxs:
-            company_out.append(
-                YesterdayThemeGroup(
-                    topic=topic, count=len(idxs), article_indices=idxs, tickers=tickers
-                )
-            )
-
-    orphans = [i for i in range(1, n + 1) if i not in used]
-    if orphans:
-        macro_out.append(
-            YesterdayThemeGroup(
-                topic="其他要闻",
-                count=len(orphans),
-                article_indices=orphans,
-                tickers=[],
-            )
-        )
-    return macro_out, company_out
-
-
-def _build_markdown(
-    macro: list[YesterdayThemeGroup],
-    company: list[YesterdayThemeGroup],
+def _build_llm_prompt(
+    macro_articles: list[RawArticle],
+    company_articles: list[RawArticle],
+    active_tickers: set[str],
+    date_label: str,
 ) -> str:
-    """由结构化主题列表生成 Markdown 简报（宏观 / 公司两节）。"""
-    lines = ["## 宏观", ""]
-    if not macro:
-        lines.append("- （无）")
-    else:
-        for g in macro:
-            lines.append(f"- {g.topic}（{g.count} 条新闻）")
-    lines.extend(["", "## 公司", ""])
-    if not company:
-        lines.append("- （无）")
-    else:
-        for g in company:
-            lines.append(f"- {g.topic}（{g.count} 条）")
-    return "\n".join(lines)
+    tickers_str = ", ".join(sorted(active_tickers)[:50])
+    macro_lines = [f"M{i}. [来源:{a.get('source','')}] {a.get('title','')} | {(a.get('description') or '')[:400]}"
+                   for i, a in enumerate(macro_articles, 1)]
+    company_lines = [f"C{i}. [Ticker:{','.join(a.get('implied_tickers') or [])}] {a.get('title','')} | {(a.get('description') or '')[:400]}"
+                     for i, a in enumerate(company_articles, 1)]
 
+    return f"""你是专业财经编辑。日期：{date_label}（纽约时间全天）
+监控Ticker池：{tickers_str}
 
-def _build_llm_prompt(filtered: list[RawArticle], *, date_label: str, n: int) -> str:
-    """拼装昨日全文新闻列表与归类任务说明，供 LLM 输出 JSON。"""
-    tz_name = get_news_timezone_name()
-    body_lines: list[str] = []
-    for i, a in enumerate(filtered, start=1):
-        desc = (a.get("description") or "")[:520]
-        body_lines.append(
-            f"{i}. [来源:{_source_label(str(a.get('source') or ''))}] "
-            f"标题:{(a.get('title') or '').strip()} "
-            f"提要:{desc}"
-        )
-    body = "\n".join(body_lines)
-    return f"""你是财经编辑。以下为本地日期 {date_label} 当日（全天 {tz_name}）内、公司新闻源（Benzinga/Finnhub）与 RSS 合并后的英文简讯（编号 1 至 {n}）。
+【宏观素材】：
+{chr(10).join(macro_lines) or '（无）'}
 
-任务：
-1. 将每一条编号**恰好归入一类**：「宏观」下的某一个主题，或「公司」下的某一个主题；编号 1..{n} 必须**各出现一次**，不得遗漏或重复。
-2. 「宏观」：货币政策/利率、地缘与政策、大宗与汇率、市场全景、多主体行业动态等。
-3. 「公司」：围绕**单一明确公司**的事件；可在 JSON 里给 tickers 数组（大写代码如 AAPL）。
-4. 只输出一个 JSON 对象，格式示例：
-{{"macro":[{{"topic":"中文主题短语","article_indices":[1,2]}}],"company":[{{"topic":"中文主题","article_indices":[3],"tickers":["AAPL"]}}]}}
-5. topic 要短；article_indices 为整数数组。
+【公司素材】：
+{chr(10).join(company_lines) or '（无）'}
 
-简讯：
-{body}
-"""
+任务与输出格式同隔夜版本（macro_news含region，company_news含ticker+event_type）。
+重点选出当日真正重要的新闻，宏观重点关注北美/欧洲/中东/亚洲的地缘政治、央行、政策、领导人发言；
+公司只选监控Ticker池内有实质影响的事件。
+
+输出JSON格式：
+{{"macro_news":[...],"company_news":[...]}}"""
 
 
 def get_yesterday_summary(
@@ -204,35 +123,52 @@ def get_yesterday_summary(
     tz_name = get_news_timezone_name()
 
     filtered = filter_articles_in_half_open_window(articles, start, end)
-    n = len(filtered)
-
     provenance = (
         f"昨日日历日 {date_label}（{window_start}–{window_end}，{tz_name}）；"
         "含 Benzinga/Finnhub 公司新闻与 RSS 合并去重；发布时间优先 API Unix，否则 RSS；"
-        "仅统计带有效发布时间的条目。主题归类与聚类/评分/早评为独立模型调用；请核对原文。"
+        "仅统计带有效发布时间的条目。结构化摘要由模型生成，请核对原文。"
     )
 
-    if n == 0:
-        md = _build_markdown([], [])
+    if not filtered:
         return YesterdaySummaryResponse(
-            markdown=md,
-            macro=[],
-            company=[],
+            macro_news=[],
+            company_news=[],
             articles_in_window=0,
             window_start_ny=window_start,
             window_end_ny=window_end,
             provenance_note=provenance,
-            clusters=[],
-            top_news=[],
             analyst_briefing="",
         )
 
-    prompt = _build_llm_prompt(filtered, date_label=date_label, n=n)
+    active = set(get_active_tickers())
+
+    def _is_company_article(a: RawArticle) -> bool:
+        implied = [str(x).strip().upper() for x in (a.get("implied_tickers") or [])]
+        if any(t in active for t in implied):
+            return True
+        txt = f"{a.get('title') or ''} {a.get('description') or ''}"
+        guessed = extract_tickers_from_text(txt)
+        return any(t in active for t in guessed)
+
+    def _is_company_source(a: RawArticle) -> bool:
+        return _is_company_article(a)
+
+    # 限制送入LLM的条数，防止JSON截断
+    macro_articles = [a for a in filtered if not _is_company_source(a)][:25]
+    company_articles = [a for a in filtered if _is_company_source(a)][:25]
+
+    prompt = _build_llm_prompt(
+        macro_articles,
+        company_articles,
+        active,
+        date_label,
+    )
     try:
         reply = chat(
             prompt,
             response_format={"type": "json_object"},
             timeout=120.0,
+            max_tokens=4000,
         )
     except ValueError as e:
         raise NewsBriefError(f"语言模型未就绪：{e}") from e
@@ -244,33 +180,15 @@ def get_yesterday_summary(
     except (json.JSONDecodeError, ValueError) as e:
         raise NewsBriefError(f"模型返回无法解析为 JSON：{e}") from e
 
-    macro_g, company_g = _normalize_groups(
-        payload.get("macro"),
-        payload.get("company"),
-        n,
-    )
-    markdown = _build_markdown(macro_g, company_g)
-
-    # 聚类 / 重要性 / 分析师早评（单次 LLM，24h 缓存；与主题归类分离）
-    active = set(get_active_tickers())
-    flat_ins = raw_articles_with_tickers_to_flat(filtered, active)
-    logger.info("昨日总结 洞察输入条数=%d（时间窗内）", len(flat_ins))
-    clusters, top_news, analyst_briefing, _ = compute_news_insights(
-        flat_ins,
-        context="yesterday_summary",
-        date_key=date_label,
-        monitor_tickers=sorted(active),
-    )
+    macro_news = [MacroNewsItem(**item) for item in payload.get("macro_news", [])]
+    company_news = [CompanyNewsItem(**item) for item in payload.get("company_news", [])]
 
     return YesterdaySummaryResponse(
-        markdown=markdown,
-        macro=macro_g,
-        company=company_g,
-        articles_in_window=n,
+        macro_news=macro_news,
+        company_news=company_news,
+        articles_in_window=len(filtered),
         window_start_ny=window_start,
         window_end_ny=window_end,
+        analyst_briefing="",
         provenance_note=provenance,
-        clusters=clusters,
-        top_news=top_news,
-        analyst_briefing=analyst_briefing,
     )

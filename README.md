@@ -57,6 +57,21 @@ SQLite (data/research.db) + data/raw + data/reports
   - **不再向报告正文写入任何内联标注**（如 `[🔵]` / `[⚠️]` / `~~...~~[🔴]`）
   - `findings` 和 `summary` 仍保留用于日志/调试
 
+执行摘要与排名机制（近期重点变更）：
+
+- 执行摘要主文案由 LLM 生成，`_executive_summary` 使用结构化模板约束（当前为 5 个板块）。
+- `### 🏆 相对强弱排序` 不再由主摘要 prompt 自由生成。
+- 排名表改为“**代码强控公司清单 + LLM 仅填优势/风险字段**”：
+  - 代码先从 `per_company` 中筛出有财务数据的公司（不可遗漏）。
+  - 二次 LLM 返回 JSON，解析后补全缺失 ticker，并强制按顺序输出 Markdown 表格。
+  - JSON 解析失败时自动降级为空表（仍覆盖全部公司）。
+- 执行摘要 LLM token 上限提升到 `max_tokens=3000`，并保留截断续写逻辑。
+
+Step2 / Step5 近期增强：
+
+- Step2 地理收入拆分新增覆盖率校验（低覆盖识别为疑似分部级数据并过滤提示）。
+- Step5 增加“监控公司白名单”约束与输出扫描告警，降低混入非监控公司的风险。
+
 ---
 
 ## 5. 缓存与并发策略
@@ -106,6 +121,7 @@ cp .env.example .env
 - `BENZINGA_API_KEY` / `FINNHUB_API_KEY`：新闻
 - `TAVILY_API_KEY`：信号抓取
 - `SEC_API_KEY`：sec-api.io 回退链路（可选）
+- `NOTION_API_TOKEN`：`scripts/notion_export.py` 导出 Notion 使用（已移除脚本内硬编码 token）
 - `REPORT_RELEVANCE_THRESHOLD`：行业报告新闻过滤阈值
 - `NEWS_TIMEZONE`：新闻时间窗
 - `SCHEDULER_TIMEZONE` / `SCHEDULER_TEST_MODE` / `SCHEDULER_ENABLE_MANUAL_TRIGGER`：调度
@@ -155,6 +171,18 @@ PYTHONPATH=src python3 -c "from research_automation.main import app; print('ok')
 PYTHONPATH=src python3 scripts/generate_sector_report.py
 ```
 
+清理执行摘要缓存（强制重生）：
+
+```bash
+PYTHONPATH=src python3 -c "from research_automation.core.database import clear_step_cache; clear_step_cache('AI_Job_Replacement', step='exec_summary'); print('缓存已清除')"
+```
+
+导出报告到 Notion（需先配置 `NOTION_API_TOKEN`）：
+
+```bash
+python3 scripts/notion_export.py
+```
+
 ---
 
 ## 10. 测试
@@ -170,6 +198,12 @@ PYTHONPATH=src pytest tests -q
 
 ```bash
 pytest tests/services/test_post_generation_checker.py -q
+```
+
+单文件语法检查（修改 `sector_report_service.py` 后推荐）：
+
+```bash
+python3 -m py_compile src/research_automation/services/sector_report_service.py
 ```
 
 ---
@@ -346,6 +380,8 @@ pytest tests/services/test_post_generation_checker.py -q
 - 后端启动失败先看 `ImportError` / 路由导入错误
 - 终端命令要注意空格与路径（如 `cd "...folder" && uvicorn ...`）
 - 行业报告很慢先看：`force_refresh`、step 缓存命中、是否并发同 sector
+- 执行摘要未更新先清 `exec_summary` 的 step cache，再触发生成
+- 排名表若出现空优势/风险，先检查 ranking JSON 解析告警（有降级兜底，不会阻断输出）
 - 搜索结果为空先检查 `data/raw` 与 `data/reports` 是否有可检索内容
 - 文档与实现冲突时，以 `src/` 代码为准
 

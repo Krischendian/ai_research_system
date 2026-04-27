@@ -136,17 +136,51 @@ class OvernightNewsItem(BaseModel):
         return v
 
 
+RegionType = Literal["North America", "Europe", "Middle East", "Asia", "Global"]
+
+EventType = Literal[
+    "earnings",
+    "partnership",
+    "ma",
+    "buyback",
+    "insider_trade",
+    "management",
+    "research",
+    "other",
+]
+
+
+class MacroNewsItem(BaseModel):
+    title: str
+    summary: str
+    region: RegionType = "Global"
+    source: str
+    source_url: str | None = None
+    published_at_ny: str | None = None
+    importance_score: int = 5
+
+
+class CompanyNewsItem(BaseModel):
+    ticker: str
+    title: str
+    summary: str
+    event_type: EventType = "other"
+    source: str
+    source_url: str | None = None
+    published_at_ny: str | None = None
+    importance_score: int = 5
+
+
 class OvernightNewsResponse(BaseModel):
     """隔夜速递 API 响应。"""
 
-    summary: str  # 一句中文，通常以「隔夜重点关注：」开头
-    news_list: list[OvernightNewsItem]
-    window_start_ny: str = ""  # 纽约窗口起点 ISO
-    window_end_ny: str = ""  # 纽约窗口终点 ISO
-    provenance_note: str = ""
-    clusters: list[NewsCluster] = Field(default_factory=list)
-    top_news: list[ClusterNewsItem] = Field(default_factory=list)
+    overnight_summary: str
+    macro_news: list[MacroNewsItem] = []
+    company_news: list[CompanyNewsItem] = []
+    window_start_ny: str
+    window_end_ny: str
     analyst_briefing: str = ""
+    provenance_note: str = ""
 
 
 class YesterdayThemeGroup(BaseModel):
@@ -167,13 +201,10 @@ class YesterdayThemeGroup(BaseModel):
 class YesterdaySummaryResponse(BaseModel):
     """昨日总结 API：分类汇总（Markdown + 结构化）。"""
 
-    markdown: str
-    macro: list[YesterdayThemeGroup]
-    company: list[YesterdayThemeGroup]
+    macro_news: list[MacroNewsItem] = []
+    company_news: list[CompanyNewsItem] = []
     articles_in_window: int = 0
-    window_start_ny: str = ""
-    window_end_ny: str = ""
-    provenance_note: str = ""
-    clusters: list[NewsCluster] = Field(default_factory=list)
-    top_news: list[ClusterNewsItem] = Field(default_factory=list)
+    window_start_ny: str
+    window_end_ny: str
     analyst_briefing: str = ""
+    provenance_note: str = ""

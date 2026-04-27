@@ -1,7 +1,10 @@
 """隔夜速递：新闻时区下隔夜窗口内筛选 + 一句中文要点（LLM）；时间以 Finnhub Unix 优先。"""
 from __future__ import annotations
 
+import json
+import re
 from datetime import datetime
+from typing import Any
 
 from research_automation.core.news_time import (
     article_published_in_news_tz,
@@ -16,10 +19,10 @@ from research_automation.extractors.news_client import (
     extract_tickers_from_text,
     fetch_rss_articles,
 )
-from research_automation.models.news import OvernightNewsItem, OvernightNewsResponse
-from research_automation.services.news_insights import (
-    compute_news_insights,
-    overnight_items_to_flat_dicts,
+from research_automation.models.news import (
+    CompanyNewsItem,
+    MacroNewsItem,
+    OvernightNewsResponse,
 )
 from research_automation.services.news_service import (
     NewsBriefError,
@@ -50,36 +53,81 @@ def _source_label(raw: str) -> str:
     return f"RSS-{s}"
 
 
+RawArticle = dict[str, Any]
+
+
+def _safe_json(reply: str) -> dict[str, Any]:
+    s = (reply or "").strip()
+    if not s:
+        return {}
+    try:
+        obj = json.loads(s)
+        return obj if isinstance(obj, dict) else {}
+    except Exception:
+        pass
+    m = re.search(r"\{[\s\S]*\}", s)
+    if m:
+        try:
+            obj = json.loads(m.group(0))
+            return obj if isinstance(obj, dict) else {}
+        except Exception:
+            return {}
+    return {}
+
+
 def _build_overnight_prompt(
-    items: list[OvernightNewsItem],
+    macro_articles: list[RawArticle],
+    company_articles: list[RawArticle],
+    active_tickers: set[str],
     start: datetime,
     end: datetime,
 ) -> str:
-    """拼装送往 LLM 的隔夜素材说明（含时间窗与编号条目）。"""
-    lines: list[str] = []
-    for i, it in enumerate(items, start=1):
-        desc = (it.summary or "")[:640]
-        lines.append(
-            f"{i}. [来源:{it.source}] "
-            f"标题:{it.title} "
-            f"提要:{desc}"
-        )
     tz_label = get_news_timezone_name()
-    window = (
-        f"{start.strftime('%Y-%m-%d %H:%M')} 至 {end.strftime('%Y-%m-%d %H:%M')} "
-        f"({tz_label})"
-    )
-    body = "\n".join(lines)
-    return f"""你是财经新闻编辑。以下为本地时间窗口 {window} 内、来自公司新闻源（Benzinga/Finnhub）与 RSS 的英文标题与提要摘录。
+    window = f"{start.strftime('%Y-%m-%d %H:%M')} 至 {end.strftime('%Y-%m-%d %H:%M')} ({tz_label})"
+    tickers_str = ", ".join(sorted(active_tickers)[:50])
 
-任务：用**恰好一句中文**概括隔夜对投研**最需一并扫一眼**的要点。
-- 句式必须以「隔夜重点关注：」开头。
-- 只综合已给出的标题与提要，禁止编造数字、未出现的实体或立场。
+    macro_lines = []
+    for i, a in enumerate(macro_articles, 1):
+        macro_lines.append(f"M{i}. [来源:{a.get('source','')}] {a.get('title','')} | {(a.get('description') or '')[:400]}")
 
-素材：
-{body}
+    company_lines = []
+    for i, a in enumerate(company_articles, 1):
+        tickers = a.get("implied_tickers") or []
+        company_lines.append(f"C{i}. [Ticker:{','.join(tickers)}] [来源:{a.get('source','')}] {a.get('title','')} | {(a.get('description') or '')[:400]}")
 
-只输出这一句话，不要其他说明。"""
+    return f"""你是专业财经编辑。时间窗口：{window}
+监控Ticker池：{tickers_str}
+
+【宏观新闻素材】（M编号）：
+{chr(10).join(macro_lines) or '（无）'}
+
+【公司新闻素材】（C编号）：
+{chr(10).join(company_lines) or '（无）'}
+
+任务：
+1. 从宏观素材中选出**重点新闻**（地缘政治、央行/政策、领导人发言、重大经济数据），每条输出：
+   - title：英文原标题（与输入完全一致）
+   - summary：中文摘要（50-100字），只用已给信息，禁止编造
+   - region：North America / Europe / Middle East / Asia / Global 五选一
+   - source：来源
+   - importance_score：1-10整数
+
+2. 从公司素材中选出监控Ticker池内的重点新闻，每条输出：
+   - ticker：最相关的一个大写ticker
+   - title：英文原标题
+   - summary：中文摘要（50-100字）
+   - event_type：earnings/partnership/ma/buyback/insider_trade/management/research/other 八选一
+   - source：来源
+   - importance_score：1-10整数
+
+3. 最后输出一句中文隔夜总结（overnight_summary），以"隔夜重点关注："开头。
+
+只输出JSON，格式：
+{{"macro_news":[{{"title":"...","summary":"...","region":"...","source":"...","importance_score":8}}],
+"company_news":[{{"ticker":"AAPL","title":"...","summary":"...","event_type":"earnings","source":"...","importance_score":7}}],
+"overnight_summary":"隔夜重点关注：..."}}
+
+不要输出无关内容。不在监控Ticker池的公司新闻直接忽略。"""
 
 
 def get_overnight_news(
@@ -91,7 +139,7 @@ def get_overnight_news(
     拉取 RSS 与公司新闻（Benzinga 优先、Finnhub 兜底），合并去重后按「新闻时区昨天 16:00～今天 08:00」筛选；
 
     每条发布时间优先取 API Unix，否则用 RSS 的 UTC 时间；无有效时间则丢弃。
-    再调用 LLM 生成一句中文总结。公司源无数据时仍仅依赖 RSS，保持兼容。
+    使用 LLM 结构化输出宏观/公司隔夜要点。
     """
     rss_batch = fetch_rss_articles(
         max_items=max_rss_items,
@@ -111,92 +159,53 @@ def get_overnight_news(
             "未能从 RSS 与公司新闻源获取任何新闻（网络、密钥或 feed 不可用）。请稍后重试。"
         )
 
-    window_start = start.isoformat()
-    window_end = end.isoformat()
-    tz_name = get_news_timezone_name()
-
     filtered = filter_articles_in_half_open_window(articles, start, end)
     active = set(get_active_tickers())
-    news_list: list[OvernightNewsItem] = []
-    for a in filtered:
-        title = (a.get("title") or "").strip()
-        if not title:
-            continue
-        desc = (a.get("description") or "").strip()
-        blob = f"{title} {desc}"
-        tickers_set = set(extract_tickers_from_text(blob))
-        for x in a.get("implied_tickers") or []:
-            u = str(x).strip().upper()
-            if u in active:
-                tickers_set.add(u)
-        tickers = sorted(tickers_set)
-        pub_local = article_published_in_news_tz(a)
-        pub_ny_s: str | None = pub_local.isoformat() if pub_local else None
-        link = (a.get("link") or "").strip() or None
-        news_list.append(
-            OvernightNewsItem(
-                title=title,
-                summary=desc[:800] + ("…" if len(desc) > 800 else ""),
-                source=_source_label(str(a.get("source") or "")),
-                source_url=link,
-                published_at_ny=pub_ny_s,
-                matched_tickers=tickers,
-            )
-        )
 
-    provenance = (
-        "条目来自 Finnhub 公司新闻（须 FINNHUB_API_KEY）与 Reuters / Bloomberg / TechCrunch 等 RSS，"
-        f"合并去重；时间窗以 {tz_name} 下「昨日 16:00～今日 08:00」为准，"
-        "发布时间优先采用 Finnhub Unix 时间戳，否则回退 RSS。"
-        "仅保留带有效发布时间的稿件。摘要由模型基于提要生成，请点原文核对。"
-    )
+    def _is_company_article(a: RawArticle) -> bool:
+        implied = [str(x).strip().upper() for x in (a.get("implied_tickers") or [])]
+        if any(t in active for t in implied):
+            return True
+        txt = f"{a.get('title') or ''} {a.get('description') or ''}"
+        guessed = extract_tickers_from_text(txt)
+        return any(t in active for t in guessed)
 
-    if not news_list:
+    macro_articles = [a for a in filtered if not _is_company_article(a)]
+    company_articles = [a for a in filtered if _is_company_article(a)]
+
+    if not filtered:
         return OvernightNewsResponse(
-            summary=(
+            overnight_summary=(
                 "隔夜重点关注：本时间窗内未匹配到带有效发布时间的新闻条目；"
                 "可能因网络延迟或各源未暴露时间戳，请稍后重试或结合下方完整晨报浏览。"
             ),
-            news_list=[],
-            window_start_ny=window_start,
-            window_end_ny=window_end,
-            provenance_note=provenance,
-            clusters=[],
-            top_news=[],
+            macro_news=[],
+            company_news=[],
+            window_start_ny=start.isoformat(),
+            window_end_ny=end.isoformat(),
             analyst_briefing="",
+            provenance_note="",
         )
 
-    prompt = _build_overnight_prompt(news_list, start, end)
+    prompt = _build_overnight_prompt(macro_articles, company_articles, active, start, end)
     try:
-        reply = chat(prompt, timeout=90.0)
+        reply = chat(prompt, response_format={"type": "json_object"}, timeout=120.0)
     except ValueError as e:
         raise NewsBriefError(f"语言模型未就绪：{e}") from e
     except RuntimeError as e:
         raise NewsBriefError(f"调用语言模型失败：{e}") from e
 
-    summary = _normalize_overnight_summary(reply)
-
-    # 聚类 / 评分 / 早评（与一句摘要分立；同一批新闻 24h 缓存）
-    insight_date_key = f"{start.date().isoformat()}_{end.date().isoformat()}"
-    flat_ins = overnight_items_to_flat_dicts(news_list)
-    clusters, top_news, analyst_briefing, score_map = compute_news_insights(
-        flat_ins,
-        context="overnight",
-        date_key=insight_date_key,
-        monitor_tickers=sorted(active),
-    )
-    scored_list: list[OvernightNewsItem] = []
-    for i, it in enumerate(news_list):
-        sc = score_map.get(i, 5)
-        scored_list.append(it.model_copy(update={"importance_score": sc}))
+    payload = _safe_json(reply)
+    macro_news = [MacroNewsItem(**item) for item in payload.get("macro_news", [])]
+    company_news = [CompanyNewsItem(**item) for item in payload.get("company_news", [])]
+    overnight_summary = _normalize_overnight_summary(payload.get("overnight_summary", "隔夜重点关注：无数据"))
 
     return OvernightNewsResponse(
-        summary=summary,
-        news_list=scored_list,
-        window_start_ny=window_start,
-        window_end_ny=window_end,
-        provenance_note=provenance,
-        clusters=clusters,
-        top_news=top_news,
-        analyst_briefing=analyst_briefing,
+        overnight_summary=overnight_summary,
+        macro_news=macro_news,
+        company_news=company_news,
+        window_start_ny=start.isoformat(),
+        window_end_ny=end.isoformat(),
+        analyst_briefing="",
+        provenance_note="",
     )
