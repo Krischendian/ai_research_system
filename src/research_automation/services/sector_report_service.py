@@ -2388,16 +2388,16 @@ def _step5_new_biz_acquisitions_insider(
                     "Step5 LLM输出包含非白名单实体: %s，执行过滤",
                     _rogue,
                 )
-                # 强制删除非白名单公司的整行内容
                 import re as _re_filter
                 filtered_lines = []
                 for _line in sector_signal.split("\n"):
-                    # 检查这行是否包含非白名单 ticker
-                    _line_tickers = set(_re_filter.findall(r'\b[A-Z]{2,5}\b', _line))
-                    _line_rogue = _line_tickers - _allowed_set_s5 - _COMMON_ABBREVS
+                    bracket_tickers = set(_re_filter.findall(r'\[([A-Z]{2,5})\]', _line))
+                    word_tickers = set(_re_filter.findall(r'\b([A-Z]{2,5})\b', _line))
+                    all_tickers = bracket_tickers | word_tickers
+                    _line_rogue = all_tickers - _allowed_set_s5 - _COMMON_ABBREVS
                     if _line_rogue:
-                        logger.warning("Step5 过滤行: %s", _line.strip())
-                        continue  # 跳过这行
+                        logger.warning("Step5 过滤行(rogue=%s): %s", _line_rogue, _line.strip())
+                        continue
                     filtered_lines.append(_line)
                 sector_signal = "\n".join(filtered_lines)
             if _is_truncated_llm_output(sector_signal) or len(
