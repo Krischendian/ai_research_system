@@ -1,10 +1,11 @@
 """把sector报告导入Notion，生成带Toggle的精美页面。"""
+import os
 import re
 import sys
 from pathlib import Path
 from notion_client import Client
 
-NOTION_TOKEN = "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"
+NOTION_TOKEN = os.environ.get("NOTION_API_TOKEN", "")
 PAGE_ID = "34890ac26a5b80679484fa52194dc845"
 REPORT_FILE = "final_report_v6.txt"
 
