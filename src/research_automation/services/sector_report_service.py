@@ -1779,7 +1779,9 @@ def _step3_per_company_outlook(
         all_tickers_in_sector = [rec.ticker for rec, *_ in per_company]
         _s3_guard = (
             "严格要求：只输出本板块内容。所有结论必须有管理层原话或具体数字依据。"
-            "禁止推断、禁止投资建议、禁止输出额外板块或总结段落。"
+            "禁止推断、禁止投资建议、禁止输出额外板块或总结段落。\n"
+            "输出格式要求：先2-4句连贯段落总结，再按主题或公司分组列支撑数据（小标题+bullet）；"
+            "每条必须标注来源公司和具体数字/原话。"
         )
         _s3_common = f"""以下是该板块各公司管理层对未来的展望与行业判断：
 
@@ -1820,13 +1822,13 @@ def _step3_per_company_outlook(
                 "行业判断",
                 "第1次——【行业判断】\n基于以下各公司10-K及Earning Call内容，只提取跨2家以上公司共同出现的行业层面判断。"
                 "每条必须有管理层原文支撑，末尾标注（来源：公司A、公司B）。"
-                "每条不超过100字。只输出bullet list，禁止任何推断、点评或额外内容。",
+                "每条不超过100字。按统一格式输出（先2-4句段落总结，再分组小标题+bullet支撑数据），禁止任何推断、点评或额外内容。",
             )
             s3_strategy = _run_s3_block(
                 "战略方向",
                 "第2次——【战略方向】\n基于以下各公司10-K及Earning Call内容，只提取跨2家以上公司共同出现的战略举措或方向。"
                 "每条必须有管理层原文支撑，末尾标注（来源：公司A、公司B）。"
-                "每条不超过100字。只输出bullet list，禁止任何推断、点评或额外内容。",
+                "每条不超过100字。按统一格式输出（先2-4句段落总结，再分组小标题+bullet支撑数据），禁止任何推断、点评或额外内容。",
             )
             sector_outlook = (
                 "【行业判断】\n"
@@ -2031,7 +2033,9 @@ def _step4_earning_call_section(
             all_tickers_s4 = [rec.ticker for rec, *_ in per_company]
             _s4_guard = (
                 "严格要求：只输出本板块内容。所有结论必须有管理层原话或具体数字依据。"
-                "禁止推断、禁止投资建议、禁止输出额外板块或总结段落。"
+                "禁止推断、禁止投资建议、禁止输出额外板块或总结段落。\n"
+                "输出格式要求：先2-4句连贯段落总结，再按主题或公司分组列支撑数据（小标题+bullet）；"
+                "每条必须标注来源公司和具体数字/原话。"
             )
             _s4_common = f"""以下是{_sector}板块本季度各公司Earning Call的关键内容：
 
@@ -2081,19 +2085,19 @@ def _step4_earning_call_section(
                 s4_ai = _run_s4_block(
                     "AI部署与替代进展",
                     "第1次——【AI部署与替代进展】\n只列出有具体数字或管理层原话支撑的AI部署事实。"
-                    "每条末尾标注（来源：公司名+数字）。只输出bullet list，禁止推断和点评。",
+                    "每条末尾标注（来源：公司名+数字）。按统一格式输出（先2-4句段落总结，再分组小标题+bullet支撑数据），禁止推断和点评。",
                     1000,
                 )
                 s4_people = _run_s4_block(
                     "人员与组织变动",
                     "第2次——【人员与组织变动】\n只列出管理层明确披露的员工数量变化、重组计划或裁员数据。"
-                    "每条末尾标注（来源：公司名+具体数字）。只输出bullet list，禁止推断和点评。",
+                    "每条末尾标注（来源：公司名+具体数字）。按统一格式输出（先2-4句段落总结，再分组小标题+bullet支撑数据），禁止推断和点评。",
                     800,
                 )
                 s4_fin = _run_s4_block(
                     "营收与盈利关键数据",
                     "第3次——【营收与盈利关键数据】\n只列出各公司本季核心财务数字，每条末尾标注（来源：公司名+财年/季度）。"
-                    "只输出bullet list，禁止任何评级或预测。",
+                    "按统一格式输出（先2-4句段落总结，再分组小标题+bullet支撑数据），禁止任何评级或预测。",
                     800,
                 )
                 sector_summary = (
@@ -2427,7 +2431,9 @@ def _step5_new_biz_acquisitions_insider(
         _allowed_tickers_s5 = ', '.join([rec.ticker for rec, *_ in per_company])
         _s5_guard = (
             "严格要求：只输出本板块内容。所有结论必须有管理层原话或具体数字依据。"
-            "禁止推断、禁止投资建议、禁止输出额外板块或总结段落。"
+            "禁止推断、禁止投资建议、禁止输出额外板块或总结段落。\n"
+            "输出格式要求：先2-4句连贯段落总结，再按主题或公司分组列支撑数据（小标题+bullet）；"
+            "每条必须标注来源公司和具体数字/原话。"
         )
         _s5_common = f"""以下是板块各公司本周的新业务、收购并购及Insider交易信号：
 
@@ -2467,13 +2473,13 @@ def _step5_new_biz_acquisitions_insider(
                 "重大投资与收购",
                 "第1次——【重大投资与收购】\n只列出有Benzinga新闻链接或Earning Call原文支撑的收购、投资事件。"
                 "格式：[公司代码] 事件描述（金额/规模）— 来源：Benzinga/Earning Call。"
-                "禁止推断战略意义，禁止额外内容。",
+                "按统一格式输出（先2-4句段落总结，再分组小标题+bullet支撑数据），禁止推断战略意义，禁止额外内容。",
             )
             s5_strategy = _run_s5_block(
                 "重大战略合作与其他动态",
                 "第2次——【重大战略合作与其他动态】\n只列出有Earning Call原文或Form 4申报支撑的战略合作、Insider交易。"
                 "格式：[公司代码] 事件描述 — 来源：Earning Call/Form 4。"
-                "禁止推断，禁止额外内容。",
+                "按统一格式输出（先2-4句段落总结，再分组小标题+bullet支撑数据），禁止推断，禁止额外内容。",
             )
             sector_signal = (
                 "【重大投资与收购】\n"
@@ -3272,7 +3278,11 @@ Sector财务快照：
 
     _strict_guard = (
         "严格要求：只输出本板块内容，不得输出其他板块、附录、术语表、结语或任何额外内容。"
-        "所有结论必须有管理层原话或具体数字作为依据，禁止推断和投资建议。"
+        "所有结论必须有管理层原话或具体数字作为依据，禁止推断和投资建议。\n"
+        "输出格式要求：\n"
+        "1. 先用2-4句连贯的段落文字，对本板块内容做整体归纳总结，必须基于具体数据、提及主要公司与关键数字。\n"
+        "2. 再用分组方式列出支撑数据，每组有小标题，组内用bullet point。\n"
+        "3. 每条bullet必须标注来源公司和具体数字/原话，按主题或公司分组，避免平铺。"
     )
     _common_data_block = f"""
 本sector重点关注项：{watch_str}
@@ -3369,6 +3379,50 @@ Sector财务快照：
         sec_event_text = _run_exec_section("⚡ 重要事件", sec_event_prompt, max_tokens=800)
         sec_signal_text = _run_exec_section("💬 管理层关键信号", sec_signal_prompt, max_tokens=600)
         sec_risk_text = _run_exec_section("⚠️ 主要风险", sec_risk_prompt, max_tokens=800)
+
+        # 执行摘要白名单过滤：剔除包含非监控标的 ticker 的行（仅作用于「重要事件/管理层关键信号」）
+        from research_automation.core import sector_config
+
+        _get_tickers = getattr(sector_config, "get_tickers", None)
+        if callable(_get_tickers):
+            _sector_tickers_raw = _get_tickers(sector)
+            if isinstance(_sector_tickers_raw, (list, tuple, set)):
+                SECTOR_TICKERS = {
+                    str(x).strip().upper()
+                    for x in _sector_tickers_raw
+                    if str(x).strip()
+                }
+            else:
+                SECTOR_TICKERS = set()
+        else:
+            # 兼容：若 sector_config 未提供 get_tickers，则用当前报告覆盖公司作为白名单
+            SECTOR_TICKERS = {
+                (getattr(rec, "ticker", "") or "").strip().upper()
+                for rec, *_ in (per_company or [])
+                if (getattr(rec, "ticker", "") or "").strip()
+            }
+
+        def _filter_non_sector_content(text: str, allowed_tickers: set[str]) -> str:
+            """过滤掉包含非监控标的的段落"""
+            lines = (text or "").split("\n")
+            filtered: list[str] = []
+            for line in lines:
+                skip = False
+                for word in line.split():
+                    clean = word.strip('*[]().,:-—"""')
+                    if len(clean) >= 2 and len(clean) <= 5 and clean.isupper() and clean.isalpha():
+                        if clean not in allowed_tickers and clean not in {
+                            'AI', 'IT', 'LLM', 'API', 'CEO', 'CFO', 'COO', 'EPS', 'ARR', 'NRR',
+                            'TCV', 'RPO', 'AUM', 'YOY', 'FMP', 'SEC', 'ESG', 'IPO', 'M&A', 'PE', 'VC'
+                        }:
+                            skip = True
+                            break
+                if not skip:
+                    filtered.append(line)
+            return '\n'.join(filtered)
+
+        sec_event_text = _filter_non_sector_content(sec_event_text, SECTOR_TICKERS)
+        sec_signal_text = _filter_non_sector_content(sec_signal_text, SECTOR_TICKERS)
 
         summary_parts = [
             "### 📊 财务快照",
