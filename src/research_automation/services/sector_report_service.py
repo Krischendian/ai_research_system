@@ -3393,16 +3393,6 @@ Sector财务快照：
     )
 
     try:
-        sec_fin_prompt = _build_section_prompt(
-            "📊 财务快照",
-            "任务要求：基于上方【财务快照】中已计算好的行业中位数和各公司数据，"
-            "写一段150字以内的行业横向总结，要求："
-            "① 点出sector增速中位数和分布区间，② 点出增速最高和最低各1-2家及原因，"
-            "③ 结合「本季指引变动方向」字段，说明哪些公司指引上调/下调，"
-            "禁止自行引用任何未在【财务快照】数据中出现的数字，"
-            "禁止逐家罗列公司数字（Step6已有详细表格）。"
-            + _coverage_rule,
-        )
         sec_theme_prompt = _build_section_prompt(
             "🔑 本季核心主题",
             "任务要求：只输出跨3家以上公司出现的共同表述，每条必须附涉及公司名和原始数字，禁止推断。"
@@ -3418,40 +3408,26 @@ Sector财务快照：
             "任务要求：只输出有发言人姓名+原话的表述，格式为「公司 — 发言人：原话」。"
             "严格要求：发言人姓名必须逐字来自上方【Earning Call 摘录】中出现的真实姓名，"
             "禁止使用任何未在摘录中出现的姓名，禁止从记忆或训练数据补充任何人名。"
-            "若某公司摘录中未出现具名发言人，则该公司不得出现在本板块。",
+            "若某公司摘录中未出现具名发言人，则该公司不得出现在本板块。"
+            "严格要求："
+            "所有引语必须是管理层的直接原话，不得改写、意译或重述。"
+            "禁止在输出中加入任何「编辑注」、「免责声明」或「格式说明」类文字。"
+            "若某段原话无法确认为逐字引用，直接省略，不得输出。"
+            "引语格式严格为：公司代码 — 发言人姓名：\"原话\"。",
         )
         sec_risk_prompt = _build_section_prompt(
             "⚠️ 主要风险",
-            "任务要求：只输出管理层主动披露的不确定因素，每条必须附公司名和具体表述依据。",
+            "输出格式："
+            "1. 先用2-3句总结本季度各公司主动披露的主要风险类别。"
+            "2. 再按风险类型分组列出具体条目，每条格式为："
+            "- 公司代码：管理层原话或具体披露内容（来源：公司+财报期）。"
+            "严格要求："
+            "只列出管理层在earnings call或10-K中主动披露的不确定因素。"
+            "每条必须有具体来源公司和财报期标注。"
+            "禁止输出跨公司推断性分析、风险叠加效应分析或任何无原文依据的总结性判断。"
+            "禁止输出「跨维度风险叠加」「时序结构」「语言层面转变」等分析师视角内容。"
+            "禁止输出上述分组条目以外的任何额外段落。",
         )
-
-        sec_fin_text = _run_exec_section("📊 财务快照", sec_fin_prompt, max_tokens=800)
-        sec_theme_text = _run_exec_section("🔑 本季核心主题", sec_theme_prompt, max_tokens=1200)
-        sec_event_text = _run_exec_section("⚡ 重要事件", sec_event_prompt, max_tokens=800)
-        sec_signal_text = _run_exec_section("💬 管理层关键信号", sec_signal_prompt, max_tokens=600)
-        sec_risk_text = _run_exec_section("⚠️ 主要风险", sec_risk_prompt, max_tokens=800)
-
-        # 执行摘要白名单过滤：剔除包含非监控标的 ticker 的行（仅作用于「重要事件/管理层关键信号」）
-        from research_automation.core import sector_config
-
-        _get_tickers = getattr(sector_config, "get_tickers", None)
-        if callable(_get_tickers):
-            _sector_tickers_raw = _get_tickers(sector)
-            if isinstance(_sector_tickers_raw, (list, tuple, set)):
-                SECTOR_TICKERS = {
-                    str(x).strip().upper()
-                    for x in _sector_tickers_raw
-                    if str(x).strip()
-                }
-            else:
-                SECTOR_TICKERS = set()
-        else:
-            # 兼容：若 sector_config 未提供 get_tickers，则用当前报告覆盖公司作为白名单
-            SECTOR_TICKERS = {
-                (getattr(rec, "ticker", "") or "").strip().upper()
-                for rec, *_ in (per_company or [])
-                if (getattr(rec, "ticker", "") or "").strip()
-            }
 
         def _filter_non_sector_content(text: str, allowed_tickers: set[str]) -> str:
             """过滤掉包含非监控标的的段落"""
@@ -3472,16 +3448,19 @@ Sector财务快照：
                     filtered.append(line)
             return '\n'.join(filtered)
 
-        sec_event_text = _filter_non_sector_content(sec_event_text, SECTOR_TICKERS)
-        sec_signal_text = _filter_non_sector_content(sec_signal_text, SECTOR_TICKERS)
+        sec_theme_text = _run_exec_section("🔑 本季核心主题", sec_theme_prompt, max_tokens=1200)
+        sec_event_text = _run_exec_section("⚡ 重要事件", sec_event_prompt, max_tokens=800)
+        sec_signal_text = _run_exec_section("💬 管理层关键信号", sec_signal_prompt, max_tokens=600)
+        allowed_tickers = {
+            (getattr(rec, "ticker", "") or "").strip().upper()
+            for rec, *_ in (per_company or [])
+            if (getattr(rec, "ticker", "") or "").strip()
+        }
+        sec_event_text = _filter_non_sector_content(sec_event_text, allowed_tickers)
+        sec_signal_text = _filter_non_sector_content(sec_signal_text, allowed_tickers)
+        sec_risk_text = _run_exec_section("⚠️ 主要风险", sec_risk_prompt, max_tokens=800)
 
         summary_parts = [
-            "### 📊 财务快照",
-            "> 数据来源：FMP Annual Financials | 评判标准：最新财年Revenue YoY增速中位数及分布",
-            sec_fin_text or "（无可用内容）",
-            "",
-            "---",
-            "",
             "### 🔑 本季核心主题",
             "> 数据来源：Earning Call 逐字稿（FMP/SEC EDGAR）| 评判标准：跨3家以上公司出现的共同表述",
             sec_theme_text or "（无可用内容）",
