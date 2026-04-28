@@ -55,6 +55,77 @@ def _is_truncated_llm_output(text: str) -> bool:
     )
 
 
+_COMMON_ABBREVS: set[str] = {
+    "AI", "US", "CEO", "CFO", "CTO", "AWS", "API", "USD",
+    "FCF", "EPS", "ARR", "TCV", "FMP", "SEC", "ETF", "IPO",
+    "LLM", "YOY", "QOQ", "GAAP", "SAAS", "IT", "OK", "IR",
+    "M&A", "PE", "VC", "R&D", "HR", "PR", "ID",
+    "TOC", "UK", "EU", "UN", "NY", "DC",
+    "FY",
+}
+
+
+def _sanitize_bracket_tickers(text: str) -> str:
+    """修复 LLM 偶发把 [TICKER] 拆成多行（如 [EL\\n]）导致括号断裂。"""
+    s = text or ""
+    return re.sub(
+        r"\[([A-Za-z]{1,6})\s*\n+\s*\]",
+        lambda m: f"[{m.group(1).strip().upper()}]",
+        s,
+    )
+
+
+def _filter_by_ticker_whitelist(text: str, allowed_set: set[str]) -> str:
+    """白名单外 ticker：整行仅 rogue 则丢弃；若同行仍含本板块标的则只涂改 rogue。"""
+    _redact_placeholder = "〔非本板块标的〕"
+    _allowed = {str(x).strip().upper() for x in (allowed_set or set()) if str(x).strip()}
+
+    def _line_has_allowed(_ln: str) -> bool:
+        for _sym in _allowed:
+            if re.search(rf"\[{re.escape(_sym)}\]", _ln, flags=re.IGNORECASE):
+                return True
+            if re.search(rf"\b{re.escape(_sym)}\b", _ln, flags=re.IGNORECASE):
+                return True
+        return False
+
+    def _redact_line(_ln: str, _rogue_syms: set[str]) -> str:
+        out = _ln
+        for _sym in sorted(_rogue_syms, key=len, reverse=True):
+            out = re.sub(
+                rf"\[{re.escape(_sym)}\]",
+                _redact_placeholder,
+                out,
+                flags=re.IGNORECASE,
+            )
+            out = re.sub(
+                rf"\b{re.escape(_sym)}\b",
+                _redact_placeholder,
+                out,
+                flags=re.IGNORECASE,
+            )
+        out = re.sub(
+            r"〔非本板块标的〕(?:[,、，]\s*〔非本板块标的〕)+",
+            _redact_placeholder,
+            out,
+        )
+        return out
+
+    _filtered_lines: list[str] = []
+    for _line in (text or "").split("\n"):
+        bracket_tickers = {x.upper() for x in re.findall(r"\[([A-Za-z]{2,6})\]", _line)}
+        word_tickers = set(re.findall(r"\b([A-Z]{2,6})\b", _line))
+        _line_rogue = (bracket_tickers - _allowed) | (word_tickers - _allowed - _COMMON_ABBREVS)
+        if not _line_rogue:
+            _filtered_lines.append(_line)
+            continue
+        if _line_has_allowed(_line):
+            _filtered_lines.append(_redact_line(_line, _line_rogue))
+            continue
+        logger.warning("Ticker白名单过滤丢弃整行(rogue=%s): %s", _line_rogue, _line.strip())
+        continue
+    return "\n".join(_filtered_lines)
+
+
 FISCAL_YEAR_END: dict[str, str] = {
     "MDB": "Jan 31",
     "ZM": "Jan 31",
@@ -2091,7 +2162,11 @@ def _step4_earning_call_section(
                 s4_people = _run_s4_block(
                     "人员与组织变动",
                     "第2次——【人员与组织变动】\n只列出管理层明确披露的员工数量变化、重组计划或裁员数据。"
-                    "每条末尾标注（来源：公司名+具体数字）。按统一格式输出（先2-4句段落总结，再分组小标题+bullet支撑数据），禁止推断和点评。",
+                    "每条末尾标注（来源：公司名+具体数字）。"
+                    "对于累计费用或累计裁员数字，必须同时标注截止日期（如「截至2025年9月30日」），"
+                    "若摘录中未明确截止日期则不得引用该累计数字。"
+                    "若同一公司在不同时间点有多个累计数字，只引用最新一个。"
+                    "按统一格式输出（先2-4句段落总结，再分组小标题+bullet支撑数据），禁止推断和点评。",
                     800,
                 )
                 s4_fin = _run_s4_block(
@@ -2107,6 +2182,11 @@ def _step4_earning_call_section(
                     f"{s4_people or '- （无可提取内容）'}\n\n"
                     "【营收与盈利关键数据】\n"
                     f"{s4_fin or '- （无可提取内容）'}"
+                )
+                _allowed_set_s4 = {rec.ticker.upper() for rec, *_ in per_company}
+                sector_summary = _sanitize_bracket_tickers(sector_summary)
+                sector_summary = _filter_by_ticker_whitelist(
+                    sector_summary, _allowed_set_s4
                 )
                 total_companies_s4 = len(per_company) if per_company else 0
                 covered_companies_s4 = len(successful_analyses)
@@ -2489,99 +2569,13 @@ def _step5_new_biz_acquisitions_insider(
             )
             # 扫描输出中是否包含非白名单公司 ticker；并对全文逐行强制过滤（续写后再次过滤）
             _allowed_set_s5 = {rec.ticker.upper() for rec, *_ in per_company}
-            _COMMON_ABBREVS = {
-                'AI', 'US', 'CEO', 'CFO', 'CTO', 'AWS', 'API', 'USD',
-                'FCF', 'EPS', 'ARR', 'TCV', 'FMP', 'SEC', 'ETF', 'IPO',
-                'LLM', 'YOY', 'QOQ', 'GAAP', 'SaaS', 'IT', 'OK', 'IR',
-                'M&A', 'PE', 'VC', 'R&D', 'HR', 'PR', 'ID',
-                # 合同/地域/军语缩写，避免误杀合法行（如 TOC-L、UK/EU）
-                'TOC', 'UK', 'EU', 'UN', 'NY', 'DC',
-                # 财年写法 FY2026，勿当 ticker
-                'FY',
-            }
-            import re as _re_s5
-
-            def _sanitize_step5_bracket_tickers(_t: str) -> str:
-                """修复 LLM 偶发把 [TICKER] 拆成多行（如 [EL\\n]）导致括号断裂。"""
-                s = _t or ""
-                return _re_s5.sub(
-                    r"\[([A-Za-z]{1,6})\s*\n+\s*\]",
-                    lambda m: f"[{m.group(1).strip().upper()}]",
-                    s,
-                )
-
-            def _filter_step5_sector_signal(_text: str) -> str:
-                """白名单外 ticker：整行仅 rogue 则丢弃；若同行仍含本板块标的则只涂改 rogue，避免误删 MDB/BAH 等有效句。"""
-                _redact_placeholder = "〔非本板块标的〕"
-
-                def _line_has_allowed(_ln: str) -> bool:
-                    for _sym in _allowed_set_s5:
-                        if _re_s5.search(
-                            rf"\[{re.escape(_sym)}\]", _ln, flags=_re_s5.IGNORECASE
-                        ):
-                            return True
-                        if _re_s5.search(rf"\b{re.escape(_sym)}\b", _ln, flags=_re_s5.IGNORECASE):
-                            return True
-                    return False
-
-                def _redact_line(_ln: str, _rogue_syms: set[str]) -> str:
-                    out = _ln
-                    for _sym in sorted(_rogue_syms, key=len, reverse=True):
-                        out = _re_s5.sub(
-                            rf"\[{re.escape(_sym)}\]",
-                            _redact_placeholder,
-                            out,
-                            flags=_re_s5.IGNORECASE,
-                        )
-                        out = _re_s5.sub(
-                            rf"\b{re.escape(_sym)}\b",
-                            _redact_placeholder,
-                            out,
-                            flags=_re_s5.IGNORECASE,
-                        )
-                    out = _re_s5.sub(
-                        r"〔非本板块标的〕(?:[,、，]\s*〔非本板块标的〕)+",
-                        _redact_placeholder,
-                        out,
-                    )
-                    return out
-
-                _filtered_lines: list[str] = []
-                for _line in (_text or "").split("\n"):
-                    bracket_tickers = {
-                        x.upper()
-                        for x in _re_s5.findall(r"\[([A-Za-z]{2,6})\]", _line)
-                    }
-                    word_tickers = set(_re_s5.findall(r"\b([A-Z]{2,6})\b", _line))
-                    # 方括号 [TICK] 视为严格标的引用：仅白名单有效，不用 IT/AI 等通用缩写豁免
-                    #（否则 [IT] 指 Gartner IT 支出等会漏网）
-                    _line_rogue = (bracket_tickers - _allowed_set_s5) | (
-                        word_tickers - _allowed_set_s5 - _COMMON_ABBREVS
-                    )
-                    if not _line_rogue:
-                        _filtered_lines.append(_line)
-                        continue
-                    if _line_has_allowed(_line):
-                        _redacted = _redact_line(_line, _line_rogue)
-                        logger.warning(
-                            "Step5 涂改非白名单 ticker rogue=%s（保留本行其余内容）",
-                            _line_rogue,
-                        )
-                        _filtered_lines.append(_redacted)
-                        continue
-                    logger.warning(
-                        "Step5 丢弃整行(rogue=%s): %s", _line_rogue, _line.strip()
-                    )
-                    continue
-                return "\n".join(_filtered_lines)
-
             _brk_syms = {
                 x.upper()
-                for x in _re_s5.findall(
+                for x in re.findall(
                     r"\[([A-Za-z]{2,6})\]", sector_signal or ""
                 )
             }
-            _word_syms = set(_re_s5.findall(r"\b[A-Z]{2,6}\b", sector_signal or ""))
+            _word_syms = set(re.findall(r"\b[A-Z]{2,6}\b", sector_signal or ""))
             _rogue = (_brk_syms - _allowed_set_s5) | (
                 _word_syms - _allowed_set_s5 - _COMMON_ABBREVS
             )
@@ -2590,8 +2584,8 @@ def _step5_new_biz_acquisitions_insider(
                     "Step5 LLM输出包含非白名单实体: %s，执行过滤",
                     _rogue,
                 )
-            sector_signal = _sanitize_step5_bracket_tickers(sector_signal)
-            sector_signal = _filter_step5_sector_signal(sector_signal)
+            sector_signal = _sanitize_bracket_tickers(sector_signal)
+            sector_signal = _filter_by_ticker_whitelist(sector_signal, _allowed_set_s5)
 
             def _strip_step5_embedded_disclaimers(_body: str) -> str:
                 """去掉模型在 sector 正文中复读的免责/来源行，与下方固定两行只保留一处。"""
@@ -3198,7 +3192,7 @@ def _executive_summary(
             if not blk:
                 continue
             start, end = blk
-            take = min(15, end - start, remaining)
+            take = min(20, end - start, remaining)
             for j in range(take):
                 idx = start + j
                 if idx not in picked_set:
@@ -3219,9 +3213,24 @@ def _executive_summary(
         out_lines = [filtered[k] for k in picked_idx[:max_lines]]
         return "\n".join(out_lines)
 
-    step4_text = _extract_key_lines(step4_lines, 120, per_company=per_company)
+    step4_text = _extract_key_lines(step4_lines, 150, per_company=per_company)
     step5_text = _extract_key_lines(step5_lines, 30)
     step6_text = _extract_key_lines(step6_lines, 40)
+    from research_automation.core import sector_config as _sector_config
+    _get_tickers = getattr(_sector_config, "get_tickers", None)
+    if callable(_get_tickers):
+        _raw = _get_tickers(sector)
+        if isinstance(_raw, (list, tuple, set)):
+            _allowed_set_exec = {str(x).strip().upper() for x in _raw if str(x).strip()}
+        else:
+            _allowed_set_exec = set()
+    else:
+        _allowed_set_exec = {
+            (getattr(rec, "ticker", "") or "").strip().upper()
+            for rec, *_ in (per_company or [])
+        }
+    step4_text = _filter_by_ticker_whitelist(step4_text, _allowed_set_exec)
+    step5_text = _filter_by_ticker_whitelist(step5_text, _allowed_set_exec)
 
     watch_str = "、".join(sector_watch_items) if sector_watch_items else "无"
     struct_notes = _special_structure_guidance_for_tickers(
@@ -3275,6 +3284,30 @@ Sector财务快照：
 - 增速前三：{", ".join(top3)}
 - 增速后三：{", ".join(bot3)}
 """
+            # 从 step4_lines 中提取各公司指引方向（上调/下调/维持/撤回）
+            # 用正则匹配「上调」「下调」「维持」「撤回」关键词，与 ticker 在同一行出现时记录
+            import re as _re_fin
+
+            guidance_direction: dict[str, str] = {}
+            for line in (step4_lines or []):
+                for _tk in ([rec.ticker for rec, *_ in (per_company or [])]):
+                    if _tk in line:
+                        if any(w in line for w in ["上调", "raised", "raise"]):
+                            guidance_direction[_tk] = "上调"
+                        elif any(w in line for w in ["下调", "lowered", "lower", "cut"]):
+                            guidance_direction[_tk] = "下调"
+                        elif any(w in line for w in ["撤回", "withdrew", "withdrawn"]):
+                            guidance_direction[_tk] = "撤回"
+                        elif any(w in line for w in ["维持", "maintained", "reiterated"]):
+                            guidance_direction[_tk] = "维持"
+
+            # 将指引方向拼入 financial_snapshot
+            if guidance_direction:
+                guidance_lines = "\n".join(
+                    f"  {tk}：指引{direction}"
+                    for tk, direction in guidance_direction.items()
+                )
+                financial_snapshot += f"\n- 本季指引变动方向：\n{guidance_lines}"
 
     _strict_guard = (
         "严格要求：只输出本板块内容，不得输出其他板块、附录、术语表、结语或任何额外内容。"
@@ -3352,22 +3385,40 @@ Sector财务快照：
             _cont_round += 1
         return (text or "").strip()
 
+    _min_coverage = max(3, int(len(per_company or []) * 0.6))
+    _coverage_rule = (
+        f"覆盖要求：本板块内容必须覆盖至少{_min_coverage}家公司，"
+        "不得集中于AI/科技类公司，零售、工业、物流类公司也必须有具体数据支撑。"
+        "若某公司无Earning Call数据，则使用财务快照数据（Revenue/EPS/YoY）作为替代。"
+    )
+
     try:
         sec_fin_prompt = _build_section_prompt(
             "📊 财务快照",
-            "任务要求：只输出财务数字对比，每条结论必须附公司名+具体数字，禁止推断。",
+            "任务要求：基于上方【财务快照】中已计算好的行业中位数和各公司数据，"
+            "写一段150字以内的行业横向总结，要求："
+            "① 点出sector增速中位数和分布区间，② 点出增速最高和最低各1-2家及原因，"
+            "③ 结合「本季指引变动方向」字段，说明哪些公司指引上调/下调，"
+            "禁止自行引用任何未在【财务快照】数据中出现的数字，"
+            "禁止逐家罗列公司数字（Step6已有详细表格）。"
+            + _coverage_rule,
         )
         sec_theme_prompt = _build_section_prompt(
             "🔑 本季核心主题",
-            "任务要求：只输出跨3家以上公司出现的共同表述，每条必须附涉及公司名和原始数字，禁止推断。",
+            "任务要求：只输出跨3家以上公司出现的共同表述，每条必须附涉及公司名和原始数字，禁止推断。"
+            + _coverage_rule,
         )
         sec_event_prompt = _build_section_prompt(
             "⚡ 重要事件",
-            "任务要求：只输出有原话/新闻/数字支撑的实质性事件，以编号列表输出。",
+            "任务要求：只输出有原话/新闻/数字支撑的实质性事件，以编号列表输出。"
+            + _coverage_rule,
         )
         sec_signal_prompt = _build_section_prompt(
             "💬 管理层关键信号",
-            "任务要求：只输出有发言人姓名+原话的表述，格式为「公司 — 发言人：原话」。",
+            "任务要求：只输出有发言人姓名+原话的表述，格式为「公司 — 发言人：原话」。"
+            "严格要求：发言人姓名必须逐字来自上方【Earning Call 摘录】中出现的真实姓名，"
+            "禁止使用任何未在摘录中出现的姓名，禁止从记忆或训练数据补充任何人名。"
+            "若某公司摘录中未出现具名发言人，则该公司不得出现在本板块。",
         )
         sec_risk_prompt = _build_section_prompt(
             "⚠️ 主要风险",
