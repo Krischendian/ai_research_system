@@ -2214,6 +2214,8 @@ def _step5_new_biz_acquisitions_insider(
             bool,
         ]
     ],
+    *,
+    sector_summary_only: bool = False,
 ) -> list[str]:
     lines: list[str] = ["## Step 5｜新业务 / 收购 / Insider 异动", ""]
 
@@ -2371,53 +2373,130 @@ def _step5_new_biz_acquisitions_insider(
 10. 所有金额数字必须与原始数据完全一致，禁止四舍五入、换算或修改任何数字"""
 
         try:
-            sector_signal = _chat5(prompt, max_tokens=400, timeout=300.0)
-            # 扫描输出中是否包含非白名单公司ticker
+            sector_signal = _chat5(prompt, max_tokens=900, timeout=300.0)
+            # 扫描输出中是否包含非白名单公司 ticker；并对全文逐行强制过滤（续写后再次过滤）
             _allowed_set_s5 = {rec.ticker.upper() for rec, *_ in per_company}
             _COMMON_ABBREVS = {
                 'AI', 'US', 'CEO', 'CFO', 'CTO', 'AWS', 'API', 'USD',
                 'FCF', 'EPS', 'ARR', 'TCV', 'FMP', 'SEC', 'ETF', 'IPO',
                 'LLM', 'YOY', 'QOQ', 'GAAP', 'SaaS', 'IT', 'OK', 'IR',
-                'M&A', 'PE', 'VC', 'IPO', 'R&D', 'HR', 'PR', 'ID',
+                'M&A', 'PE', 'VC', 'R&D', 'HR', 'PR', 'ID',
+                # 合同/地域/军语缩写，避免误杀合法行（如 TOC-L、UK/EU）
+                'TOC', 'UK', 'EU', 'UN', 'NY', 'DC',
+                # 财年写法 FY2026，勿当 ticker
+                'FY',
             }
             import re as _re_s5
-            _found_tickers = set(_re_s5.findall(r'\b[A-Z]{2,5}\b', sector_signal))
+
+            def _sanitize_step5_bracket_tickers(_t: str) -> str:
+                """修复 LLM 偶发把 [TICKER] 拆成多行（如 [EL\\n]）导致括号断裂。"""
+                s = _t or ""
+                return _re_s5.sub(
+                    r"\[([A-Za-z]{1,6})\s*\n+\s*\]",
+                    lambda m: f"[{m.group(1).strip().upper()}]",
+                    s,
+                )
+
+            def _filter_step5_sector_signal(_text: str) -> str:
+                """白名单外 ticker：整行仅 rogue 则丢弃；若同行仍含本板块标的则只涂改 rogue，避免误删 MDB/BAH 等有效句。"""
+                _redact_placeholder = "〔非本板块标的〕"
+
+                def _line_has_allowed(_ln: str) -> bool:
+                    for _sym in _allowed_set_s5:
+                        if _re_s5.search(
+                            rf"\[{re.escape(_sym)}\]", _ln, flags=_re_s5.IGNORECASE
+                        ):
+                            return True
+                        if _re_s5.search(rf"\b{re.escape(_sym)}\b", _ln, flags=_re_s5.IGNORECASE):
+                            return True
+                    return False
+
+                def _redact_line(_ln: str, _rogue_syms: set[str]) -> str:
+                    out = _ln
+                    for _sym in sorted(_rogue_syms, key=len, reverse=True):
+                        out = _re_s5.sub(
+                            rf"\[{re.escape(_sym)}\]",
+                            _redact_placeholder,
+                            out,
+                            flags=_re_s5.IGNORECASE,
+                        )
+                        out = _re_s5.sub(
+                            rf"\b{re.escape(_sym)}\b",
+                            _redact_placeholder,
+                            out,
+                            flags=_re_s5.IGNORECASE,
+                        )
+                    out = _re_s5.sub(
+                        r"〔非本板块标的〕(?:[,、，]\s*〔非本板块标的〕)+",
+                        _redact_placeholder,
+                        out,
+                    )
+                    return out
+
+                _filtered_lines: list[str] = []
+                for _line in (_text or "").split("\n"):
+                    bracket_tickers = {
+                        x.upper()
+                        for x in _re_s5.findall(r"\[([A-Za-z]{2,6})\]", _line)
+                    }
+                    word_tickers = set(_re_s5.findall(r"\b([A-Z]{2,6})\b", _line))
+                    all_tickers = bracket_tickers | word_tickers
+                    _line_rogue = all_tickers - _allowed_set_s5 - _COMMON_ABBREVS
+                    if not _line_rogue:
+                        _filtered_lines.append(_line)
+                        continue
+                    if _line_has_allowed(_line):
+                        _redacted = _redact_line(_line, _line_rogue)
+                        logger.warning(
+                            "Step5 涂改非白名单 ticker rogue=%s（保留本行其余内容）",
+                            _line_rogue,
+                        )
+                        _filtered_lines.append(_redacted)
+                        continue
+                    logger.warning(
+                        "Step5 丢弃整行(rogue=%s): %s", _line_rogue, _line.strip()
+                    )
+                    continue
+                return "\n".join(_filtered_lines)
+
+            _found_tickers = set(_re_s5.findall(r"\b[A-Z]{2,6}\b", sector_signal or ""))
             _rogue = _found_tickers - _allowed_set_s5 - _COMMON_ABBREVS
             if _rogue:
                 logger.warning(
                     "Step5 LLM输出包含非白名单实体: %s，执行过滤",
                     _rogue,
                 )
-                import re as _re_filter
-                filtered_lines = []
-                for _line in sector_signal.split("\n"):
-                    bracket_tickers = set(_re_filter.findall(r'\[([A-Z]{2,5})\]', _line))
-                    word_tickers = set(_re_filter.findall(r'\b([A-Z]{2,5})\b', _line))
-                    all_tickers = bracket_tickers | word_tickers
-                    _line_rogue = all_tickers - _allowed_set_s5 - _COMMON_ABBREVS
-                    if _line_rogue:
-                        logger.warning("Step5 过滤行(rogue=%s): %s", _line_rogue, _line.strip())
-                        continue
-                    filtered_lines.append(_line)
-                sector_signal = "\n".join(filtered_lines)
-            if _is_truncated_llm_output(sector_signal) or len(
-                (sector_signal or "").strip()
-            ) < 40:
-                logger.warning("Step5 sector总结疑似截断，尝试续写")
+            sector_signal = _sanitize_step5_bracket_tickers(sector_signal)
+            sector_signal = _filter_step5_sector_signal(sector_signal)
+            _step5_cont_round = 0
+            while (
+                _is_truncated_llm_output(sector_signal)
+                or len((sector_signal or "").strip()) < 40
+            ) and _step5_cont_round < 3:
+                logger.warning(
+                    "Step5 sector总结疑似截断，尝试续写 round=%s",
+                    _step5_cont_round,
+                )
                 try:
                     _cont5 = _chat5(
                         f"以下内容未写完，请从中断处继续，只输出续写内容，不要重复：\n\n{sector_signal}",
-                        max_tokens=300,
+                        max_tokens=600,
                         timeout=300.0,
                     )
                     sector_signal = sector_signal.rstrip() + "\n" + _cont5
                 except Exception:
                     logger.warning("Step5续写失败，使用已有内容")
+                    break
+                sector_signal = _sanitize_step5_bracket_tickers(sector_signal)
+                sector_signal = _filter_step5_sector_signal(sector_signal)
+                _step5_cont_round += 1
             lines.append("> **数据来源**：Benzinga 公司新闻 + FMP Insider 交易申报（Form 4）｜**评判标准**：收购/战略合作/异常 Insider 交易（买入>$1M 或卖出>$5M）")
             lines.append("> ⚠️ **以下为系统辅助总结，非原文直接提取，仅供参考。原文链接请展开各公司详情查看。**")
             lines.append("")
             lines.append(sector_signal)
             lines.append("")
+            if sector_summary_only:
+                return lines
 
             # Reference 块
             lines.append("**参考来源：**")
@@ -2453,6 +2532,9 @@ def _step5_new_biz_acquisitions_insider(
             if _strict_expose_llm_errors():
                 raise
     # ── Sector 总结 END ──────────────────────────────────────────
+
+    if sector_summary_only:
+        return lines
 
     for rec, signals, insider, _below, _had in per_company:
         t = rec.ticker
@@ -3077,13 +3159,24 @@ Sector财务快照：
 > 数据来源：Earning Call 前瞻性表述（含 expect/may/consider 等情态动词）| 评判标准：管理层主动披露的不确定因素
 [在此填写：管理层普遍提及的风险，附具体公司和表述，2-3条]
 
+---
+
+### 🏆 相对强弱排序
+> 数据来源：综合财务快照 + 管理层前瞻指引 + 重要事件 | 评判标准：当前基本面动能与指引置信度的综合评估
+（必须用Markdown表格，每家有财务数据的公司占一行，不得省略任何公司，格式如下：）
+
+| 排名 | 公司 | 核心优势 | 主要风险 |
+|------|------|----------|----------|
+| 1 | **TICKER** | 核心优势描述 | 主要风险描述 |
+...以此类推，覆盖所有有财务数据的公司
+
 要求：
 1. 财务快照和本季核心主题不得重复相同内容
 2. 每个板块必须有具体公司名称、数字、事件
 3. 只基于提供的原文，不捏造信息
 4. 中文输出，公司名/指标/人名保留英文
 5. 总长度控制在350-500字
-6. 必须且只能输出以上5个板块（📊财务快照、🔑本季核心主题、⚡重要事件、💬管理层关键信号、⚠️主要风险），不得新增任何额外板块
+6. 严格只输出以上6个板块，禁止自行添加任何其他额外板块或章节
 
 【严格数字规则 — 违反则输出无效】
 1. 所有金额数字必须与原文数据完全一致，禁止换算单位（原文写 $697M 就写 $697M，不得改为 $0.70B 或 $6.97B）

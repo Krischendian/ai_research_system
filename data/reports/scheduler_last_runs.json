@@ -2,16 +2,16 @@
   "last_runs": {
     "batch_fetch_financials": {},
     "overnight_report": {
-      "at": "2026-04-27T06:31:03.704785+08:00",
+      "at": "2026-04-28T06:31:05.212793+08:00",
       "ok": true,
-      "detail": "/Users/krisfan/Desktop/untitled folder/data/reports/overnight_2026-04-27.json"
+      "detail": "/Users/krisfan/Desktop/untitled folder/data/reports/overnight_2026-04-28.json"
     },
     "daily_summary_report": {
-      "at": "2026-04-27T06:33:10.199387+08:00",
-      "ok": true,
-      "detail": "/Users/krisfan/Desktop/untitled folder/data/reports/daily_2026-04-27.json"
+      "at": "2026-04-28T06:32:01.666157+08:00",
+      "ok": false,
+      "detail": "ValidationError: 2 validation errors for MacroNewsItem\ntitle\n  Field required [type=missing, input_value={'headline': '伊朗和..., 'ref': 'M5,M8,C1,C19'}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.12/v/missing\nregion\n  Input should be 'North America', 'Europe', 'Middle East', 'Asia' or 'Global' [type=literal_error, input_value='中东', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.12/v/literal_error"
     }
   },
-  "scheduler_started_at": "2026-04-28T05:22:54.680389+08:00",
-  "updated_at": "2026-04-27T21:22:54.680954+00:00"
+  "scheduler_started_at": "2026-04-28T08:03:38.675400+08:00",
+  "updated_at": "2026-04-28T00:03:38.676052+00:00"
 }
