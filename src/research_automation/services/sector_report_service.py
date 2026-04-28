@@ -1777,47 +1777,63 @@ def _step3_per_company_outlook(
     if len(outlook_briefs) >= 2:
         briefs_text = '\n\n'.join(outlook_briefs)
         all_tickers_in_sector = [rec.ticker for rec, *_ in per_company]
-        prompt = f"""你是资深行业研究分析师。以下是该板块各公司管理层对未来的展望与行业判断：
+        _s3_guard = (
+            "严格要求：只输出本板块内容。所有结论必须有管理层原话或具体数字依据。"
+            "禁止推断、禁止投资建议、禁止输出额外板块或总结段落。"
+        )
+        _s3_common = f"""以下是该板块各公司管理层对未来的展望与行业判断：
 
 {briefs_text}
 
 本板块共 {len(all_tickers_in_sector)} 家公司：{', '.join(all_tickers_in_sector)}
-以上数据覆盖其中 {len(outlook_briefs)} 家。
+以上数据覆盖其中 {len(outlook_briefs)} 家。"""
 
-请生成板块整体展望总结。要求：
-1. 必须逐一提及每家有数据的公司，禁止只聚焦头部公司而忽略其他
-2. 只提炼多家公司（至少2家）共同提到的战略方向或行业判断
-3. 每条结论必须标注具体公司名称和数字，禁止模糊表述
-4. 分点列出，每点以【战略方向】或【行业判断】开头
-5. 单家公司独有的展望不在此列出，留给个股详情
-6. 每句必须有实质内容，禁止车轱辘话
-7. 中文输出，公司名保留英文
-8. 禁止输出任何以#开头的标题行，直接输出正文段落"""
-
-        try:
-            sector_outlook = _chat3(prompt, max_tokens=1600, timeout=300.0)
-            _s3_cont = 0
-            while _s3_cont < 3 and (
-                _is_truncated_llm_output(sector_outlook)
-                or len(sector_outlook.strip()) < 120
+        def _run_s3_block(_name: str, _task_rule: str) -> str:
+            _prompt = (
+                f"你是资深行业研究分析师。\n{_s3_guard}\n\n{_s3_common}\n\n{_task_rule}"
+            )
+            _txt = _chat3(_prompt, max_tokens=1000, timeout=300.0)
+            _round = 0
+            while _round < 3 and (
+                _is_truncated_llm_output(_txt) or len((_txt or "").strip()) < 60
             ):
                 logger.warning(
-                    "Step3 sector总结疑似截断，尝试续写 round=%s",
-                    _s3_cont,
+                    "Step3[%s]疑似截断，尝试续写 round=%s",
+                    _name,
+                    _round,
                 )
                 try:
                     _cont = _chat3(
-                        f"""以下是一份未完成的板块展望总结，请从中断处继续补全，只输出续写内容，不要重复已有内容：
-
-{sector_outlook}""",
-                        max_tokens=900,
+                        f"以下是未完成的「{_name}」内容，请从中断处继续，只输出续写内容，不要重复已有内容：\n\n{_txt}",
+                        max_tokens=1000,
                         timeout=300.0,
                     )
-                    sector_outlook = sector_outlook.rstrip() + "\n" + _cont
+                    _txt = _txt.rstrip() + "\n" + _cont
                 except Exception:
-                    logger.warning("Step3续写失败，使用已有内容")
+                    logger.warning("Step3[%s]续写失败，使用已有内容", _name)
                     break
-                _s3_cont += 1
+                _round += 1
+            return (_txt or "").strip()
+
+        try:
+            s3_industry = _run_s3_block(
+                "行业判断",
+                "第1次——【行业判断】\n基于以下各公司10-K及Earning Call内容，只提取跨2家以上公司共同出现的行业层面判断。"
+                "每条必须有管理层原文支撑，末尾标注（来源：公司A、公司B）。"
+                "每条不超过100字。只输出bullet list，禁止任何推断、点评或额外内容。",
+            )
+            s3_strategy = _run_s3_block(
+                "战略方向",
+                "第2次——【战略方向】\n基于以下各公司10-K及Earning Call内容，只提取跨2家以上公司共同出现的战略举措或方向。"
+                "每条必须有管理层原文支撑，末尾标注（来源：公司A、公司B）。"
+                "每条不超过100字。只输出bullet list，禁止任何推断、点评或额外内容。",
+            )
+            sector_outlook = (
+                "【行业判断】\n"
+                f"{s3_industry or '- （无可提取内容）'}\n\n"
+                "【战略方向】\n"
+                f"{s3_strategy or '- （无可提取内容）'}"
+            )
             total_companies = len(per_company)
             covered_companies = len(outlook_briefs)
             covered_tickers = []
@@ -2013,7 +2029,11 @@ def _step4_earning_call_section(
             briefs_text = '\n\n'.join(company_briefs)
 
             all_tickers_s4 = [rec.ticker for rec, *_ in per_company]
-            sector_summary_prompt = f"""你是资深行业研究分析师。以下是{_sector}板块本季度各公司Earning Call的关键内容：
+            _s4_guard = (
+                "严格要求：只输出本板块内容。所有结论必须有管理层原话或具体数字依据。"
+                "禁止推断、禁止投资建议、禁止输出额外板块或总结段落。"
+            )
+            _s4_common = f"""以下是{_sector}板块本季度各公司Earning Call的关键内容：
 
 {briefs_text}
 
@@ -2021,62 +2041,69 @@ def _step4_earning_call_section(
 以上数据覆盖其中 {len(successful_analyses)} 家（{', '.join([t for t, _ in successful_analyses])}）。
 
 本sector重点关注项：{watch_str}
+"""
 
-请生成一份{_sector}板块本季度Earning Call总结。
-
-要求：
-1. 有数据的每家公司都必须在总结中至少出现一次，绝对不允许遗漏任何有数据的公司
-2. 单家公司的引用次数不得超过总引用次数的30%，确保均衡覆盖
-3. 每一条结论必须有具体公司名称和具体数字支撑，禁止泛泛而谈
-4. 只提炼在多家公司（至少2家）中同时出现的共同趋势，单家公司独有的信息放到个股详情
-5. 重点关注：sector_watch_items中列出的关注项在各公司的实际表现
-6. 格式：分点列出，每点以【趋势名称】开头，后跟具体公司数据
-7. 每句必须有实质信息，禁止车轱辘话
-8. 中文输出，公司名/数字/人名保留英文
-9. 禁止输出任何以#开头的标题行，直接输出正文段落
-10. 所有数字必须与原文一致，禁止换算单位；原文含roughly/approximately等不确定词时必须保留"约"字
-11. 每条“共同趋势”必须列出不少于3家有实质证据的公司，并给出对应数字或原话；若不足3家，不得写成“共同趋势”，改写为“个股亮点”
-12. 禁止使用“暗示”“内在动力”“折射”等推断性语言，把未被管理层明确提及的战略方向强行关联到财务指标
-13. 某公司AI相关描述必须能在该公司Earning Call原话中找到直接对应；若仅为泛泛表态，不得写成“具体AI落地进展”
-14. 若输出“AI替代劳动力相关性：高/中/低”，必须按以下口径：
-    - 高：满足（a）管理层明确讨论AI替代本公司自身岗位；或（b）公司核心商业逻辑直接是“为客户提供AI替代劳动力方案”
-    - 中：仅提供AI工具/效率改善，但未量化就业替代效果
-    - 低：与AI替代劳动力无直接业务闭环
-    - 特别约束：工具提供方的客户自助率/自动化率，不能直接作为该公司“高相关性”的依据"""
-
-            _ps4 = len(sector_summary_prompt)
-            logger.info(
-                "Step4 sector总结 prompt长度：%s 字符，约 %s tokens（粗估 chars/4）",
-                _ps4,
-                _ps4 // 4,
-            )
-
-            try:
-                sector_summary = _chat(
-                    sector_summary_prompt, max_tokens=3200, timeout=300.0
+            def _run_s4_block(_name: str, _task_rule: str, _max_tokens: int) -> str:
+                _prompt = (
+                    f"你是资深行业研究分析师。\n{_s4_guard}\n\n{_s4_common}\n{_task_rule}"
                 )
-                _s4_cont_round = 0
-                while _s4_cont_round < 3 and (
-                    _is_truncated_llm_output(sector_summary)
-                    or len(sector_summary.strip()) < 160
+                _plen = len(_prompt)
+                logger.info(
+                    "Step4[%s] prompt长度：%s 字符，约 %s tokens（粗估 chars/4）",
+                    _name,
+                    _plen,
+                    _plen // 4,
+                )
+                _txt = _chat(_prompt, max_tokens=_max_tokens, timeout=300.0)
+                _round = 0
+                while _round < 3 and (
+                    _is_truncated_llm_output(_txt) or len((_txt or "").strip()) < 60
                 ):
                     logger.warning(
-                        "Step4 sector总结疑似截断，尝试续写 round=%s",
-                        _s4_cont_round,
+                        "Step4[%s]疑似截断，尝试续写 round=%s",
+                        _name,
+                        _round,
                     )
                     try:
-                        _s4_cont = _chat(
-                            f"""以下是一份未完成的板块 Earning Call 总结，请从中断处继续补全，只输出续写内容，不要重复已有内容：
-
-{sector_summary}""",
-                            max_tokens=1200,
+                        _cont = _chat(
+                            f"以下是未完成的「{_name}」内容，请从中断处继续，只输出续写内容，不要重复已有内容：\n\n{_txt}",
+                            max_tokens=_max_tokens,
                             timeout=300.0,
                         )
-                        sector_summary = sector_summary.rstrip() + "\n" + _s4_cont
+                        _txt = _txt.rstrip() + "\n" + _cont
                     except Exception:
-                        logger.warning("Step4续写失败，使用已有内容")
+                        logger.warning("Step4[%s]续写失败，使用已有内容", _name)
                         break
-                    _s4_cont_round += 1
+                    _round += 1
+                return (_txt or "").strip()
+
+            try:
+                s4_ai = _run_s4_block(
+                    "AI部署与替代进展",
+                    "第1次——【AI部署与替代进展】\n只列出有具体数字或管理层原话支撑的AI部署事实。"
+                    "每条末尾标注（来源：公司名+数字）。只输出bullet list，禁止推断和点评。",
+                    1000,
+                )
+                s4_people = _run_s4_block(
+                    "人员与组织变动",
+                    "第2次——【人员与组织变动】\n只列出管理层明确披露的员工数量变化、重组计划或裁员数据。"
+                    "每条末尾标注（来源：公司名+具体数字）。只输出bullet list，禁止推断和点评。",
+                    800,
+                )
+                s4_fin = _run_s4_block(
+                    "营收与盈利关键数据",
+                    "第3次——【营收与盈利关键数据】\n只列出各公司本季核心财务数字，每条末尾标注（来源：公司名+财年/季度）。"
+                    "只输出bullet list，禁止任何评级或预测。",
+                    800,
+                )
+                sector_summary = (
+                    "【AI部署与替代进展】\n"
+                    f"{s4_ai or '- （无可提取内容）'}\n\n"
+                    "【人员与组织变动】\n"
+                    f"{s4_people or '- （无可提取内容）'}\n\n"
+                    "【营收与盈利关键数据】\n"
+                    f"{s4_fin or '- （无可提取内容）'}"
+                )
                 total_companies_s4 = len(per_company) if per_company else 0
                 covered_companies_s4 = len(successful_analyses)
                 covered_tickers_s4 = [t for t, _ in successful_analyses]
@@ -2398,27 +2425,62 @@ def _step5_new_biz_acquisitions_insider(
     if len(all_signals_brief) >= 1:
         briefs_text = '\n\n'.join(all_signals_brief)
         _allowed_tickers_s5 = ', '.join([rec.ticker for rec, *_ in per_company])
-        prompt = f"""你是资深行业研究分析师。以下是板块各公司本周的新业务、收购并购及Insider交易信号：
+        _s5_guard = (
+            "严格要求：只输出本板块内容。所有结论必须有管理层原话或具体数字依据。"
+            "禁止推断、禁止投资建议、禁止输出额外板块或总结段落。"
+        )
+        _s5_common = f"""以下是板块各公司本周的新业务、收购并购及Insider交易信号：
 
 {briefs_text}
 
 本板块监控公司白名单（严格只能引用以下公司，禁止提及任何不在此列表中的公司名称或ticker）：
 {_allowed_tickers_s5}
+"""
 
-请生成板块整体新业务与Insider动态总结。要求：
-1. 重点标注：大额收购、战略合作、管理层大额买入/卖出
-2. 每条结论必须有具体公司名称、金额或事件名称
-3. Insider交易：只标注异常的（买入超过$1M或卖出超过$5M）
-4. 分点列出，格式：[公司] 事件描述（金额/规模）
-5. 如果本周信号较少，如实说明，不要凑字数
-6. 正文仅写事件与结论；禁止输出「数据来源」「免责声明」「系统辅助」「仅供参考」「原文链接」类提示行（报告会在正文外统一标注一次）
-7. 中文输出，公司名/金额保留英文
-8. 禁止输出任何以#开头的标题行，直接输出正文段落
-9. 严格只能引用白名单中的公司，禁止从训练知识补充任何白名单之外的公司、合同或事件
-10. 所有金额数字必须与原始数据完全一致，禁止四舍五入、换算或修改任何数字"""
+        def _run_s5_block(_name: str, _task_rule: str) -> str:
+            _prompt = f"你是资深行业研究分析师。\n{_s5_guard}\n\n{_s5_common}\n{_task_rule}"
+            _txt = _chat5(_prompt, max_tokens=800, timeout=300.0)
+            _round = 0
+            while _round < 3 and (
+                _is_truncated_llm_output(_txt) or len((_txt or "").strip()) < 40
+            ):
+                logger.warning(
+                    "Step5[%s]疑似截断，尝试续写 round=%s",
+                    _name,
+                    _round,
+                )
+                try:
+                    _cont = _chat5(
+                        f"以下是未完成的「{_name}」内容，请从中断处继续，只输出续写内容，不要重复已有内容：\n\n{_txt}",
+                        max_tokens=800,
+                        timeout=300.0,
+                    )
+                    _txt = _txt.rstrip() + "\n" + _cont
+                except Exception:
+                    logger.warning("Step5[%s]续写失败，使用已有内容", _name)
+                    break
+                _round += 1
+            return (_txt or "").strip()
 
         try:
-            sector_signal = _chat5(prompt, max_tokens=1400, timeout=300.0)
+            s5_invest = _run_s5_block(
+                "重大投资与收购",
+                "第1次——【重大投资与收购】\n只列出有Benzinga新闻链接或Earning Call原文支撑的收购、投资事件。"
+                "格式：[公司代码] 事件描述（金额/规模）— 来源：Benzinga/Earning Call。"
+                "禁止推断战略意义，禁止额外内容。",
+            )
+            s5_strategy = _run_s5_block(
+                "重大战略合作与其他动态",
+                "第2次——【重大战略合作与其他动态】\n只列出有Earning Call原文或Form 4申报支撑的战略合作、Insider交易。"
+                "格式：[公司代码] 事件描述 — 来源：Earning Call/Form 4。"
+                "禁止推断，禁止额外内容。",
+            )
+            sector_signal = (
+                "【重大投资与收购】\n"
+                f"{s5_invest or '- （无可提取内容）'}\n\n"
+                "【重大战略合作与其他动态】\n"
+                f"{s5_strategy or '- （无可提取内容）'}"
+            )
             # 扫描输出中是否包含非白名单公司 ticker；并对全文逐行强制过滤（续写后再次过滤）
             _allowed_set_s5 = {rec.ticker.upper() for rec, *_ in per_company}
             _COMMON_ABBREVS = {
@@ -2524,30 +2586,6 @@ def _step5_new_biz_acquisitions_insider(
                 )
             sector_signal = _sanitize_step5_bracket_tickers(sector_signal)
             sector_signal = _filter_step5_sector_signal(sector_signal)
-            _step5_cont_round = 0
-            while (
-                _is_truncated_llm_output(sector_signal)
-                or len((sector_signal or "").strip()) < 40
-            ) and _step5_cont_round < 4:
-                logger.warning(
-                    "Step5 sector总结疑似截断，尝试续写 round=%s",
-                    _step5_cont_round,
-                )
-                try:
-                    _cont5 = _chat5(
-                        f"以下内容未写完，请从中断处继续，只输出续写内容，不要重复已有段落；"
-                        f"禁止输出数据来源说明、免责声明或「仅供参考」类句子（系统会在正文外统一标注）：\n\n"
-                        f"{sector_signal}",
-                        max_tokens=1000,
-                        timeout=300.0,
-                    )
-                    sector_signal = sector_signal.rstrip() + "\n" + _cont5
-                except Exception:
-                    logger.warning("Step5续写失败，使用已有内容")
-                    break
-                sector_signal = _sanitize_step5_bracket_tickers(sector_signal)
-                sector_signal = _filter_step5_sector_signal(sector_signal)
-                _step5_cont_round += 1
 
             def _strip_step5_embedded_disclaimers(_body: str) -> str:
                 """去掉模型在 sector 正文中复读的免责/来源行，与下方固定两行只保留一处。"""
@@ -3232,7 +3270,14 @@ Sector财务快照：
 - 增速后三：{", ".join(bot3)}
 """
 
-    prompt = f"""你是资深行业研究分析师。以下是{sector}板块本季度完整数据：
+    _strict_guard = (
+        "严格要求：只输出本板块内容，不得输出其他板块、附录、术语表、结语或任何额外内容。"
+        "所有结论必须有管理层原话或具体数字作为依据，禁止推断和投资建议。"
+    )
+    _common_data_block = f"""
+本sector重点关注项：{watch_str}
+
+{struct_notes}
 
 【财务快照】
 {financial_snapshot}
@@ -3245,123 +3290,116 @@ Sector财务快照：
 
 【财务数据摘录】
 {step6_text}
+"""
 
-本sector重点关注项：{watch_str}
+    def _build_section_prompt(_title: str, _rule: str) -> str:
+        return (
+            f"你是资深行业研究分析师。请仅生成执行摘要中的「{_title}」板块正文。\n"
+            f"{_strict_guard}\n\n"
+            f"{_common_data_block}\n\n"
+            f"{_rule}\n\n"
+            "禁止输出标题、分隔线、表格、额外说明；只输出本板块正文内容。"
+        )
 
-{struct_notes}
-
-⚠️ 数字一致性要求：
-- 所有具体数字（EPS、营收、增速、指引区间等）必须直接引用上方【Earning Call 摘录】中已出现的数字，禁止自行计算或重新生成
-- 特别是各公司的指引数字（如EPS指引、营收指引），必须与Earning Call摘录中的原文完全一致
-- 如果某公司的指引数字在摘录中出现多处且不一致，选用最新/最详细的那处，并只引用一次
-
-请严格按照以下模板填充内容，模板中的每个板块标题和格式不得修改，不得新增任何板块：
-
-### 📊 财务快照
-> 数据来源：FMP Annual Financials | 评判标准：最新财年Revenue YoY增速中位数及分布
-[在此填写：sector整体增速中位数（注明基于几家公司）、头尾公司对比、Gross Margin水平，2-3句，必须有具体数字和样本数]
-
----
-
-### 🔑 本季核心主题
-> 数据来源：Earning Call 逐字稿（FMP/SEC EDGAR）| 评判标准：跨3家以上公司出现的共同表述
-[在此填写：sector级别最重要的2-3个共同趋势，每个趋势必须附具体公司名称和数据；每条结论末尾追加：（涉及公司：A、B、C；其余N家公司本季未披露可量化数据）；末尾补充一句点名其他值得关注的公司]
-
----
-
-### ⚡ 重要事件
-> 数据来源：Earning Call 逐字稿 + Benzinga 公司新闻 | 评判标准：涉及资本配置/人员/产品的实质性变化
-[在此填写：本季最值得关注的3-5个具体事件，格式：1. **[公司]** 事件描述]
-
----
-
-### 💬 管理层关键信号
-> 数据来源：Earning Call 逐字稿原话 | 评判标准：CEO/CFO对业务趋势的直接表态
-[在此填写：来自不同公司CEO/CFO的直接表态，附发言人姓名和原话关键词，2-4条，格式：- **公司 — 姓名**："原话关键词"——分析]
-
----
-
-### ⚠️ 主要风险
-> 数据来源：Earning Call 前瞻性表述（含 expect/may/consider 等情态动词）| 评判标准：管理层主动披露的不确定因素
-[在此填写：管理层普遍提及的风险，附具体公司和表述，2-3条]
-
----
-
-### 🏆 相对强弱排序
-> 数据来源：综合财务快照 + 管理层前瞻指引 + 重要事件 | 评判标准：当前基本面动能与指引置信度的综合评估
-（必须用Markdown表格，每家有财务数据的公司占一行，不得省略任何公司，格式如下：）
-
-| 排名 | 公司 | 核心优势 | 主要风险 |
-|------|------|----------|----------|
-| 1 | **TICKER** | 核心优势描述 | 主要风险描述 |
-...以此类推，覆盖所有有财务数据的公司
-
-要求：
-1. 财务快照和本季核心主题不得重复相同内容
-2. 每个板块必须有具体公司名称、数字、事件
-3. 只基于提供的原文，不捏造信息
-4. 中文输出，公司名/指标/人名保留英文
-5. 总长度控制在350-500字
-6. 严格只输出以上6个板块，禁止自行添加任何其他额外板块或章节
-
-【严格数字规则 — 违反则输出无效】
-1. 所有金额数字必须与原文数据完全一致，禁止换算单位（原文写 $697M 就写 $697M，不得改为 $0.70B 或 $6.97B）
-2. 原文含 roughly / approximately / about / ~等不确定性词时，中文摘要必须保留"约""大约""左右"，禁止省略
-3. 凡非原文直接引用的比率、倍数、覆盖率等派生计算值，必须在数字后标注"（计算值）"
-4. 禁止跨公司混淆数据：每个数字只能归属于其原始来源公司，不得张冠李戴
-5. 只基于提供的原文，不捏造任何信息
-6. 中文输出，公司名/指标/人名保留英文
-7. 总长度控制在350-500字"""
-
-    _pex = len(prompt)
-    logger.info(
-        "执行摘要 prompt长度：%s 字符，约 %s tokens（粗估 chars/4）",
-        _pex,
-        _pex // 4,
-    )
+    def _run_exec_section(
+        section_name: str,
+        prompt: str,
+        *,
+        max_tokens: int,
+        min_len: int = 80,
+    ) -> str:
+        _plen = len(prompt)
+        logger.info(
+            "执行摘要子板块[%s] prompt长度：%s 字符，约 %s tokens（粗估 chars/4）",
+            section_name,
+            _plen,
+            _plen // 4,
+        )
+        text = chat_with_retry(prompt, max_tokens=max_tokens, timeout=300.0)
+        _cont_round = 0
+        while _cont_round < 3 and (
+            _is_truncated_llm_output(text) or len((text or "").strip()) < min_len
+        ):
+            logger.warning(
+                "执行摘要子板块[%s]疑似截断，尝试续写 round=%s",
+                section_name,
+                _cont_round,
+            )
+            _cont_prompt = (
+                f"以下是未完成的「{section_name}」板块正文，请从中断处继续，只输出续写内容，不要重复已有内容：\n\n"
+                f"{text}"
+            )
+            try:
+                _cont = chat_with_retry(
+                    _cont_prompt,
+                    max_tokens=max_tokens,
+                    timeout=300.0,
+                )
+                text = text.rstrip() + "\n" + _cont
+            except Exception:
+                logger.warning("执行摘要子板块[%s]续写失败，使用已有内容", section_name)
+                break
+            _cont_round += 1
+        return (text or "").strip()
 
     try:
-        summary = chat_with_retry(prompt, max_tokens=4500, timeout=300.0)
-        _exec_cont = 0
-        while _exec_cont < 3:
-            # 检测排名表是否完整（排名表行数应接近公司数量；后续会删 LLM 表仅留代码表）
-            _ranking_truncated = False
-            if per_company and "🏆" in summary:
-                _expected_rows = len(per_company)
-                _table_lines = [
-                    l
-                    for l in summary.split("\n")
-                    if l.strip().startswith("|")
-                    and not l.strip().startswith("|---")
-                ]
-                _ranking_rows = max(0, len(_table_lines) - 5)
-                if _ranking_rows < _expected_rows * 0.7:
-                    logger.warning(
-                        "执行摘要排名表疑似截断：期望%s行，实际约%s行，触发续写 sector=%s",
-                        _expected_rows,
-                        _ranking_rows,
-                        sector,
-                    )
-                    _ranking_truncated = True
-            if not _is_truncated_llm_output(summary) and not _ranking_truncated:
-                break
-            logger.warning(
-                "执行摘要疑似截断，尝试续写 sector=%s round=%s",
-                sector,
-                _exec_cont,
-            )
-            continuation_prompt = f"""以下是一份未完成的行业执行摘要，请从中断处继续补全，只输出续写内容，不要重复已有内容：
+        sec_fin_prompt = _build_section_prompt(
+            "📊 财务快照",
+            "任务要求：只输出财务数字对比，每条结论必须附公司名+具体数字，禁止推断。",
+        )
+        sec_theme_prompt = _build_section_prompt(
+            "🔑 本季核心主题",
+            "任务要求：只输出跨3家以上公司出现的共同表述，每条必须附涉及公司名和原始数字，禁止推断。",
+        )
+        sec_event_prompt = _build_section_prompt(
+            "⚡ 重要事件",
+            "任务要求：只输出有原话/新闻/数字支撑的实质性事件，以编号列表输出。",
+        )
+        sec_signal_prompt = _build_section_prompt(
+            "💬 管理层关键信号",
+            "任务要求：只输出有发言人姓名+原话的表述，格式为「公司 — 发言人：原话」。",
+        )
+        sec_risk_prompt = _build_section_prompt(
+            "⚠️ 主要风险",
+            "任务要求：只输出管理层主动披露的不确定因素，每条必须附公司名和具体表述依据。",
+        )
 
-{summary}"""
-            try:
-                continuation = chat_with_retry(
-                    continuation_prompt, max_tokens=1600, timeout=300.0
-                )
-                summary = summary.rstrip() + "\n" + continuation
-            except Exception:
-                logger.warning("执行摘要续写失败，使用已有内容 sector=%s", sector)
-                break
-            _exec_cont += 1
+        sec_fin_text = _run_exec_section("📊 财务快照", sec_fin_prompt, max_tokens=800)
+        sec_theme_text = _run_exec_section("🔑 本季核心主题", sec_theme_prompt, max_tokens=1200)
+        sec_event_text = _run_exec_section("⚡ 重要事件", sec_event_prompt, max_tokens=800)
+        sec_signal_text = _run_exec_section("💬 管理层关键信号", sec_signal_prompt, max_tokens=600)
+        sec_risk_text = _run_exec_section("⚠️ 主要风险", sec_risk_prompt, max_tokens=800)
+
+        summary_parts = [
+            "### 📊 财务快照",
+            "> 数据来源：FMP Annual Financials | 评判标准：最新财年Revenue YoY增速中位数及分布",
+            sec_fin_text or "（无可用内容）",
+            "",
+            "---",
+            "",
+            "### 🔑 本季核心主题",
+            "> 数据来源：Earning Call 逐字稿（FMP/SEC EDGAR）| 评判标准：跨3家以上公司出现的共同表述",
+            sec_theme_text or "（无可用内容）",
+            "",
+            "---",
+            "",
+            "### ⚡ 重要事件",
+            "> 数据来源：Earning Call 逐字稿 + Benzinga 公司新闻 | 评判标准：涉及资本配置/人员/产品的实质性变化",
+            sec_event_text or "（无可用内容）",
+            "",
+            "---",
+            "",
+            "### 💬 管理层关键信号",
+            "> 数据来源：Earning Call 逐字稿原话 | 评判标准：CEO/CFO对业务趋势的直接表态",
+            sec_signal_text or "（无可用内容）",
+            "",
+            "---",
+            "",
+            "### ⚠️ 主要风险",
+            "> 数据来源：Earning Call 前瞻性表述（含 expect/may/consider 等情态动词）| 评判标准：管理层主动披露的不确定因素",
+            sec_risk_text or "（无可用内容）",
+        ]
+        summary = "\n".join(summary_parts).strip()
         # ── 排名表：代码控制公司列表，LLM只填优势和风险 ──────────
         ranking_table = ""
         if per_company:
