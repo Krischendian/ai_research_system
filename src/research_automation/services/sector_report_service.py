@@ -60,6 +60,8 @@ _COMMON_ABBREVS: set[str] = {
     "FCF", "EPS", "ARR", "TCV", "FMP", "SEC", "ETF", "IPO",
     "LLM", "YOY", "QOQ", "GAAP", "SAAS", "IT", "OK", "IR",
     "M&A", "PE", "VC", "R&D", "HR", "PR", "ID",
+    # 常见财务/机构缩写，避免误判为ticker导致整行丢弃
+    "EBITDA", "GDP", "CBP", "IQ", "SG", "SGA", "EDGAR",
     "TOC", "UK", "EU", "UN", "NY", "DC",
     "FY",
 }
@@ -145,23 +147,32 @@ def _strip_unauthorized_sections(text: str, forbidden_headings: list[str]) -> st
 
 
 def _filter_non_sector_content(text: str, allowed_tickers: set[str]) -> str:
-    """过滤掉包含非监控标的的段落"""
+    """删除包含非监控板块 ticker 的行"""
+    if not allowed_tickers:
+        return text
+
     lines = (text or "").split("\n")
     filtered: list[str] = []
     for line in lines:
-        skip = False
-        for word in line.split():
-            clean = word.strip('*[]().,:-—"""')
-            if len(clean) >= 2 and len(clean) <= 5 and clean.isupper() and clean.isalpha():
-                if clean not in allowed_tickers and clean not in {
-                    'AI', 'IT', 'LLM', 'API', 'CEO', 'CFO', 'COO', 'EPS', 'ARR', 'NRR',
-                    'TCV', 'RPO', 'AUM', 'YOY', 'FMP', 'SEC', 'ESG', 'IPO', 'M&A', 'PE', 'VC'
-                }:
-                    skip = True
-                    break
-        if not skip:
-            filtered.append(line)
-    return '\n'.join(filtered)
+        # 提取行中所有被括号、方括号包围的词，或以「公司代码 —」开头的词
+        # 这些位置才是真正的 ticker 引用
+        ticker_refs = re.findall(
+            r"\[([A-Z]{1,5})\]|"  # [TICKER]
+            r"（([A-Z]{1,5})）|"  # （TICKER）
+            r"^[-•*]\s*([A-Z]{1,5})\s*[—–]|"  # - TICKER — 行首
+            r"\(([A-Z]{1,5})\)",  # (TICKER)
+            line,
+        )
+        # 展平匹配结果
+        found_tickers = {t for group in ticker_refs for t in group if t}
+
+        # 只有当找到的 ticker 明确不在白名单时才过滤
+        rogue = found_tickers - allowed_tickers
+        if rogue:
+            continue
+        filtered.append(line)
+
+    return "\n".join(filtered)
 
 
 FISCAL_YEAR_END: dict[str, str] = {
@@ -1886,12 +1897,7 @@ def _step3_per_company_outlook(
     if len(outlook_briefs) >= 2:
         briefs_text = '\n\n'.join(outlook_briefs)
         all_tickers_in_sector = [rec.ticker for rec, *_ in per_company]
-        _s3_guard = (
-            "严格要求：只输出本板块内容。所有结论必须有管理层原话或具体数字依据。"
-            "禁止推断、禁止投资建议、禁止输出额外板块或总结段落。\n"
-            "输出格式要求：先2-4句连贯段落总结，再按主题或公司分组列支撑数据（小标题+bullet）；"
-            "每条必须标注来源公司和具体数字/原话。"
-        )
+        _sector_tickers = ", ".join(all_tickers_in_sector)
         _s3_common = f"""以下是该板块各公司管理层对未来的展望与行业判断：
 
 {briefs_text}
@@ -1900,10 +1906,8 @@ def _step3_per_company_outlook(
 以上数据覆盖其中 {len(outlook_briefs)} 家。"""
 
         def _run_s3_block(_name: str, _task_rule: str) -> str:
-            _prompt = (
-                f"你是资深行业研究分析师。\n{_s3_guard}\n\n{_s3_common}\n\n{_task_rule}"
-            )
-            _txt = _chat3(_prompt, max_tokens=1000, timeout=300.0)
+            _prompt = f"{_task_rule}\n\n{_s3_common}"
+            _txt = _chat3(_prompt, max_tokens=1200, timeout=300.0)
             _round = 0
             while _round < 3 and (
                 _is_truncated_llm_output(_txt) or len((_txt or "").strip()) < 60
@@ -1929,15 +1933,35 @@ def _step3_per_company_outlook(
         try:
             s3_industry = _run_s3_block(
                 "行业判断",
-                "第1次——【行业判断】\n基于以下各公司10-K及Earning Call内容，只提取跨2家以上公司共同出现的行业层面判断。"
-                "每条必须有管理层原文支撑，末尾标注（来源：公司A、公司B）。"
-                "每条不超过100字。按统一格式输出（先2-4句段落总结，再分组小标题+bullet支撑数据），禁止任何推断、点评或额外内容。",
+                "你是一个严格的数据提取工具，不是分析师。\n\n"
+                "任务：从以下各公司10-K及Earning Call内容中，提取跨2家以上公司共同出现的行业层面判断。\n\n"
+                "输出格式（严格遵守）：\n"
+                "【行业判断】\n"
+                "- [判断内容，不超过80字]（来源：公司A、公司B）\n"
+                "- [判断内容，不超过80字]（来源：公司A、公司B）\n\n"
+                "规则：\n"
+                "- 只输出bullet list，每条必须有至少2家公司来源\n"
+                "- 每条必须直接引用管理层原文或具体数字\n"
+                "- 禁止输出标题【行业判断】以外的任何其他标题\n"
+                "- 禁止输出总结段落、综合研判、结论性文字\n"
+                f"- 禁止引用监控名单以外的公司（监控名单：{_sector_tickers}）\n"
+                "- 输出到最后一个bullet结束，不得追加任何内容",
             )
             s3_strategy = _run_s3_block(
                 "战略方向",
-                "第2次——【战略方向】\n基于以下各公司10-K及Earning Call内容，只提取跨2家以上公司共同出现的战略举措或方向。"
-                "每条必须有管理层原文支撑，末尾标注（来源：公司A、公司B）。"
-                "每条不超过100字。按统一格式输出（先2-4句段落总结，再分组小标题+bullet支撑数据），禁止任何推断、点评或额外内容。",
+                "你是一个严格的数据提取工具，不是分析师。\n\n"
+                "任务：从以下各公司10-K及Earning Call内容中，提取跨2家以上公司共同出现的战略举措或方向。\n\n"
+                "输出格式（严格遵守）：\n"
+                "【战略方向】\n"
+                "- [举措内容，不超过80字]（来源：公司A、公司B）\n"
+                "- [举措内容，不超过80字]（来源：公司A、公司B）\n\n"
+                "规则：\n"
+                "- 只输出bullet list，每条必须有至少2家公司来源\n"
+                "- 每条必须直接引用管理层原文或具体数字\n"
+                "- 禁止输出标题【战略方向】以外的任何其他标题\n"
+                "- 禁止输出总结段落、综合研判、战略方向综合观察等内容\n"
+                f"- 禁止引用监控名单以外的公司（监控名单：{_sector_tickers}）\n"
+                "- 输出到最后一个bullet结束，不得追加任何内容",
             )
             _allowed_tickers_s3 = {
                 (getattr(rec, "ticker", "") or "").strip().upper()
@@ -1950,21 +1974,19 @@ def _step3_per_company_outlook(
                 s3_industry,
                 [
                     "综合研判", "行业研判结论", "综合观察", "战略方向综合观察",
-                    "跨公司共识", "研判结论", "总结",
+                    "跨公司共识", "研判结论", "总结", "小结",
                 ],
             )
             s3_strategy = _strip_unauthorized_sections(
                 s3_strategy,
                 [
                     "综合研判", "行业研判结论", "综合观察", "战略方向综合观察",
-                    "跨公司共识", "研判结论", "总结",
+                    "跨公司共识", "研判结论", "总结", "小结",
                 ],
             )
             sector_outlook = (
-                "【行业判断】\n"
-                f"{s3_industry or '- （无可提取内容）'}\n\n"
-                "【战略方向】\n"
-                f"{s3_strategy or '- （无可提取内容）'}"
+                f"{s3_industry or '【行业判断】\\n- （无可提取内容）'}\n\n"
+                f"{s3_strategy or '【战略方向】\\n- （无可提取内容）'}"
             )
             total_companies = len(per_company)
             covered_companies = len(outlook_briefs)
