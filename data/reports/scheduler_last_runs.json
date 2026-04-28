@@ -12,6 +12,6 @@
       "detail": "ValidationError: 2 validation errors for MacroNewsItem\ntitle\n  Field required [type=missing, input_value={'headline': '伊朗和..., 'ref': 'M5,M8,C1,C19'}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.12/v/missing\nregion\n  Input should be 'North America', 'Europe', 'Middle East', 'Asia' or 'Global' [type=literal_error, input_value='中东', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.12/v/literal_error"
     }
   },
-  "scheduler_started_at": "2026-04-28T08:03:38.675400+08:00",
-  "updated_at": "2026-04-28T00:03:38.676052+00:00"
+  "scheduler_started_at": "2026-04-28T09:49:38.481916+08:00",
+  "updated_at": "2026-04-28T01:49:38.482653+00:00"
 }

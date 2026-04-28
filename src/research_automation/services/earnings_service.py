@@ -265,7 +265,9 @@ def analyze_earnings_call(
     from research_automation.core.database import get_step_cache, set_step_cache
     import json
 
-    _EARNINGS_CACHE_VERSION = 3  # 改动prompt时bump这个数字
+    # 仅在 prompt/解析 schema 变更导致旧缓存语义错误时 bump；调 max_tokens/timeout 勿 bump，
+    # 否则全市场已缓存电话会分析一并失效，重跑成本高。
+    _EARNINGS_CACHE_VERSION = 3
 
     # 先查缓存
     cached = get_step_cache(
@@ -374,8 +376,8 @@ def analyze_earnings_call(
         reply = chat(
             prompt,
             response_format={"type": "json_object"},
-            timeout=180.0,
-            max_tokens=6000,
+            timeout=240.0,
+            max_tokens=8192,
         )
     except ValueError as e:
         raise EarningsAnalysisError(f"语言模型未就绪：{e}") from e
@@ -393,8 +395,8 @@ def analyze_earnings_call(
             reply2 = chat(
                 retry_prompt,
                 response_format={"type": "json_object"},
-                timeout=180.0,
-                max_tokens=6000,
+                timeout=240.0,
+                max_tokens=8192,
             )
             payload = _extract_json_object(reply2)
         except (json.JSONDecodeError, ValueError) as e2:

@@ -34,11 +34,25 @@ def _strict_expose_llm_errors() -> bool:
 
 
 def _is_truncated_llm_output(text: str) -> bool:
-    """与执行摘要一致：空输出或句末非完整结束标点则视为可能被硬截断，可触发续写。"""
+    """空输出或句末非完整结束标点则视为可能被硬截断，可触发续写。
+    含中文分点链常以「；」收束，勿误判为截断。"""
     t = (text or "").rstrip()
     if not t:
         return True
-    return t[-1] not in ("。", "！", "？", ".", "!", "?", "\"", "”", "）", ")")
+    return t[-1] not in (
+        "。",
+        "！",
+        "？",
+        ".",
+        "!",
+        "?",
+        "\"",
+        "”",
+        "）",
+        ")",
+        "；",
+        "…",
+    )
 
 
 FISCAL_YEAR_END: dict[str, str] = {
@@ -1398,6 +1412,16 @@ def _step2_per_company_revenue_breakdown(
 6. 所有金额单位与原始数据一致（美元）
 7. 禁止凭空捏造segment数据，只能使用上面提供的原始数据
 8. 计算各分部美元金额时，必须且只能使用本公司在 Step 6 Revenue 表格中已确认的总收入数字作为基数；禁止使用任何其他来源的收入数字
+
+在输出地理收入表格后，检查所有地理分部名称：
+如果所有分部名称中均不包含任何可识别的地理信息
+（国家名、洲名、地区名，如 United States、China、Europe、Asia、
+Americas、EMEA、Pacific、Latin、International、North、South 等），
+则说明这是公司内部管理架构命名而非地理收入，
+在表格正下方紧接一行注释：
+「⚠️ 注：以上分部名称不含地理信息，可能为公司内部运营架构划分，
+非跨国地理收入分布，请结合公司年报核实。」
+若任意一个分部名称中含有可识别的地理信息，则正常输出，不加任何注释。
 """
 
             llm_result = None
@@ -1747,8 +1771,8 @@ def _step3_per_company_outlook(
         blk_text = '\n'.join(blk)
         if '原文未明确提及' in blk_text and 'NOT_FOUND' in blk_text:
             continue
-        # 只取前300字
-        outlook_briefs.append(f"【{rec.ticker}】\n{blk_text[:300]}")
+        # 控制单家输入长度，避免 prompt 爆炸；过低会截断关税/指引等长段落（如 PPG）
+        outlook_briefs.append(f"【{rec.ticker}】\n{blk_text[:1100]}")
 
     if len(outlook_briefs) >= 2:
         briefs_text = '\n\n'.join(outlook_briefs)
@@ -1771,20 +1795,29 @@ def _step3_per_company_outlook(
 8. 禁止输出任何以#开头的标题行，直接输出正文段落"""
 
         try:
-            sector_outlook = _chat3(prompt, max_tokens=900, timeout=300.0)
-            if _is_truncated_llm_output(sector_outlook):
-                logger.warning("Step3 sector总结疑似截断，尝试续写")
+            sector_outlook = _chat3(prompt, max_tokens=1600, timeout=300.0)
+            _s3_cont = 0
+            while _s3_cont < 3 and (
+                _is_truncated_llm_output(sector_outlook)
+                or len(sector_outlook.strip()) < 120
+            ):
+                logger.warning(
+                    "Step3 sector总结疑似截断，尝试续写 round=%s",
+                    _s3_cont,
+                )
                 try:
                     _cont = _chat3(
                         f"""以下是一份未完成的板块展望总结，请从中断处继续补全，只输出续写内容，不要重复已有内容：
 
 {sector_outlook}""",
-                        max_tokens=400,
+                        max_tokens=900,
                         timeout=300.0,
                     )
                     sector_outlook = sector_outlook.rstrip() + "\n" + _cont
                 except Exception:
                     logger.warning("Step3续写失败，使用已有内容")
+                    break
+                _s3_cont += 1
             total_companies = len(per_company)
             covered_companies = len(outlook_briefs)
             covered_tickers = []
@@ -1964,13 +1997,16 @@ def _step4_earning_call_section(
             for t, analysis in successful_analyses:
                 brief_parts = [f"【{t}】"]
                 if analysis.summary:
-                    brief_parts.append(f"概括：{analysis.summary[:200]}")
+                    brief_parts.append(f"概括：{analysis.summary[:480]}")
                 if analysis.management_viewpoints:
-                    vp_texts = [vp.text for vp in analysis.management_viewpoints[:3]]
+                    vp_texts = [vp.text for vp in analysis.management_viewpoints[:5]]
                     brief_parts.append(f"核心观点：{'；'.join(vp_texts)}")
                 if analysis.quotations:
                     q = analysis.quotations[0]
-                    brief_parts.append(f"关键原话：{q.speaker}：\"{q.quote[:100]}\"")
+                    brief_parts.append(f"关键原话：{q.speaker}：\"{q.quote[:220]}\"")
+                if analysis.new_business_highlights:
+                    nb_texts = [nb.text for nb in analysis.new_business_highlights[:5]]
+                    brief_parts.append(f"新业务/亮点：{'；'.join(nb_texts)}")
                 company_briefs.append('\n'.join(brief_parts))
 
             watch_str = '、'.join(sector_watch_items) if sector_watch_items else '无'
@@ -2017,21 +2053,30 @@ def _step4_earning_call_section(
 
             try:
                 sector_summary = _chat(
-                    sector_summary_prompt, max_tokens=1800, timeout=300.0
+                    sector_summary_prompt, max_tokens=3200, timeout=300.0
                 )
-                if _is_truncated_llm_output(sector_summary):
-                    logger.warning("Step4 sector总结疑似截断，尝试续写")
+                _s4_cont_round = 0
+                while _s4_cont_round < 3 and (
+                    _is_truncated_llm_output(sector_summary)
+                    or len(sector_summary.strip()) < 160
+                ):
+                    logger.warning(
+                        "Step4 sector总结疑似截断，尝试续写 round=%s",
+                        _s4_cont_round,
+                    )
                     try:
                         _s4_cont = _chat(
                             f"""以下是一份未完成的板块 Earning Call 总结，请从中断处继续补全，只输出续写内容，不要重复已有内容：
 
 {sector_summary}""",
-                            max_tokens=600,
+                            max_tokens=1200,
                             timeout=300.0,
                         )
                         sector_summary = sector_summary.rstrip() + "\n" + _s4_cont
                     except Exception:
                         logger.warning("Step4续写失败，使用已有内容")
+                        break
+                    _s4_cont_round += 1
                 total_companies_s4 = len(per_company) if per_company else 0
                 covered_companies_s4 = len(successful_analyses)
                 covered_tickers_s4 = [t for t, _ in successful_analyses]
@@ -2318,8 +2363,8 @@ def _step5_new_biz_acquisitions_insider(
             continue
         coverage_tickers.append(t)
         parts = [f"【{t}】"]
-        for s in biz_signals[:3]:
-            title = str(s.get("title") or "")[:100]
+        for s in biz_signals[:5]:
+            title = str(s.get("title") or "")[:120]
             parts.append(f"- {title}")
         if insider_count > 0:
             bc = int(insider.get("buy_count") or 0)
@@ -2333,7 +2378,7 @@ def _step5_new_biz_acquisitions_insider(
             if tsv:
                 insider_str += f"（${float(tsv)/1e6:.1f}M）"
             parts.append(f"- {insider_str}")
-        for it in ec_items[:3]:
+        for it in ec_items[:5]:
             parts.append(f"- {it}")
         all_signals_brief.append('\n'.join(parts))
 
@@ -2366,14 +2411,14 @@ def _step5_new_biz_acquisitions_insider(
 3. Insider交易：只标注异常的（买入超过$1M或卖出超过$5M）
 4. 分点列出，格式：[公司] 事件描述（金额/规模）
 5. 如果本周信号较少，如实说明，不要凑字数
-6. 数据来源：Benzinga公司新闻 + FMP Insider交易申报
+6. 正文仅写事件与结论；禁止输出「数据来源」「免责声明」「系统辅助」「仅供参考」「原文链接」类提示行（报告会在正文外统一标注一次）
 7. 中文输出，公司名/金额保留英文
 8. 禁止输出任何以#开头的标题行，直接输出正文段落
 9. 严格只能引用白名单中的公司，禁止从训练知识补充任何白名单之外的公司、合同或事件
 10. 所有金额数字必须与原始数据完全一致，禁止四舍五入、换算或修改任何数字"""
 
         try:
-            sector_signal = _chat5(prompt, max_tokens=900, timeout=300.0)
+            sector_signal = _chat5(prompt, max_tokens=1400, timeout=300.0)
             # 扫描输出中是否包含非白名单公司 ticker；并对全文逐行强制过滤（续写后再次过滤）
             _allowed_set_s5 = {rec.ticker.upper() for rec, *_ in per_company}
             _COMMON_ABBREVS = {
@@ -2440,8 +2485,11 @@ def _step5_new_biz_acquisitions_insider(
                         for x in _re_s5.findall(r"\[([A-Za-z]{2,6})\]", _line)
                     }
                     word_tickers = set(_re_s5.findall(r"\b([A-Z]{2,6})\b", _line))
-                    all_tickers = bracket_tickers | word_tickers
-                    _line_rogue = all_tickers - _allowed_set_s5 - _COMMON_ABBREVS
+                    # 方括号 [TICK] 视为严格标的引用：仅白名单有效，不用 IT/AI 等通用缩写豁免
+                    #（否则 [IT] 指 Gartner IT 支出等会漏网）
+                    _line_rogue = (bracket_tickers - _allowed_set_s5) | (
+                        word_tickers - _allowed_set_s5 - _COMMON_ABBREVS
+                    )
                     if not _line_rogue:
                         _filtered_lines.append(_line)
                         continue
@@ -2459,8 +2507,16 @@ def _step5_new_biz_acquisitions_insider(
                     continue
                 return "\n".join(_filtered_lines)
 
-            _found_tickers = set(_re_s5.findall(r"\b[A-Z]{2,6}\b", sector_signal or ""))
-            _rogue = _found_tickers - _allowed_set_s5 - _COMMON_ABBREVS
+            _brk_syms = {
+                x.upper()
+                for x in _re_s5.findall(
+                    r"\[([A-Za-z]{2,6})\]", sector_signal or ""
+                )
+            }
+            _word_syms = set(_re_s5.findall(r"\b[A-Z]{2,6}\b", sector_signal or ""))
+            _rogue = (_brk_syms - _allowed_set_s5) | (
+                _word_syms - _allowed_set_s5 - _COMMON_ABBREVS
+            )
             if _rogue:
                 logger.warning(
                     "Step5 LLM输出包含非白名单实体: %s，执行过滤",
@@ -2472,15 +2528,17 @@ def _step5_new_biz_acquisitions_insider(
             while (
                 _is_truncated_llm_output(sector_signal)
                 or len((sector_signal or "").strip()) < 40
-            ) and _step5_cont_round < 3:
+            ) and _step5_cont_round < 4:
                 logger.warning(
                     "Step5 sector总结疑似截断，尝试续写 round=%s",
                     _step5_cont_round,
                 )
                 try:
                     _cont5 = _chat5(
-                        f"以下内容未写完，请从中断处继续，只输出续写内容，不要重复：\n\n{sector_signal}",
-                        max_tokens=600,
+                        f"以下内容未写完，请从中断处继续，只输出续写内容，不要重复已有段落；"
+                        f"禁止输出数据来源说明、免责声明或「仅供参考」类句子（系统会在正文外统一标注）：\n\n"
+                        f"{sector_signal}",
+                        max_tokens=1000,
                         timeout=300.0,
                     )
                     sector_signal = sector_signal.rstrip() + "\n" + _cont5
@@ -2490,6 +2548,28 @@ def _step5_new_biz_acquisitions_insider(
                 sector_signal = _sanitize_step5_bracket_tickers(sector_signal)
                 sector_signal = _filter_step5_sector_signal(sector_signal)
                 _step5_cont_round += 1
+
+            def _strip_step5_embedded_disclaimers(_body: str) -> str:
+                """去掉模型在 sector 正文中复读的免责/来源行，与下方固定两行只保留一处。"""
+                out_ln: list[str] = []
+                for raw in (_body or "").splitlines():
+                    s = raw.strip()
+                    if "以下为系统辅助总结" in s and "仅供参考" in s:
+                        continue
+                    if "非原文直接提取" in s and "仅供参考" in s:
+                        continue
+                    if "原文链接请展开各公司详情" in s:
+                        continue
+                    if (
+                        "Benzinga" in s
+                        and "Insider" in s
+                        and ("数据来源" in s or "**数据来源**" in s or "评判标准" in s)
+                    ):
+                        continue
+                    out_ln.append(raw)
+                return "\n".join(out_ln)
+
+            sector_signal = _strip_step5_embedded_disclaimers(sector_signal)
             lines.append("> **数据来源**：Benzinga 公司新闻 + FMP Insider 交易申报（Form 4）｜**评判标准**：收购/战略合作/异常 Insider 交易（买入>$1M 或卖出>$5M）")
             lines.append("> ⚠️ **以下为系统辅助总结，非原文直接提取，仅供参考。原文链接请展开各公司详情查看。**")
             lines.append("")
@@ -2944,6 +3024,52 @@ def _step6_financial_table(
     return lines
 
 
+def _is_exec_summary_rank_heading(line: str) -> bool:
+    s = line.strip()
+    return s.startswith("###") and "🏆" in s and "相对强弱" in s
+
+
+def _exec_summary_ranking_section_line_ranges(lines: list[str]) -> list[tuple[int, int]]:
+    """每个 [start, end) 为半开区间，对应一段「### 🏆 …相对强弱…」板块（含表体）。"""
+    ranges: list[tuple[int, int]] = []
+    i = 0
+    n = len(lines)
+    while i < n:
+        if not _is_exec_summary_rank_heading(lines[i]):
+            i += 1
+            continue
+        start = i
+        i += 1
+        while i < n and not _is_exec_summary_rank_heading(lines[i]):
+            st = lines[i].strip()
+            if st.startswith("###"):
+                break
+            i += 1
+        ranges.append((start, i))
+    return ranges
+
+
+def _normalize_exec_summary_ranking_sections(
+    summary: str, *, canonical_ranking_md: str
+) -> str:
+    """
+    保证最终只保留一张「相对强弱排序」表：
+    - 若下方有代码生成的 canonical 表，则整段删除主摘要 LLM（含续写）里所有同名板块，避免与 canonical 重复。
+    - 若无 canonical，仅删除续写导致的第二段及之后同名板块，保留第一段。
+    """
+    lines = summary.split("\n")
+    ranges = _exec_summary_ranking_section_line_ranges(lines)
+    if not ranges:
+        return summary
+    if canonical_ranking_md.strip():
+        merged = lines[: ranges[0][0]] + lines[ranges[-1][1] :]
+        return "\n".join(merged)
+    if len(ranges) <= 1:
+        return summary
+    merged = lines[: ranges[0][1]] + lines[ranges[-1][1] :]
+    return "\n".join(merged)
+
+
 def _executive_summary(
     sector: str,
     step4_lines: list[str],
@@ -3195,35 +3321,47 @@ Sector财务快照：
     )
 
     try:
-        summary = chat_with_retry(prompt, max_tokens=3000, timeout=300.0)
-        # 检测排名表是否完整（排名表行数应接近公司数量）
-        _ranking_truncated = False
-        if per_company and '🏆' in summary:
-            _expected_rows = len(per_company)
-            _table_lines = [
-                l for l in summary.split('\n')
-                if l.strip().startswith('|') and not l.strip().startswith('|---')
-            ]
-            # 减去各板块表头行（约5个板块各1行）
-            _ranking_rows = max(0, len(_table_lines) - 5)
-            if _ranking_rows < _expected_rows * 0.7:
-                logger.warning(
-                    "执行摘要排名表疑似截断：期望%s行，实际约%s行，触发续写 sector=%s",
-                    _expected_rows, _ranking_rows, sector,
-                )
-                _ranking_truncated = True
-        if _is_truncated_llm_output(summary) or _ranking_truncated:
-            logger.warning("执行摘要疑似截断，尝试续写 sector=%s", sector)
+        summary = chat_with_retry(prompt, max_tokens=4500, timeout=300.0)
+        _exec_cont = 0
+        while _exec_cont < 3:
+            # 检测排名表是否完整（排名表行数应接近公司数量；后续会删 LLM 表仅留代码表）
+            _ranking_truncated = False
+            if per_company and "🏆" in summary:
+                _expected_rows = len(per_company)
+                _table_lines = [
+                    l
+                    for l in summary.split("\n")
+                    if l.strip().startswith("|")
+                    and not l.strip().startswith("|---")
+                ]
+                _ranking_rows = max(0, len(_table_lines) - 5)
+                if _ranking_rows < _expected_rows * 0.7:
+                    logger.warning(
+                        "执行摘要排名表疑似截断：期望%s行，实际约%s行，触发续写 sector=%s",
+                        _expected_rows,
+                        _ranking_rows,
+                        sector,
+                    )
+                    _ranking_truncated = True
+            if not _is_truncated_llm_output(summary) and not _ranking_truncated:
+                break
+            logger.warning(
+                "执行摘要疑似截断，尝试续写 sector=%s round=%s",
+                sector,
+                _exec_cont,
+            )
             continuation_prompt = f"""以下是一份未完成的行业执行摘要，请从中断处继续补全，只输出续写内容，不要重复已有内容：
 
 {summary}"""
             try:
                 continuation = chat_with_retry(
-                    continuation_prompt, max_tokens=800, timeout=300.0
+                    continuation_prompt, max_tokens=1600, timeout=300.0
                 )
                 summary = summary.rstrip() + "\n" + continuation
             except Exception:
                 logger.warning("执行摘要续写失败，使用已有内容 sector=%s", sector)
+                break
+            _exec_cont += 1
         # ── 排名表：代码控制公司列表，LLM只填优势和风险 ──────────
         ranking_table = ""
         if per_company:
@@ -3307,7 +3445,7 @@ Sector财务快照：
 4. 排名靠前的公司优势要明显强于靠后的"""
 
                 try:
-                    ranking_raw = chat_with_retry(ranking_prompt, max_tokens=1500, timeout=300.0)
+                    ranking_raw = chat_with_retry(ranking_prompt, max_tokens=2200, timeout=300.0)
                     ranking_data = _parse_llm_json_payload(ranking_raw)
                     if ranking_data and "rankings" in ranking_data:
                         rankings = ranking_data["rankings"]
@@ -3394,6 +3532,10 @@ Sector财务快照：
             covered.append(f"{rec.ticker}（{rec.company_name or rec.ticker}）")
         ref_lines.append("、".join(covered))
         ref_lines.append("")
+
+    summary = _normalize_exec_summary_ranking_sections(
+        summary, canonical_ranking_md=ranking_table
+    )
 
     lines_out: list[str] = [
         "## 📋 执行摘要",
