@@ -126,6 +126,44 @@ def _filter_by_ticker_whitelist(text: str, allowed_set: set[str]) -> str:
     return "\n".join(_filtered_lines)
 
 
+def _strip_unauthorized_sections(text: str, forbidden_headings: list[str]) -> str:
+    """删除 LLM 输出中不允许出现的标题及其后续内容"""
+    lines = (text or "").split('\n')
+    result: list[str] = []
+    skip = False
+    for line in lines:
+        stripped = line.strip().lstrip('#').strip()
+        if any(h in stripped for h in forbidden_headings):
+            skip = True
+            continue
+        if skip and line.startswith('#'):
+            # 遇到新标题停止跳过
+            skip = False
+        if not skip:
+            result.append(line)
+    return '\n'.join(result).strip()
+
+
+def _filter_non_sector_content(text: str, allowed_tickers: set[str]) -> str:
+    """过滤掉包含非监控标的的段落"""
+    lines = (text or "").split("\n")
+    filtered: list[str] = []
+    for line in lines:
+        skip = False
+        for word in line.split():
+            clean = word.strip('*[]().,:-—"""')
+            if len(clean) >= 2 and len(clean) <= 5 and clean.isupper() and clean.isalpha():
+                if clean not in allowed_tickers and clean not in {
+                    'AI', 'IT', 'LLM', 'API', 'CEO', 'CFO', 'COO', 'EPS', 'ARR', 'NRR',
+                    'TCV', 'RPO', 'AUM', 'YOY', 'FMP', 'SEC', 'ESG', 'IPO', 'M&A', 'PE', 'VC'
+                }:
+                    skip = True
+                    break
+        if not skip:
+            filtered.append(line)
+    return '\n'.join(filtered)
+
+
 FISCAL_YEAR_END: dict[str, str] = {
     "MDB": "Jan 31",
     "ZM": "Jan 31",
@@ -1901,6 +1939,27 @@ def _step3_per_company_outlook(
                 "每条必须有管理层原文支撑，末尾标注（来源：公司A、公司B）。"
                 "每条不超过100字。按统一格式输出（先2-4句段落总结，再分组小标题+bullet支撑数据），禁止任何推断、点评或额外内容。",
             )
+            _allowed_tickers_s3 = {
+                (getattr(rec, "ticker", "") or "").strip().upper()
+                for rec, *_ in (per_company or [])
+                if (getattr(rec, "ticker", "") or "").strip()
+            }
+            s3_industry = _filter_non_sector_content(s3_industry, _allowed_tickers_s3)
+            s3_strategy = _filter_non_sector_content(s3_strategy, _allowed_tickers_s3)
+            s3_industry = _strip_unauthorized_sections(
+                s3_industry,
+                [
+                    "综合研判", "行业研判结论", "综合观察", "战略方向综合观察",
+                    "跨公司共识", "研判结论", "总结",
+                ],
+            )
+            s3_strategy = _strip_unauthorized_sections(
+                s3_strategy,
+                [
+                    "综合研判", "行业研判结论", "综合观察", "战略方向综合观察",
+                    "跨公司共识", "研判结论", "总结",
+                ],
+            )
             sector_outlook = (
                 "【行业判断】\n"
                 f"{s3_industry or '- （无可提取内容）'}\n\n"
@@ -3429,28 +3488,13 @@ Sector财务快照：
             "禁止输出上述分组条目以外的任何额外段落。",
         )
 
-        def _filter_non_sector_content(text: str, allowed_tickers: set[str]) -> str:
-            """过滤掉包含非监控标的的段落"""
-            lines = (text or "").split("\n")
-            filtered: list[str] = []
-            for line in lines:
-                skip = False
-                for word in line.split():
-                    clean = word.strip('*[]().,:-—"""')
-                    if len(clean) >= 2 and len(clean) <= 5 and clean.isupper() and clean.isalpha():
-                        if clean not in allowed_tickers and clean not in {
-                            'AI', 'IT', 'LLM', 'API', 'CEO', 'CFO', 'COO', 'EPS', 'ARR', 'NRR',
-                            'TCV', 'RPO', 'AUM', 'YOY', 'FMP', 'SEC', 'ESG', 'IPO', 'M&A', 'PE', 'VC'
-                        }:
-                            skip = True
-                            break
-                if not skip:
-                    filtered.append(line)
-            return '\n'.join(filtered)
-
         sec_theme_text = _run_exec_section("🔑 本季核心主题", sec_theme_prompt, max_tokens=1200)
         sec_event_text = _run_exec_section("⚡ 重要事件", sec_event_prompt, max_tokens=800)
         sec_signal_text = _run_exec_section("💬 管理层关键信号", sec_signal_prompt, max_tokens=600)
+        sec_signal_text = _strip_unauthorized_sections(
+            sec_signal_text,
+            ["编辑注", "免责声明", "格式说明"],
+        )
         allowed_tickers = {
             (getattr(rec, "ticker", "") or "").strip().upper()
             for rec, *_ in (per_company or [])
@@ -3459,6 +3503,10 @@ Sector财务快照：
         sec_event_text = _filter_non_sector_content(sec_event_text, allowed_tickers)
         sec_signal_text = _filter_non_sector_content(sec_signal_text, allowed_tickers)
         sec_risk_text = _run_exec_section("⚠️ 主要风险", sec_risk_prompt, max_tokens=800)
+        sec_risk_text = _strip_unauthorized_sections(
+            sec_risk_text,
+            ["跨类别风险", "风险叠加", "交叉敞口", "时序结构", "语言层面"],
+        )
 
         summary_parts = [
             "### 🔑 本季核心主题",
