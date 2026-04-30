@@ -1,5 +1,5 @@
 """晨报新闻路由（v1：RSS + LLM）。"""
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from research_automation.models.news import (
     MorningBrief,
@@ -14,12 +14,14 @@ router = APIRouter(prefix="/news", tags=["news"])
 
 
 @router.get("/overnight", response_model=OvernightNewsResponse)
-def overnight_brief() -> OvernightNewsResponse:
+def overnight_brief(
+    sector: str | None = Query(None, description="板块名称，如 AI_Job_Replacement"),
+) -> OvernightNewsResponse:
     """
     纽约时段「昨天 16:00～今天 08:00」内的 RSS 条目 + 一句中文隔夜要点（LLM）。
     """
     try:
-        return get_overnight_news()
+        return get_overnight_news(sector=sector)
     except NewsBriefError as e:
         raise HTTPException(status_code=503, detail=e.message) from e
     except Exception as e:
@@ -30,12 +32,14 @@ def overnight_brief() -> OvernightNewsResponse:
 
 
 @router.get("/yesterday-summary", response_model=YesterdaySummaryResponse)
-def yesterday_summary() -> YesterdaySummaryResponse:
+def yesterday_summary(
+    sector: str | None = Query(None, description="板块名称，如 AI_Job_Replacement"),
+) -> YesterdaySummaryResponse:
     """
     纽约「昨日」全天（00:00–24:00）内有时间戳的 RSS 条目，经 LLM 分「宏观 / 公司」主题汇总。
     """
     try:
-        return get_yesterday_summary()
+        return get_yesterday_summary(sector=sector)
     except NewsBriefError as e:
         raise HTTPException(status_code=503, detail=e.message) from e
     except Exception as e:

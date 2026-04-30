@@ -113,18 +113,28 @@ def list_companies(
         conn.close()
 
 
-def get_active_tickers() -> list[str]:
-    """返回所有 ``is_active=1`` 的 ticker，按字母序。"""
+def get_active_tickers(sector: str | None = None) -> list[str]:
+    """返回所有 ``is_active=1`` 的 ticker，按字母序；可选 ``sector`` 时仅该板块。"""
     conn = get_connection()
     try:
         init_db(conn)
-        cur = conn.execute(
-            """
-            SELECT ticker FROM companies
-            WHERE is_active = 1
-            ORDER BY ticker
-            """
-        )
+        if sector is None:
+            cur = conn.execute(
+                """
+                SELECT ticker FROM companies
+                WHERE is_active = 1
+                ORDER BY ticker
+                """
+            )
+        else:
+            cur = conn.execute(
+                """
+                SELECT ticker FROM companies
+                WHERE is_active = 1 AND sector = ?
+                ORDER BY ticker
+                """,
+                (sector.strip(),),
+            )
         return [str(r["ticker"]) for r in cur.fetchall()]
     finally:
         conn.close()

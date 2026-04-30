@@ -175,8 +175,12 @@ class OvernightNewsResponse(BaseModel):
     """隔夜速递 API 响应。"""
 
     overnight_summary: str
+    macro_summary: str = ""
+    company_summary: str = ""
+    macro_today_theme: str = ""
     macro_news: list[MacroNewsItem] = []
     company_news: list[CompanyNewsItem] = []
+    no_news_tickers: list[str] = []
     window_start_ny: str
     window_end_ny: str
     analyst_briefing: str = ""
@@ -201,8 +205,12 @@ class YesterdayThemeGroup(BaseModel):
 class YesterdaySummaryResponse(BaseModel):
     """昨日总结 API：分类汇总（Markdown + 结构化）。"""
 
+    macro_summary: str = ""
+    company_summary: str = ""
+    macro_today_theme: str = ""
     macro_news: list[MacroNewsItem] = []
     company_news: list[CompanyNewsItem] = []
+    no_news_tickers: list[str] = []
     articles_in_window: int = 0
     window_start_ny: str
     window_end_ny: str

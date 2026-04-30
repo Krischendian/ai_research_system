@@ -209,3 +209,181 @@ def item_importance(item: dict[str, Any]) -> int | None:
         return int(v)
     except (TypeError, ValueError):
         return None
+
+
+def _md_one_line(text: str | None) -> str:
+    """单行展示：换行压成空格，避免破坏列表缩进。"""
+    return " ".join((text or "").split()) if text else ""
+
+
+def _md_macro_block_lines(items: list[Any], start_index: int = 1) -> tuple[list[str], int]:
+    """宏观新闻条目 → Markdown 行；返回 (lines, next_index)。"""
+    lines: list[str] = []
+    i = start_index
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        title = _md_one_line(item.get("title")) or "—"
+        summary = _md_one_line(item.get("summary")) or "—"
+        source = _md_one_line(item.get("source")) or "—"
+        region = _md_one_line(item.get("region")) or "Global"
+        imp = item.get("importance_score")
+        imp_s = str(int(imp)) if isinstance(imp, int) else (
+            str(imp) if imp is not None else "—"
+        )
+        url = (item.get("source_url") or "").strip()
+        lines.append(f"{i}. **{title}**")
+        lines.append(f"   - 摘要：{summary}")
+        lines.append(f"   - 来源：{source} | 区域：{region} | 重要性：{imp_s}")
+        if url:
+            lines.append(f"   - 链接：{url}")
+        i += 1
+    return lines, i
+
+
+def _md_company_block_lines(items: list[Any], start_index: int = 1) -> tuple[list[str], int]:
+    lines: list[str] = []
+    i = start_index
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        ticker = (item.get("ticker") or "").strip().upper() or "—"
+        title = _md_one_line(item.get("title")) or "—"
+        summary = _md_one_line(item.get("summary")) or "—"
+        source = _md_one_line(item.get("source")) or "—"
+        ev = _md_one_line(item.get("event_type")) or "other"
+        imp = item.get("importance_score")
+        imp_s = str(int(imp)) if isinstance(imp, int) else (
+            str(imp) if imp is not None else "—"
+        )
+        url = (item.get("source_url") or "").strip()
+        lines.append(f"{i}. **[{ticker}] {title}**")
+        lines.append(f"   - 摘要：{summary}")
+        lines.append(f"   - 事件：{ev} | 来源：{source} | 重要性：{imp_s}")
+        if url:
+            lines.append(f"   - 链接：{url}")
+        i += 1
+    return lines, i
+
+
+def build_morning_brief_news_markdown(
+    sector: str,
+    overnight: dict[str, Any] | None,
+    yesterday_doc: dict[str, Any] | None,
+) -> str:
+    """
+    将晨报页「隔夜速递 + 昨日总结」新闻版块导出为 Markdown（与页面数据源一致）。
+
+    ``overnight`` / ``yesterday_doc`` 为 API JSON 字典，可为空或 ``None``。
+    """
+    sec = (sector or "").strip() or "—"
+    parts: list[str] = [
+        f"# 自动化晨报版面导出（{sec}）",
+        "",
+        "> 数据来源：`/api/v1/news/overnight` 与 `/api/v1/news/yesterday-summary`",
+        "",
+    ]
+
+    # --- 隔夜 ---
+    parts.append(f"## 隔夜速递 — {sec}")
+    parts.append("")
+    if not overnight:
+        parts.append("*（隔夜速递未加载或无数据）*")
+        parts.append("")
+    else:
+        ows = (overnight.get("overnight_summary") or "").strip()
+        if ows:
+            parts.append(ows)
+            parts.append("")
+        wns = (overnight.get("window_start_ny") or "").strip()
+        wne = (overnight.get("window_end_ny") or "").strip()
+        if wns and wne:
+            parts.append(f"- 时间窗（NY）：{wns} → {wne}")
+            parts.append("")
+        opn = (overnight.get("provenance_note") or "").strip()
+        if opn:
+            parts.append(f"- 说明：{_md_one_line(opn)}")
+            parts.append("")
+        ms = (overnight.get("macro_summary") or "").strip()
+        if ms:
+            parts.append("### 宏观概览")
+            parts.append("")
+            parts.append(ms)
+            parts.append("")
+        o_macro = overnight.get("macro_news") or []
+        parts.append("### 🌍 宏观")
+        parts.append("")
+        if not o_macro:
+            parts.append("*暂无宏观隔夜重点。*")
+        else:
+            bl, _ = _md_macro_block_lines(o_macro, 1)
+            parts.extend(bl)
+        parts.append("")
+        cs = (overnight.get("company_summary") or "").strip()
+        if cs:
+            parts.append("### 公司概览")
+            parts.append("")
+            parts.append(cs)
+            parts.append("")
+        o_company = overnight.get("company_news") or []
+        parts.append("### 🏢 公司")
+        parts.append("")
+        if not o_company:
+            parts.append("*暂无公司隔夜重点。*")
+        else:
+            bl, _ = _md_company_block_lines(o_company, 1)
+            parts.extend(bl)
+        parts.append("")
+
+    # --- 昨日 ---
+    parts.append(f"## 昨日总结 — {sec}")
+    parts.append("")
+    if not yesterday_doc:
+        parts.append("*（昨日总结未加载或无数据）*")
+        parts.append("")
+    else:
+        yws = (yesterday_doc.get("window_start_ny") or "").strip()
+        ywe = (yesterday_doc.get("window_end_ny") or "").strip()
+        if yws and ywe:
+            parts.append(f"- 时间窗（NY）：{yws} → {ywe}")
+            parts.append("")
+        yn = yesterday_doc.get("articles_in_window")
+        if isinstance(yn, int):
+            parts.append(f"- 窗口新闻条数：{yn}")
+            parts.append("")
+        ypn = (yesterday_doc.get("provenance_note") or "").strip()
+        if ypn:
+            parts.append(f"- 说明：{_md_one_line(ypn)}")
+            parts.append("")
+        y_macro_summary = (yesterday_doc.get("macro_summary") or "").strip()
+        if y_macro_summary:
+            parts.append("### 宏观概览")
+            parts.append("")
+            parts.append(y_macro_summary)
+            parts.append("")
+        y_macro = yesterday_doc.get("macro_news") or []
+        parts.append("### 🌍 宏观")
+        parts.append("")
+        if not y_macro:
+            parts.append("*昨日暂无宏观重点。*")
+        else:
+            bl, _ = _md_macro_block_lines(y_macro, 1)
+            parts.extend(bl)
+        parts.append("")
+        y_company_summary = (yesterday_doc.get("company_summary") or "").strip()
+        if y_company_summary:
+            parts.append("### 公司概览")
+            parts.append("")
+            parts.append(y_company_summary)
+            parts.append("")
+        y_company = yesterday_doc.get("company_news") or []
+        parts.append("### 🏢 公司")
+        parts.append("")
+        if not y_company:
+            parts.append("*昨日暂无公司重点。*")
+        else:
+            bl, _ = _md_company_block_lines(y_company, 1)
+            parts.extend(bl)
+        parts.append("")
+
+    return "\n".join(parts).rstrip() + "\n"

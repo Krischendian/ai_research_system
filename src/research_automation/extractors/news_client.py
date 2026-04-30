@@ -16,6 +16,8 @@ import feedparser
 import requests
 from bs4 import BeautifulSoup
 
+from research_automation.core.source_filter import filter_trusted
+
 logger = logging.getLogger(__name__)
 
 # 公司名称常见后缀，用于生成别名以做简单子串匹配（英文稿）
@@ -298,6 +300,7 @@ def fetch_macro_news_with_fallback(
             continue
         if batch:
             trimmed = batch[:max_items]
+            trimmed = filter_trusted(trimmed)
             _save_macro_cache(url, label, trimmed)
             logger.info(
                 "宏观 RSS 已选用 %s（%s），条目 %s",
@@ -317,7 +320,7 @@ def fetch_macro_news_with_fallback(
 
     cached, ok = _load_macro_cache_if_fresh()
     if ok and cached:
-        return cached[:max_items], True
+        return filter_trusted(cached[:max_items]), True
     return [], False
 
 
@@ -427,5 +430,7 @@ def fetch_rss_articles(*, max_items: int = 24, per_feed_limit: int = 10) -> list
             seen.add(key)
             out.append(art)
             if len(out) >= max_items:
+                out = filter_trusted(out)
                 return out
+    out = filter_trusted(out)
     return out

@@ -16,11 +16,11 @@ pg = st.navigation(
          #   title="深度分析",
           #  icon="🔬",
        # ),
-       # st.Page(
-        #    str(_ROOT / "frontend" / "pages" / "02_MorningBrief.py"),
-         #   title="自动化晨报",
-         #   icon="🌅",
-        #),
+        st.Page(
+            str(_ROOT / "frontend" / "pages" / "02_MorningBrief.py"),
+            title="自动化晨报",
+            icon="🌅",
+        ),
         st.Page(
             str(_ROOT / "frontend" / "pages" / "04_SectorReport.py"),
             title="行业监控报告",

@@ -192,7 +192,7 @@ def _chat_claude(
         client = anthropic.Anthropic(api_key=api_key)
         resp = client.messages.create(
             model=model,
-            max_tokens=max_tokens if max_tokens is not None else 8096,
+            max_tokens=min(max_tokens, 16000) if max_tokens is not None else 8096,
             messages=[{"role": "user", "content": text}],
             timeout=max(timeout, 180.0),
         )

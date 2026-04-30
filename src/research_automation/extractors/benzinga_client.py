@@ -18,6 +18,7 @@ from typing import Any, TypedDict
 import requests
 from dotenv import load_dotenv
 
+from research_automation.core.source_filter import filter_trusted
 from research_automation.extractors.news_client import RawArticle
 
 logger = logging.getLogger(__name__)
@@ -248,6 +249,7 @@ def get_company_news(ticker: str, from_date: str, to_date: str) -> list[Benzinga
         page += 1
         follow_url = str(next_url).strip() if next_url else None
 
+    collected = filter_trusted(collected)
     _write_cache(cpath, collected)
     return collected
 

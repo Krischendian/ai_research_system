@@ -3,28 +3,42 @@ from __future__ import annotations
 
 SECTOR_WATCH_ITEMS: dict[str, list[str]] = {
     "AI_Job_Replacement": [
-        "layoffs and headcount reduction",
-        "workforce restructuring",
-        "employees affected",
-        "AI replacing workers",
-        "automation replacing jobs",
-        "AI deployment and adoption",
-        "AI monetization progress",
-        "digital transformation investment",
-        "AI裁员态度与人员规划",
-        "AI替代方向与落地进展",
+        "AI replacing workers / automation replacing jobs",
+        "layoffs and headcount reduction due to AI",
+        "workforce restructuring / headcount guidance",
+        "AI deployment ROI and monetization",
+        "management commentary on AI strategy and hiring",
+        "insider buy/sell",
+        "earnings and revenue guidance",
+        "new partnerships or contracts",
+        "M&A activity",
+        "share buyback",
     ],
     "Natural_Gas": [
-        "产量指引与完井计划",
-        "天然气价格预期",
-        "资本支出计划（CAPEX guidance）",
-        "与上季度管理层指引变化",
+        "production guidance and well completion plans",
+        "natural gas price outlook / Henry Hub",
+        "CAPEX guidance and changes vs prior quarter",
+        "LNG export capacity and contracts",
+        "pipeline and infrastructure updates",
+        "management commentary on supply/demand",
+        "earnings and revenue guidance",
+        "insider buy/sell",
+        "M&A activity",
+        "share buyback",
+        "EPA / energy policy impact",
     ],
     "Technology": [
-        "AI产品/服务收入贡献",
-        "云业务增长指引",
-        "资本支出计划",
-        "与上季度管理层指引变化",
+        "AI product/service revenue contribution",
+        "cloud business growth guidance",
+        "CAPEX guidance and changes vs prior quarter",
+        "new AI partnerships or enterprise contracts",
+        "antitrust / regulatory developments",
+        "chip / semiconductor supply chain",
+        "management commentary on AI strategy",
+        "earnings and revenue guidance",
+        "insider buy/sell",
+        "M&A activity",
+        "share buyback",
     ],
 }
 
@@ -88,3 +102,9 @@ def get_sector_macro_keywords(sector: str) -> list[str]:
             seen.add(kw)
             result.append(kw)
     return result
+
+
+def get_sector_watch_items_str(sector: str) -> str:
+    """返回格式化的关注点列表字符串，供 prompt 使用。"""
+    items = get_sector_watch_items(sector)
+    return "\n".join(f"- {item}" for item in items)
