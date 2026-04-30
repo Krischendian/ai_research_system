@@ -19,3 +19,7 @@ data/cache/
 
 # vscode
 .vscode/daily_brief_cache.db
+*.pyc
+__pycache__/
+data/reports/scheduler_last_runs.json
+morning_brief_export_*.md
