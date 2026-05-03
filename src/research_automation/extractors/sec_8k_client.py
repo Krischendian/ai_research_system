@@ -15,7 +15,7 @@ import re
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 from urllib.parse import quote
 
 import requests
@@ -61,6 +61,8 @@ def _filing_age_days(filing_date: str) -> int:
 
 def _iter_recent_8k(
     submissions: dict[str, Any],
+    *,
+    form_types: Iterable[str] = ("8-K", "8-K/A"),
 ) -> list[tuple[str, str, str]]:
     """自新到旧列出 (accessionNumber, filingDate YYYY-MM-DD, primaryDocument)。"""
     recent = submissions.get("filings", {}).get("recent")
@@ -72,8 +74,9 @@ def _iter_recent_8k(
     docs = recent.get("primaryDocument") or []
     n = min(len(forms), len(dates), len(accs), len(docs))
     out: list[tuple[str, str, str]] = []
+    form_set = {str(f).upper() for f in form_types}
     for i in range(n):
-        if str(forms[i]).upper() not in ("8-K", "8-K/A"):
+        if str(forms[i]).upper() not in form_set:
             continue
         fd = str(dates[i])[:10]
         out.append((str(accs[i]), fd, str(docs[i])))
@@ -295,6 +298,7 @@ def search_8k_transcript(
     fiscal_year: int | None = None,
     fiscal_quarter: int | None = None,
     max_8k_to_scan: int = 80,
+    form_types: tuple[str, ...] = ("8-K", "8-K/A"),
 ) -> str | None:
     """
     在 SEC 8-K 申报中查找 EX-99.x 等附件，提取电话会/业绩说明类正文（纯文本）。
@@ -320,7 +324,7 @@ def search_8k_transcript(
         logger.warning("8-K 逐字稿：submissions 失败 ticker=%s: %s", sym, e)
         return None
 
-    rows = _iter_recent_8k(submissions)
+    rows = _iter_recent_8k(submissions, form_types=form_types)
     if not rows:
         return None
     # 始终自新到旧尝试（submissions 数组顺序因数据源而异）
@@ -452,6 +456,7 @@ def fetch_transcript_from_8k(
     *,
     fiscal_year: int | None = None,
     fiscal_quarter: int | None = None,
+    form_types: tuple[str, ...] = ("8-K", "8-K/A"),
 ) -> str | None:
     """
     使用 sec-api.io ``POST /full-text-search`` 检索近期 8-K 附件（EX-99 / transcript 等），
@@ -483,7 +488,7 @@ def fetch_transcript_from_8k(
     _throttle_before_sec_api_call()
     payload: dict[str, Any] = {
         "query": "earnings OR conference OR transcript OR revenue OR quarter OR results",
-        "formTypes": ["8-K", "8-K/A"],
+        "formTypes": list(form_types),
         "startDate": start_d.isoformat(),
         "endDate": end_d.isoformat(),
         "ciks": [f"{cik_int:010d}"],
@@ -514,7 +519,7 @@ def fetch_transcript_from_8k(
     for f in filings:
         if not isinstance(f, dict):
             continue
-        if str(f.get("formType") or "").upper() not in ("8-K", "8-K/A"):
+        if str(f.get("formType") or "").upper() not in {x.upper() for x in form_types}:
             continue
         ft = (f.get("ticker") or "").strip().upper()
         if ft and ft != sym:

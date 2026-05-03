@@ -23,6 +23,7 @@ from research_automation.core.paragraph_text import (
     paragraphs_to_numbered_excerpt,
     split_into_paragraphs,
 )
+from research_automation.core.ticker_normalize import is_us_equity
 from research_automation.extractors import fmp_client
 # from research_automation.extractors.earningscall_lib import (
 #     get_transcript_from_earningscall,
@@ -286,6 +287,7 @@ def analyze_earnings_call(
             pass  # 缓存损坏，继续正常流程
 
     qlabel = f"{year}Q{quarter}"
+    filing_forms = ("8-K", "8-K/A") if is_us_equity(symbol) else ("6-K", "6-K/A")
 
     fmp_tr: dict[str, Any] | None = None
     try:
@@ -310,6 +312,7 @@ def analyze_earnings_call(
                 lookback_days=14,
                 fiscal_year=year,
                 fiscal_quarter=quarter,
+                form_types=filing_forms,
             )
         except Exception:
             logger.exception("EDGAR 8-K 逐字稿拉取异常 ticker=%s %s", symbol, qlabel)
@@ -326,6 +329,7 @@ def analyze_earnings_call(
                     lookback_days=14,
                     fiscal_year=year,
                     fiscal_quarter=quarter,
+                    form_types=filing_forms,
                 )
             except Exception:
                 logger.exception(

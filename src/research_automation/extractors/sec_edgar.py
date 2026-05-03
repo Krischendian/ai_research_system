@@ -165,10 +165,10 @@ def _fetch_submissions(cik: int) -> dict[str, Any]:
 
 
 def _find_10k_filing(
-    submissions: dict[str, Any], filing_year: int
+    submissions: dict[str, Any], filing_year: int, forms: tuple[str, ...] = ("10-K", "10-K/A")
 ) -> tuple[str, str] | None:
     """
-    在 recent filings 中寻找 ``form == 10-K`` 且 filingDate 落在 ``filing_year`` 公历年。
+    在 recent filings 中寻找 ``form`` 命中 forms 且 filingDate 落在 ``filing_year`` 公历年。
     返回 (accessionNumber, primaryDocument)。
     """
     recent = submissions.get("filings", {}).get("recent")
@@ -180,8 +180,9 @@ def _find_10k_filing(
     docs = recent.get("primaryDocument", [])
     n = min(len(forms), len(dates), len(accs), len(docs))
     target_prefix = str(filing_year)
+    form_set = {f.upper() for f in forms}
     for i in range(n):
-        if str(forms[i]).upper() not in ("10-K", "10-K/A"):
+        if str(forms[i]).upper() not in form_set:
             continue
         fd = str(dates[i])[:4] if dates[i] else ""
         if fd == target_prefix:
@@ -190,14 +191,16 @@ def _find_10k_filing(
 
 
 def _resolve_10k_filing(
-    submissions: dict[str, Any], year: int
+    submissions: dict[str, Any], year: int, forms: tuple[str, ...] = ("10-K", "10-K/A")
 ) -> tuple[str, str]:
     """按 ``year`` 查找，若无则依次尝试 ``year-1``、``year-2``。"""
     for y in (year, year - 1, year - 2):
-        hit = _find_10k_filing(submissions, y)
+        hit = _find_10k_filing(submissions, y, forms=forms)
         if hit is not None:
             return hit
-    raise SecEdgarError(f"未找到 {year} 年前后可匹配的 10-K 申报（form=10-K）。")
+    raise SecEdgarError(
+        f"未找到 {year} 年前后可匹配申报（form in {', '.join(forms)}）。"
+    )
 
 
 def _filing_url(cik: int, accession: str, primary_document: str) -> str:
@@ -406,7 +409,12 @@ def _cache_path_section(sym: str, year: int, section_key: str) -> Path:
     return root / f"{sym}_{year}_sec_{section_key}.txt"
 
 
-def get_10k_sections(ticker: str, year: int) -> dict[str, str]:
+def get_10k_sections(
+    ticker: str,
+    year: int,
+    *,
+    forms: tuple[str, ...] = ("10-K", "10-K/A"),
+) -> dict[str, str]:
     """
     拉取指定公历年附近 10-K，解析并缓存各章节纯文本。
 
@@ -431,7 +439,7 @@ def get_10k_sections(ticker: str, year: int) -> dict[str, str]:
     if all(p.exists() and p.stat().st_size > 0 for p in paths.values()):
         return {k: paths[k].read_text(encoding="utf-8", errors="replace") for k in keys}
 
-    raw_doc = _get_10k_raw_html(sym, year)
+    raw_doc = _get_10k_raw_html(sym, year, forms=forms)
     plain = _html_to_plain_text(raw_doc.replace("\r\n", "\n"))
 
     item1 = _extract_item1_business_from_plain(plain)
@@ -461,7 +469,12 @@ def get_10k_sections(ticker: str, year: int) -> dict[str, str]:
     return out
 
 
-def _get_10k_raw_html(ticker: str, year: int) -> str:
+def _get_10k_raw_html(
+    ticker: str,
+    year: int,
+    *,
+    forms: tuple[str, ...] = ("10-K", "10-K/A"),
+) -> str:
     """
     获取指定「申报公历年」对应 10-K 主文档的原始 HTML；优先读缓存 ``*_full.html``。
     与 ``get_10k_text`` 共用同一次下载，避免重复请求 SEC。
@@ -476,7 +489,7 @@ def _get_10k_raw_html(ticker: str, year: int) -> str:
 
     cik = get_cik(sym)
     subs = _fetch_submissions(cik)
-    accession, primary_doc = _resolve_10k_filing(subs, year)
+    accession, primary_doc = _resolve_10k_filing(subs, year, forms=forms)
     if not primary_doc:
         raise SecEdgarError("SEC submissions 中缺少 primaryDocument。")
 
@@ -485,7 +498,12 @@ def _get_10k_raw_html(ticker: str, year: int) -> str:
     return raw_doc
 
 
-def get_10k_text(ticker: str, year: int) -> str:
+def get_10k_text(
+    ticker: str,
+    year: int,
+    *,
+    forms: tuple[str, ...] = ("10-K", "10-K/A"),
+) -> str:
     """
     拉取指定公历年附近提交的 10-K，解析「Item 1. Business」为纯文本。
 
@@ -500,7 +518,7 @@ def get_10k_text(ticker: str, year: int) -> str:
     if cache.exists() and cache.stat().st_size > 0:
         return cache.read_text(encoding="utf-8", errors="replace")
 
-    sections = get_10k_sections(sym, year)
+    sections = get_10k_sections(sym, year, forms=forms)
     item1 = (sections.get("item1") or "").strip()
 
     if not item1 or len(item1) < 100:

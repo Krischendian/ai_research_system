@@ -24,7 +24,7 @@ from research_automation.core.paragraph_text import (
 )
 from research_automation.core.verbatim_match import quote_matches_haystack
 from research_automation.extractors.llm_client import chat
-from research_automation.core.ticker_normalize import normalize_equity_ticker
+from research_automation.core.ticker_normalize import is_us_equity, normalize_equity_ticker
 from research_automation.extractors.fmp_client import get_segment_revenue
 from research_automation.extractors.sec_edgar import (
     SecEdgarError,
@@ -1082,15 +1082,17 @@ def get_profile(ticker: str) -> BusinessProfile:
         except Exception:
             pass  # 缓存损坏，继续走原流程
 
+    filing_forms = ("10-K", "10-K/A") if is_us_equity(symbol) else ("20-F", "20-F/A")
+    filing_label = "10-K" if filing_forms[0].startswith("10-") else "20-F"
     try:
-        sections = get_10k_sections(symbol, filing_year)
+        sections = get_10k_sections(symbol, filing_year, forms=filing_forms)
     except SecEdgarError as e:
-        raise ProfileGenerationError(f"无法获取 SEC 10-K 文本：{e}") from e
+        raise ProfileGenerationError(f"无法获取 SEC {filing_label} 文本：{e}") from e
 
     merged = _merge_sections_for_profile(sections)
     if not merged.strip():
         raise ProfileGenerationError(
-            "未能从 10-K 解析出任何可用章节文本（Item 1/1A/7/8）。"
+            f"未能从 {filing_label} 解析出任何可用章节文本（Item 1/1A/7/8）。"
         )
 
     excerpt = merged
@@ -1135,7 +1137,7 @@ def get_profile(ticker: str) -> BusinessProfile:
     payload["ticker"] = symbol
     payload["last_updated"] = datetime.now(timezone.utc).isoformat()
     payload["data_source_label"] = (
-        f"SEC EDGAR 10-K 节选（标的 {symbol}，{filing_year} 公历年申报附近）："
+        f"SEC EDGAR {filing_label} 节选（标的 {symbol}，{filing_year} 公历年申报附近）："
         "Item 1 业务、Item 1A 风险、Item 7 MD&A、Item 8 附注（分部/地区营收相关窗口）；"
         f"合并顺序为 Item1→Item7→Item8 附注→Item1A；至多约 {_PROFILE_MERGED_MAX_CHARS} 字符送 OpenAI 抽取。"
         " 业务线占比与地理占比须区分：产品线入 revenue_by_segment，国家/区域入 revenue_by_geography。"
@@ -1145,7 +1147,7 @@ def get_profile(ticker: str) -> BusinessProfile:
     try:
         cik = get_cik(symbol)
         payload["primary_source_url"] = (
-            f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={cik}&type=10-K&owner=exclude&count=40"
+            f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={cik}&type={filing_label}&owner=exclude&count=40"
         )
     except SecEdgarError:
         payload["primary_source_url"] = f"https://www.sec.gov/edgar/search/#/q={symbol}"
