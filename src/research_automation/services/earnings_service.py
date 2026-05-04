@@ -39,6 +39,15 @@ from research_automation.models.earnings import (
     EarningsViewpoint,
 )
 
+# 非美股 internal ticker → FMP transcript symbol 映射
+_FMP_TRANSCRIPT_TICKER_MAP: dict[str, str] = {
+    "DHL GY": "DHL.DE",
+    "FRE GY": "FRE.DE",
+    "KBX GY": "KBX.DE",
+    "RTO": "RTO",
+    "BT/A LN": "BT-A.L",
+}
+
 logger = logging.getLogger(__name__)
 
 # 无逐字稿时 API 返回的说明（与 HTTP detail 一致，便于前端展示）
@@ -291,7 +300,8 @@ def analyze_earnings_call(
 
     fmp_tr: dict[str, Any] | None = None
     try:
-        fmp_tr = fmp_client.get_earnings_transcript(symbol, year, quarter)
+        fmp_symbol = _FMP_TRANSCRIPT_TICKER_MAP.get(symbol, symbol)
+        fmp_tr = fmp_client.get_earnings_transcript(fmp_symbol, year, quarter)
     except Exception:
         logger.exception("FMP 逐字稿拉取异常 ticker=%s %s", symbol, qlabel)
         fmp_tr = None
@@ -305,6 +315,13 @@ def analyze_earnings_call(
         transcript_origin = "fmp"
         logger.info("电话会逐字稿来源=FMP ticker=%s %s", symbol, qlabel)
     else:
+        # 非美股且在 FMP 映射表里：FMP 已无数据，直接跳过 SEC
+        if symbol in _FMP_TRANSCRIPT_TICKER_MAP:
+            logger.info("非美股跳过SEC ticker=%s %s", symbol, qlabel)
+            raise EarningsAnalysisError(
+                EARNINGS_NO_TRANSCRIPT_MESSAGE,
+                tag=EARNINGS_NO_TRANSCRIPT_TAG,
+            )
         sec_text: str | None = None
         try:
             sec_text = search_8k_transcript(

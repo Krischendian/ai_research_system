@@ -265,6 +265,31 @@ def check_fiscal_year_consistency(
     return "OK"
 
 
+def _normalize_to_same_scale(a: float, b: float) -> tuple[float, float]:
+    """自动归一化量级差异（处理电话会口述百万单位 vs FMP 绝对值）。"""
+    aa, bb = float(a), float(b)
+    if bb == 0:
+        return aa, bb
+    # 可链式缩放（例如先缩 b 再缩 a），最多 6 步防止死循环
+    for _ in range(6):
+        ratio = aa / bb
+        if ratio > 1000:
+            aa = aa / 1_000_000
+        elif ratio < 0.001:
+            bb = bb / 1_000_000
+        else:
+            break
+    return aa, bb
+
+
+def _revenue_pair_gap(v: float, ref: float) -> float:
+    """在归一化后的同一量级上算相对偏差，用于挑选最匹配的口述候选。"""
+    vn, rvn = _normalize_to_same_scale(v, ref)
+    if rvn == 0:
+        return float("inf")
+    return abs(vn - rvn) / abs(rvn)
+
+
 def _validate_and_sanitize_financials(
     ticker: str, rows: list[Any]
 ) -> tuple[list[Any], list[str]]:
@@ -288,11 +313,13 @@ def _validate_and_sanitize_financials(
     ec_revenue_candidates: list[float] = []
     try:
         from research_automation.extractors.sec_edgar import get_financial_statements
+        from research_automation.core.ticker_normalize import is_us_equity
 
-        for r in sanitized_sorted:
-            yy = getattr(r, "year", None)
-            if isinstance(yy, int) and yy not in sec_by_year:
-                sec_by_year[yy] = get_financial_statements(sym, yy)
+        if is_us_equity(sym):
+            for r in sanitized_sorted:
+                yy = getattr(r, "year", None)
+                if isinstance(yy, int) and yy not in sec_by_year:
+                    sec_by_year[yy] = get_financial_statements(sym, yy)
     except Exception:
         pass
     try:
@@ -347,11 +374,13 @@ def _validate_and_sanitize_financials(
         # 1C-Revenue 双源核验：FMP vs 管理层电话会口述数字
         if rev is not None and ec_revenue_candidates:
             rev_f = float(rev)
-            # 取最接近 FMP 年度收入的口述值，偏差>2%则告警
-            nearest = min(ec_revenue_candidates, key=lambda v: abs(v - rev_f))
-            if rev_f != 0:
-                rev_gap = abs(nearest - rev_f) / abs(rev_f)
-                if rev_gap > 0.02:
+            # 先按归一化后的相对距离选口述值（避免绝对值尺度下误选「接近」的错误大数）
+            nearest = min(ec_revenue_candidates, key=lambda v: _revenue_pair_gap(v, rev_f))
+            nearest_norm, rev_norm = _normalize_to_same_scale(nearest, rev_f)
+            if rev_norm != 0:
+                rev_gap = abs(nearest_norm - rev_norm) / abs(rev_norm)
+                # 偏差 >50% 视为口述/提取与报表无法对齐（量级或误提取），不触发清空
+                if rev_gap > 0.02 and rev_gap <= 0.5:
                     issues.append(
                         f"{sym} FY{y}: Revenue FMP/电话会口述偏差 {rev_gap:.1%} (>2%)"
                     )
@@ -428,9 +457,57 @@ def _validate_and_sanitize_financials(
 
 
 def _get_validated_financials(ticker: str, years: int = 3) -> tuple[list[Any], list[str]]:
-    """统一入口：先取 FMP 财务，再做合理性校验与字段降级。"""
+    """统一入口：Bloomberg → FMP 两级回退，再做合理性校验与字段降级。"""
+    from research_automation.extractors.bloomberg_reader import get_financials_annual as bbg_annual
     from research_automation.extractors.fmp_client import get_financials
+    from research_automation.models.financial import AnnualFinancials
 
+    def _f(v: object) -> float | None:
+        try:
+            return float(v) if v is not None else None
+        except Exception:
+            return None
+
+    # Bloomberg 优先
+    try:
+        bbg_rows = bbg_annual(ticker, years=years)
+        if bbg_rows:
+            # Bloomberg 数据单位是百万本币，换算成绝对值
+            BBG_UNIT = 1_000_000
+            rows = [
+                AnnualFinancials(
+                    year=int(r["fiscal_year"]),
+                    revenue=_f(r.get("revenue")) * BBG_UNIT if _f(r.get("revenue")) else None,
+                    ebitda=_f(r.get("ebitda")) * BBG_UNIT if _f(r.get("ebitda")) else None,
+                    capex=_f(r.get("capex")) * BBG_UNIT if _f(r.get("capex")) else None,
+                    net_income=_f(r.get("net_income")) * BBG_UNIT
+                    if _f(r.get("net_income"))
+                    else None,
+                    gross_margin=(
+                        _f(r.get("gross_profit")) / _f(r.get("revenue"))
+                        if _f(r.get("gross_profit"))
+                        and _f(r.get("revenue"))
+                        and _f(r.get("revenue")) != 0
+                        else None
+                    ),
+                    net_debt_to_equity=(
+                        (_f(r.get("total_debt")) - (_f(r.get("cash")) or 0))
+                        / _f(r.get("total_equity"))
+                        if _f(r.get("total_debt")) is not None
+                        and _f(r.get("total_equity")) not in (None, 0)
+                        else None
+                    ),
+                )
+                for r in bbg_rows
+            ]
+            logger.info("Bloomberg 财务命中 ticker=%s %d 行", ticker, len(rows))
+            return _validate_and_sanitize_financials(ticker, rows)
+    except Exception:
+        logger.warning(
+            "Bloomberg 财务读取失败 ticker=%s，回退 FMP", ticker, exc_info=True
+        )
+
+    # FMP 回退
     rows = get_financials(ticker, years=years)
     return _validate_and_sanitize_financials(ticker, rows)
 
@@ -3806,18 +3883,16 @@ def _step_overview_sector(
         get_profile,
     )
 
-    from research_automation.extractors.fmp_client import get_financials
-
     total = len(per_company)
 
     # 区分"有效覆盖"与"数据暂不可用"公司
-    # 判断标准：能拉到至少1年财务数据 = 有效；否则列为数据缺失
+    # 判断标准：Bloomberg → FMP → SEC 任一来源有财务数据 = 有效
     data_available: list[str] = []
     data_unavailable: list[str] = []
     for rec, *_ in per_company:
         try:
-            rows = get_financials(rec.ticker, years=1)
-            if rows:
+            rows, _ = _get_validated_financials(rec.ticker, years=1)
+            if rows and rows[0].revenue:
                 data_available.append(rec.ticker)
             else:
                 data_unavailable.append(rec.ticker)
@@ -3843,8 +3918,8 @@ def _step_overview_sector(
     ]
     if data_unavailable:
         lines.append(
-            f"> ⚠️ 以下公司因非美股或SEC数据不可用，本报告各Step均无实质内容，"
-            f"不计入有效覆盖统计：**{', '.join(data_unavailable)}**"
+            f"> ⚠️ 以下公司财务数据暂不可用，Step分析内容可能不完整："
+            f"**{', '.join(data_unavailable)}**"
         )
         lines.append("")
 

@@ -133,3 +133,45 @@ OSError: [Errno 11] Resource deadlock avoided
 2026-04-29 12:05:50,472 WARNING research_automation.services.daily_brief_service: LLM公司摘要失败: [Errno 11] Resource deadlock avoided
 2026-04-29 12:05:50,495 INFO scheduled_brief: sector=Technology 完成，简报长度=11787 字符
 2026-04-29 12:05:50,495 INFO scheduled_brief: === 定时任务完成 成功=3 失败=0 ===
+2026-04-30 12:05:01,458 INFO scheduled_brief: === 每日简报定时任务启动 纽约时间=2026-04-30 12:05 EDT ===
+2026-04-30 12:05:01,991 INFO scheduled_brief: 共 3 个 sector：['AI_Job_Replacement', 'Natural_Gas', 'Technology']
+2026-04-30 12:05:01,991 INFO scheduled_brief: 生成简报 sector=AI_Job_Replacement tickers=16 个
+2026-04-30 12:05:20,302 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-30 12:05:32,740 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-30 12:05:48,634 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-30 12:06:03,296 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-30 12:06:03,324 INFO scheduled_brief: sector=AI_Job_Replacement 完成，简报长度=10444 字符
+2026-04-30 12:06:03,325 INFO scheduled_brief: 生成简报 sector=Natural_Gas tickers=12 个
+2026-04-30 12:06:20,807 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-30 12:06:31,649 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-30 12:06:40,116 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-30 12:06:50,217 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-30 12:06:50,251 INFO scheduled_brief: sector=Natural_Gas 完成，简报长度=10637 字符
+2026-04-30 12:06:50,251 INFO scheduled_brief: 生成简报 sector=Technology tickers=5 个
+2026-04-30 12:07:09,634 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-30 12:07:24,577 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-30 12:07:33,991 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-30 12:07:48,587 INFO httpx: HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-04-30 12:07:48,606 INFO scheduled_brief: sector=Technology 完成，简报长度=12809 字符
+2026-04-30 12:07:48,607 INFO scheduled_brief: === 定时任务完成 成功=3 失败=0 ===
+2026-05-01 12:05:01,049 INFO scheduled_brief: === 每日简报定时任务启动 纽约时间=2026-05-01 12:05 EDT ===
+2026-05-01 12:05:01,623 INFO scheduled_brief: 共 3 个 sector：['AI_Job_Replacement', 'Natural_Gas', 'Technology']
+2026-05-01 12:05:01,624 INFO scheduled_brief: 生成简报 sector=AI_Job_Replacement tickers=16 个
+2026-05-01 12:05:03,042 WARNING research_automation.services.daily_brief_service: LLM宏观摘要失败: [Errno 11] Resource deadlock avoided
+2026-05-01 12:05:10,835 WARNING research_automation.services.daily_brief_service: LLM公司摘要失败: [Errno 11] Resource deadlock avoided
+2026-05-01 12:05:12,133 WARNING research_automation.services.daily_brief_service: LLM宏观摘要失败: [Errno 11] Resource deadlock avoided
+2026-05-01 12:05:17,520 WARNING research_automation.services.daily_brief_service: LLM公司摘要失败: [Errno 11] Resource deadlock avoided
+2026-05-01 12:05:17,524 INFO scheduled_brief: sector=AI_Job_Replacement 完成，简报长度=9519 字符
+2026-05-01 12:05:17,524 INFO scheduled_brief: 生成简报 sector=Natural_Gas tickers=12 个
+2026-05-01 12:05:18,873 WARNING research_automation.services.daily_brief_service: LLM宏观摘要失败: [Errno 11] Resource deadlock avoided
+2026-05-01 12:05:23,712 WARNING research_automation.services.daily_brief_service: LLM公司摘要失败: [Errno 11] Resource deadlock avoided
+2026-05-01 12:05:24,844 WARNING research_automation.services.daily_brief_service: LLM宏观摘要失败: [Errno 11] Resource deadlock avoided
+2026-05-01 12:05:29,109 WARNING research_automation.services.daily_brief_service: LLM公司摘要失败: [Errno 11] Resource deadlock avoided
+2026-05-01 12:05:29,122 INFO scheduled_brief: sector=Natural_Gas 完成，简报长度=6344 字符
+2026-05-01 12:05:29,122 INFO scheduled_brief: 生成简报 sector=Technology tickers=5 个
+2026-05-01 12:05:30,230 WARNING research_automation.services.daily_brief_service: LLM宏观摘要失败: [Errno 11] Resource deadlock avoided
+2026-05-01 12:05:35,893 WARNING research_automation.services.daily_brief_service: LLM公司摘要失败: [Errno 11] Resource deadlock avoided
+2026-05-01 12:05:36,852 WARNING research_automation.services.daily_brief_service: LLM宏观摘要失败: [Errno 11] Resource deadlock avoided
+2026-05-01 12:05:43,249 WARNING research_automation.services.daily_brief_service: LLM公司摘要失败: [Errno 11] Resource deadlock avoided
+2026-05-01 12:05:43,258 INFO scheduled_brief: sector=Technology 完成，简报长度=10543 字符
+2026-05-01 12:05:43,258 INFO scheduled_brief: === 定时任务完成 成功=3 失败=0 ===

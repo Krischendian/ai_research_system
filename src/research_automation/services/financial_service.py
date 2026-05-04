@@ -8,9 +8,16 @@ from datetime import datetime, timezone
 
 from research_automation.extractors import fmp_client
 from research_automation.extractors.sec_edgar import get_financial_statements
+from research_automation.extractors.bloomberg_reader import get_financials_annual as bbg_get_financials_annual
 from research_automation.models.financial import AnnualFinancials, CompanyFinancials
 
 logger = logging.getLogger(__name__)
+
+
+def _bbg_to_float(v: object) -> float | None:
+    if v is None:
+        return None
+    return float(v)
 
 
 def _sec_company_search_url(symbol: str) -> str:
@@ -47,6 +54,51 @@ def get_financials(ticker: str) -> CompanyFinancials:
             data_source_label="",
             primary_source_url=None,
         )
+
+    # Bloomberg 优先：非美股标的从 DO PostgreSQL 读取 ETL 数据
+    try:
+        bbg_rows = bbg_get_financials_annual(symbol, years=3)
+        if bbg_rows:
+            financials: list[AnnualFinancials] = []
+            for r in bbg_rows:
+                rev = _bbg_to_float(r.get("revenue"))
+                gp = _bbg_to_float(r.get("gross_profit"))
+                gross_margin = (
+                    (gp / rev) if rev and rev != 0 and gp is not None else None
+                )
+                debt = _bbg_to_float(r.get("total_debt"))
+                cash = _bbg_to_float(r.get("cash"))
+                equity = _bbg_to_float(r.get("total_equity"))
+                net_debt_to_equity: float | None = None
+                if equity is not None and equity != 0 and debt is not None:
+                    c_adj = cash if cash is not None else 0.0
+                    net_debt_to_equity = (debt - c_adj) / equity
+
+                financials.append(
+                    AnnualFinancials(
+                        year=int(r["fiscal_year"]),
+                        revenue=rev,
+                        gross_margin=gross_margin,
+                        ebitda=_bbg_to_float(r.get("ebitda")),
+                        net_income=_bbg_to_float(r.get("net_income")),
+                        capex=_bbg_to_float(r.get("capex")),
+                        net_debt_to_equity=net_debt_to_equity,
+                    )
+                )
+            logger.info("Bloomberg 财务数据命中 ticker=%s，%d 行", symbol, len(financials))
+            return CompanyFinancials(
+                ticker=symbol,
+                financials=financials,
+                last_updated=now_iso,
+                data_source="Bloomberg",
+                data_source_label=(
+                    "数据来自 Bloomberg Terminal（BLPAPI）年度财务；"
+                    "货币与单位以 Bloomberg 披露为准（百万本币）。"
+                ),
+                primary_source_url=f"https://www.bloomberg.com/quote/{symbol}:HK",
+            )
+    except Exception:
+        logger.warning("Bloomberg 财务读取失败 ticker=%s，继续 FMP 链路", symbol, exc_info=True)
 
     fmp_rows: list[AnnualFinancials] = []
     try:

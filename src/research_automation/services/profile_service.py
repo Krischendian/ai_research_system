@@ -5,6 +5,8 @@ import json
 import logging
 import os
 import re
+
+import requests
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
@@ -60,6 +62,15 @@ _FMP_SEGMENT_PCT_WARN_THRESHOLD = 10.0
 _FMP_SEGMENT_VALIDATION_WARNING = "业务线占比与财报披露偏差较大，请人工复核"
 _PROFILE_CACHE_VERSION = 1
 
+# 非美股 internal ticker → FMP company profile API symbol
+_FMP_PROFILE_TICKER_MAP: dict[str, str] = {
+    "DHL GY": "DHL.DE",
+    "FRE GY": "FRE.DE",
+    "KBX GY": "KBX.DE",
+    "RTO": "RTO",
+    "BT/A LN": "BT-A.L",
+}
+
 _PROFILE_SECTION_HEADERS: tuple[tuple[str, str], ...] = (
     ("ITEM_1_BUSINESS", "item1"),
     ("ITEM_7_MD_AND_A", "item7"),
@@ -96,6 +107,25 @@ def _merge_sections_for_profile(sections: dict[str, str]) -> str:
     if len(merged) > _PROFILE_MERGED_MAX_CHARS:
         merged = merged[:_PROFILE_MERGED_MAX_CHARS] + "\n\n[... TRUNCATED ...]"
     return merged
+
+
+def _build_fmp_prompt(symbol: str, description: str) -> str:
+    """FMP profile 描述专用 prompt，只生成 core_business。"""
+    return (
+        "你是投研助理，根据下面的公司描述，用中文写一段简洁的业务简介（core_business）。\n\n"
+        "要求：\n"
+        "- 100-200字，中性客观\n"
+        "- 包含：主营业务、主要产品/服务、主要市场/客户\n"
+        "- 不得添加原文没有的信息\n\n"
+        f"公司代码：{symbol}\n\n"
+        "公司描述：\n"
+        f"{description}\n\n"
+        "仅输出一个 JSON 对象：\n"
+        '{"core_business": "...", "revenue_by_segment": [], "revenue_by_geography": [], '
+        '"future_guidance": null, "industry_view_text": null, "industry_view_source": null, '
+        '"key_quotes": [], "corporate_actions": [], '
+        '"field_sources": {"core_business": [], "future_guidance": [], "industry_view": []}}\n'
+    )
 
 
 def _build_prompt(symbol: str, numbered_paragraphs: str) -> str:
@@ -1084,16 +1114,138 @@ def get_profile(ticker: str) -> BusinessProfile:
 
     filing_forms = ("10-K", "10-K/A") if is_us_equity(symbol) else ("20-F", "20-F/A")
     filing_label = "10-K" if filing_forms[0].startswith("10-") else "20-F"
+    sec_fetch_ok = False
+    _fmp_desc_used = False
     try:
         sections = get_10k_sections(symbol, filing_year, forms=filing_forms)
+        sec_fetch_ok = True
     except SecEdgarError as e:
-        raise ProfileGenerationError(f"无法获取 SEC {filing_label} 文本：{e}") from e
+        fmp_sym = _FMP_PROFILE_TICKER_MAP.get(symbol)
+        if fmp_sym:
+            try:
+                api_key = (os.getenv("FMP_API_KEY") or "").strip()
+                if not api_key:
+                    raise ProfileGenerationError(
+                        f"无法获取 SEC {filing_label} 文本：{e}"
+                    ) from e
+                url = "https://financialmodelingprep.com/stable/profile"
+                resp = requests.get(
+                    url,
+                    params={"symbol": fmp_sym, "apikey": api_key},
+                    headers={
+                        "Accept": "application/json",
+                        "User-Agent": "research-automation/1.0 (+https://financialmodelingprep.com/)",
+                    },
+                    timeout=10,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                d = data[0] if isinstance(data, list) and data else {}
+                desc = str(d.get("description") or "").strip()
+                if desc:
+                    sections = {"item1": desc}
+                    _fmp_desc_used = True
+                else:
+                    raise ProfileGenerationError(
+                        f"无法获取 SEC {filing_label} 文本：{e}"
+                    ) from e
+            except ProfileGenerationError:
+                raise
+            except Exception:
+                raise ProfileGenerationError(
+                    f"无法获取 SEC {filing_label} 文本：{e}"
+                ) from e
+        else:
+            raise ProfileGenerationError(
+                f"无法获取 SEC {filing_label} 文本：{e}"
+            ) from e
 
     merged = _merge_sections_for_profile(sections)
-    if not merged.strip():
-        raise ProfileGenerationError(
-            f"未能从 {filing_label} 解析出任何可用章节文本（Item 1/1A/7/8）。"
+    if sec_fetch_ok:
+        m = merged.strip()
+        mlow = m.lower()
+        _exec_bio_hits = (
+            mlow.count("chief")
+            + mlow.count("officer")
+            + mlow.count("president")
+            + mlow.count("director")
         )
+        _SEC_CONTENT_POOR = (
+            not m
+            or len(m) < 200
+            or len(m) > 50000  # 过长视为劣质，改用 FMP profile
+            or all(
+                kw not in mlow
+                for kw in [
+                    "provide",
+                    "service",
+                    "product",
+                    "solution",
+                    "platform",
+                    "operate",
+                    "revenue",
+                    "customer",
+                    "market",
+                    "business",
+                ]
+            )
+            or _exec_bio_hits > 5
+        )
+        if _SEC_CONTENT_POOR:
+            fmp_sym = _FMP_PROFILE_TICKER_MAP.get(symbol, symbol)
+            try:
+                api_key = (os.getenv("FMP_API_KEY") or "").strip()
+                if api_key:
+                    url = "https://financialmodelingprep.com/stable/profile"
+                    resp = requests.get(
+                        url,
+                        params={"symbol": fmp_sym, "apikey": api_key},
+                        headers={
+                            "Accept": "application/json",
+                            "User-Agent": "research-automation/1.0 (+https://financialmodelingprep.com/)",
+                        },
+                        timeout=10,
+                    )
+                    resp.raise_for_status()
+                    data = resp.json()
+                    d = data[0] if isinstance(data, list) and data else {}
+                    desc = str(d.get("description") or "").strip()
+                    if desc:
+                        merged = desc
+                        sections = {"item1": desc}
+                        _fmp_desc_used = True
+            except Exception:
+                pass
+
+    if not merged.strip():
+        fmp_sym = _FMP_PROFILE_TICKER_MAP.get(symbol)
+        if fmp_sym:
+            try:
+                api_key = (os.getenv("FMP_API_KEY") or "").strip()
+                url = "https://financialmodelingprep.com/stable/profile"
+                resp = requests.get(
+                    url,
+                    params={"symbol": fmp_sym, "apikey": api_key},
+                    headers={
+                        "Accept": "application/json",
+                        "User-Agent": "research-automation/1.0 (+https://financialmodelingprep.com/)",
+                    },
+                    timeout=10,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                d = data[0] if isinstance(data, list) and data else {}
+                desc = str(d.get("description") or "").strip()
+                if desc:
+                    sections = {"item1": desc}
+                    merged = _merge_sections_for_profile(sections)
+                    _fmp_desc_used = True
+            except Exception:
+                pass
+        if not merged.strip():
+            raise ProfileGenerationError(
+                f"未能从 {filing_label} 解析出任何可用章节文本（Item 1/1A/7/8）。"
+            )
 
     excerpt = merged
     doc_uid = build_10k_profile_doc_uid(symbol, filing_year)
@@ -1115,7 +1267,10 @@ def get_profile(ticker: str) -> BusinessProfile:
     id_to_text = {r["paragraph_id"]: r["content"] for r in records}
     merged_excerpt = _merge_excerpt_from_paragraphs(records)
 
-    prompt = _build_prompt(symbol, numbered)
+    if _fmp_desc_used:
+        prompt = _build_fmp_prompt(symbol, merged)
+    else:
+        prompt = _build_prompt(symbol, numbered)
     try:
         reply = chat(
             prompt,
