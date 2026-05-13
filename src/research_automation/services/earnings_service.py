@@ -42,10 +42,14 @@ from research_automation.models.earnings import (
 # 非美股 internal ticker → FMP transcript symbol 映射
 _FMP_TRANSCRIPT_TICKER_MAP: dict[str, str] = {
     "DHL GY": "DHL.DE",
+    "DHL": "DHL.DE",
     "FRE GY": "FRE.DE",
+    "FRE": "FRE.DE",
     "KBX GY": "KBX.DE",
+    "KBX": "KBX.DE",
     "RTO": "RTO",
     "BT/A LN": "BT-A.L",
+    "BT/A": "BT-A.L",
 }
 
 logger = logging.getLogger(__name__)
@@ -299,12 +303,33 @@ def analyze_earnings_call(
     filing_forms = ("8-K", "8-K/A") if is_us_equity(symbol) else ("6-K", "6-K/A")
 
     fmp_tr: dict[str, Any] | None = None
+    fmp_symbol = _FMP_TRANSCRIPT_TICKER_MAP.get(symbol, symbol)
+    _is_non_us = symbol in _FMP_TRANSCRIPT_TICKER_MAP
     try:
-        fmp_symbol = _FMP_TRANSCRIPT_TICKER_MAP.get(symbol, symbol)
         fmp_tr = fmp_client.get_earnings_transcript(fmp_symbol, year, quarter)
     except Exception:
         logger.exception("FMP 逐字稿拉取异常 ticker=%s %s", symbol, qlabel)
         fmp_tr = None
+
+    # 非美股：若请求季度无数据，向前回退最多2个季度
+    if _is_non_us and (not fmp_tr or not fmp_tr.get("content")):
+        _fb_year, _fb_quarter = year, quarter
+        for _ in range(2):
+            _fb_quarter -= 1
+            if _fb_quarter < 1:
+                _fb_quarter = 4
+                _fb_year -= 1
+            try:
+                _fb_tr = fmp_client.get_earnings_transcript(fmp_symbol, _fb_year, _fb_quarter)
+                if _fb_tr and _fb_tr.get("content"):
+                    fmp_tr = _fb_tr
+                    logger.info(
+                        "非美股电话会回退: %s 请求 %s 无数据，命中 %sQ%s",
+                        symbol, qlabel, _fb_year, _fb_quarter,
+                    )
+                    break
+            except Exception:
+                continue
 
     transcript_origin: Literal["fmp", "sec_8k", "sec_api"]
     transcript = ""
@@ -313,10 +338,21 @@ def analyze_earnings_call(
         dialogues = fmp_tr["content"]
         transcript = fmp_client.dialogues_to_plaintext_for_llm(dialogues).strip()
         transcript_origin = "fmp"
+        # 若 FMP 实际命中的财年/财季与请求不同，更新 qlabel 让对外暴露的
+        # ``analysis.quarter`` 反映"真实命中"而非"尝试请求"。
+        actual_qlabel = str(fmp_tr.get("quarter") or "").strip()
+        if actual_qlabel and actual_qlabel != qlabel:
+            logger.info(
+                "电话会请求 %s 实际命中 %s ticker=%s",
+                qlabel,
+                actual_qlabel,
+                symbol,
+            )
+            qlabel = actual_qlabel
         logger.info("电话会逐字稿来源=FMP ticker=%s %s", symbol, qlabel)
     else:
         # 非美股且在 FMP 映射表里：FMP 已无数据，直接跳过 SEC
-        if symbol in _FMP_TRANSCRIPT_TICKER_MAP:
+        if _is_non_us:
             logger.info("非美股跳过SEC ticker=%s %s", symbol, qlabel)
             raise EarningsAnalysisError(
                 EARNINGS_NO_TRANSCRIPT_MESSAGE,

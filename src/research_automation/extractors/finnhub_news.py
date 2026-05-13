@@ -84,7 +84,8 @@ class CompanyNewsItem(TypedDict):
 
 def _cache_path_company(symbol: str, from_d: str, to_d: str) -> Path:
     sym = (symbol or "").strip().upper()
-    return _cache_dir() / f"company_{sym}_{from_d}_{to_d}.json"
+    safe_ticker = sym.replace("/", "_").replace(" ", "_")
+    return _cache_dir() / f"company_{safe_ticker}_{from_d}_{to_d}.json"
 
 
 def _read_cache_if_fresh(path: Path) -> Any | None:

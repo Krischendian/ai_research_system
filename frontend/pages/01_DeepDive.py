@@ -560,7 +560,7 @@ if st.session_state.queried:
             else:
                 trend_fig = _financial_trend_figure(rows)
                 if trend_fig is not None:
-                    st.plotly_chart(trend_fig, use_container_width=True)
+                    st.plotly_chart(trend_fig, width="stretch")
                 # 按年升序，计算 YoY%
                 sorted_rows = sorted(
                     [r for r in rows if r.get("year") is not None],
@@ -630,7 +630,7 @@ if st.session_state.queried:
                     styled = _sty.map(_color_yoy, subset=yoy_cols)
                 except AttributeError:
                     styled = _sty.applymap(_color_yoy, subset=yoy_cols)
-                st.dataframe(styled, use_container_width=True, hide_index=True)
+                st.dataframe(styled, width="stretch", hide_index=True)
 
         st.subheader("业务画像")
         if st.session_state.profile_error:
@@ -842,7 +842,7 @@ if st.session_state.queried:
                         unsafe_allow_html=True,
                     )
                 else:
-                    st.plotly_chart(fig_seg, use_container_width=True)
+                    st.plotly_chart(fig_seg, width="stretch")
                     st.caption("点击图例可隐藏/显示对应扇区；悬停查看占比与金额（若有）。")
                 _mix_source_expander(
                     seg,
@@ -859,7 +859,7 @@ if st.session_state.queried:
                         unsafe_allow_html=True,
                     )
                 else:
-                    st.plotly_chart(fig_geo, use_container_width=True)
+                    st.plotly_chart(fig_geo, width="stretch")
                     st.caption("点击图例可隐藏/显示对应扇区；悬停查看占比与金额（若有）。")
                 _mix_source_expander(
                     geo,

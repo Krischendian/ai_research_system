@@ -18,6 +18,12 @@ class CompanyRecord:
     bloomberg_ticker: str | None = None
 
 
+def display_equity_ticker(rec: CompanyRecord) -> str:
+    """报告/展示用代码：优先 Bloomberg（如 ``DHL GY Equity``），否则内部 ``ticker``。"""
+    bb = (rec.bloomberg_ticker or "").strip()
+    return bb if bb else rec.ticker
+
+
 def add_company(
     ticker: str,
     company_name: str,

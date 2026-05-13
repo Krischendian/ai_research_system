@@ -249,6 +249,25 @@ def build_quarterly_sector_charts(
             vals.append(statistics.mean(items) if items else None)
         return vals
  
+    # 计算各季度覆盖公司数，过滤覆盖不足50%的季度（避免断崖效应）
+    total_companies = len(quarterly_data)
+    def _coverage_count(field: str, ql: str) -> int:
+        count = 0
+        for rows in quarterly_data.values():
+            for r in rows:
+                ql_r = r.quarter if hasattr(r, "quarter") else r.get("quarter", "")
+                if ql_r == ql:
+                    v = getattr(r, field, None) if hasattr(r, field) else r.get(field)
+                    if v is not None:
+                        count += 1
+        return count
+
+    min_coverage = max(1, total_companies // 2)  # 至少50%公司有数据
+    quarters = [
+        ql for ql in quarters
+        if _coverage_count("revenue", ql) >= min_coverage
+    ]
+
     revenues = _sum_field("revenue", quarters)
     capexes = [abs(v) if v is not None else None for v in _sum_field("capex", quarters)]
     gross_margins = [v * 100 if v is not None else None for v in _avg_field("gross_margin", quarters)]
@@ -276,6 +295,31 @@ def build_quarterly_sector_charts(
     figs = []
  
     # ── 图1（左上）：CAPEX 2-Period Rate of Change 折线 ──────
+    # 动态 Y 轴范围：用 p95 截断极值，避免单期离群值（如某季度 +35×）把其他季度
+    # 全部压成 0 轴附近；超出 y_max 的点用注释标出绝对值
+    roc_valid = [v for v in capex_roc if v is not None]
+    roc_range: list[float] | None = None
+    roc_p95: float | None = None
+    if roc_valid:
+        sorted_roc = sorted(roc_valid)
+        n = len(sorted_roc)
+        # 手算 75 分位作为上限截断（比 p95 更激进，避免单期极值把图撑开）
+        if n >= 2:
+            pos = 0.75 * (n - 1)
+            lo = int(pos)
+            hi = min(lo + 1, n - 1)
+            frac = pos - lo
+            roc_p95 = sorted_roc[lo] + (sorted_roc[hi] - sorted_roc[lo]) * frac
+        else:
+            roc_p95 = sorted_roc[-1]
+        # 上限：p75 × 2.0 或 2.0 取较大者；下限：负值时留足空间（× 1.3），正值时至少 -0.5
+        y_max = max(float(roc_p95) * 2.0, 2.0)
+        _min_val = min(roc_valid)
+        if _min_val < 0:
+            y_min = _min_val * 1.3  # 负值往下多留 30% 空间
+        else:
+            y_min = -0.5  # 即使全正值也保留负值区域，避免从 0 开始
+        roc_range = [y_min, y_max]
     fig1 = go.Figure(go.Scatter(
         x=quarters, y=capex_roc,
         mode="lines+markers",
@@ -283,12 +327,58 @@ def build_quarterly_sector_charts(
         marker=dict(size=6),
         hovertemplate="<b>%{x}</b><br>CAPEX ROC: %{y:.3f}<extra></extra>",
     ))
-    fig1.update_layout(
-        title=dict(text=f"2-Period Rate of Change of CAPEX (Quarterly)", font=dict(size=12)),
-        xaxis={**_xaxis},
-        yaxis={**_yaxis, "title": "Rate of Change"},
-        **_base,
+    # 季度过密时抽稀 X 轴标签（保留每隔一个季度的标签）
+    _x_tickvals = (
+        [q for i, q in enumerate(quarters) if i % 2 == 0]
+        if len(quarters) > 10
+        else None
     )
+    # 保持 tickangle=-45 与其他子图一致；仅追加 tickmode/tickvals 抽稀
+    _xaxis_sparse = (
+        {**_xaxis, "tickmode": "array", "tickvals": _x_tickvals}
+        if _x_tickvals
+        else {**_xaxis}
+    )
+    fig1.update_layout(
+        title=dict(text="2-Period Rate of Change of CAPEX (Quarterly)", font=dict(size=12)),
+        xaxis=_xaxis_sparse,
+        yaxis={**_yaxis, "title": "Rate of Change",
+               **({"range": roc_range} if roc_range else {"range": [-1.0, 2.0]})},
+        **{**_base, "height": 380},
+    )
+    # 极值点注释：遍历所有被截断的点，每个都标出实际值
+    if roc_valid and roc_range is not None:
+        for i, (q, v) in enumerate(zip(quarters, capex_roc)):
+            if v is None:
+                continue
+            if v > roc_range[1]:
+                fig1.add_annotation(
+                    x=q,
+                    y=roc_range[1],
+                    text=f"峰值 {v:+.1f}",
+                    showarrow=True,
+                    arrowhead=2,
+                    arrowcolor="#F4A460",
+                    ax=0,
+                    ay=-30,
+                    font=dict(size=10, color="#F4A460"),
+                    bgcolor="rgba(0,0,0,0.6)",
+                    borderpad=2,
+                )
+            elif v < roc_range[0]:
+                fig1.add_annotation(
+                    x=q,
+                    y=roc_range[0],
+                    text=f"谷值 {v:+.1f}",
+                    showarrow=True,
+                    arrowhead=2,
+                    arrowcolor="#F4A460",
+                    ax=0,
+                    ay=30,
+                    font=dict(size=10, color="#F4A460"),
+                    bgcolor="rgba(0,0,0,0.6)",
+                    borderpad=2,
+                )
     figs.append(fig1)
  
     # ── 图2（右上）：Total CAPEX per Quarter 柱状（正值）────────
@@ -307,6 +397,8 @@ def build_quarterly_sector_charts(
     figs.append(fig2)
  
     # ── 图3（左中）：Gross Margin vs CAPEX ROC 双轴叠加 ─────────
+    # 复用图1的 p95 截断 Y 轴范围，保持双图视觉一致并避免极值再次压缩双轴
+    roc2_range = list(roc_range) if roc_range else None
     fig3 = go.Figure()
     fig3.add_trace(go.Scatter(
         x=quarters, y=gross_margins,
@@ -329,7 +421,8 @@ def build_quarterly_sector_charts(
         xaxis={**_xaxis},
         yaxis={**_yaxis, "title": "Gross Margin %", "side": "left"},
         yaxis2={**_yaxis, "title": "CAPEX 2P ROC", "side": "right",
-                "overlaying": "y", "showgrid": False},
+                "overlaying": "y", "showgrid": False,
+                **({"range": roc2_range} if roc2_range else {})},
         legend=dict(orientation="h", y=1.08, x=0, font=dict(size=10)),
         **_base,
     )

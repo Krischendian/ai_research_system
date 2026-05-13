@@ -181,7 +181,7 @@ if not sectors:
 
 col1, col2 = st.columns([3, 1])
 with col2:
-    load_btn = st.button("🔄 加载监控台", type="primary", use_container_width=True)
+    load_btn = st.button("🔄 加载监控台", type="primary", width="stretch")
     use_llm = st.checkbox("生成主题/风险摘要（LLM）", value=True)
 
 if load_btn:
@@ -242,7 +242,7 @@ if rows:
 
     st.dataframe(
         df[display_cols],
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         height=min(80 + len(df) * 45, 600),
         column_config={

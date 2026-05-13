@@ -11,10 +11,17 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
-from research_automation.core.company_manager import CompanyRecord, list_companies
+from research_automation.core.company_manager import (
+    CompanyRecord,
+    display_equity_ticker,
+    list_companies,
+)
 from research_automation.extractors.fmp_client import get_insider_trades
 from research_automation.services.checker_config import SOFTWARE_EXCEPTIONS
-from research_automation.services.insider_service import get_insider_summary
+from research_automation.services.insider_service import (
+    get_insider_summary,
+    get_insider_trades_sec_form4,
+)
 from research_automation.services.signal_fetcher import (
     SignalFetchStats,
     company_display_name,
@@ -35,11 +42,12 @@ def _strict_expose_llm_errors() -> bool:
 
 def _is_truncated_llm_output(text: str) -> bool:
     """空输出或句末非完整结束标点则视为可能被硬截断，可触发续写。
-    含中文分点链常以「；」收束，勿误判为截断。"""
+    含中文分点链常以「；」收束，勿误判为截断。
+    若最后一行以「）」收束但该行无「—」分组描述，亦视为截断（常见于「（X家）」后未写描述即被截断）。"""
     t = (text or "").rstrip()
     if not t:
         return True
-    return t[-1] not in (
+    if t[-1] not in (
         "。",
         "！",
         "？",
@@ -52,18 +60,159 @@ def _is_truncated_llm_output(text: str) -> bool:
         ")",
         "；",
         "…",
-    )
+    ):
+        return True
+    # 末尾是「）」但是最后一行以「（X家）」等结束且没有「—」描述，也视为截断
+    last_line = t.split("\n")[-1].strip()
+    if last_line.endswith("）") and "—" not in last_line:
+        return True
+    # 末尾遗留未闭合的中文 / 英文左括号（典型截断：`美国关税政策（`、`市场（abc`）
+    if re.search(r"[（(][^）)]{0,50}$", t):
+        return True
+    # 末尾遗留未闭合的 [TICKER（典型 LLM 在分组列表中被中断在 `[K` / `[KBX` 等位置）
+    if re.search(r"\[[A-Za-z]{1,6}$", t):
+        return True
+    return False
 
 
 _COMMON_ABBREVS: set[str] = {
-    "AI", "US", "CEO", "CFO", "CTO", "AWS", "API", "USD",
-    "FCF", "EPS", "ARR", "TCV", "FMP", "SEC", "ETF", "IPO",
-    "LLM", "YOY", "QOQ", "GAAP", "SAAS", "IT", "OK", "IR",
-    "M&A", "PE", "VC", "R&D", "HR", "PR", "ID",
-    # 常见财务/机构缩写，避免误判为ticker导致整行丢弃
-    "EBITDA", "GDP", "CBP", "IQ", "SG", "SGA", "EDGAR",
-    "TOC", "UK", "EU", "UN", "NY", "DC",
+    # 人员/职务
+    "AI",
+    "CEO",
+    "CFO",
+    "CTO",
+    "CIO",
+    "COO",
+    "CMO",
+    "CAO",
+    "CSO",
+    "CHRO",
+    "EVP",
+    "SVP",
+    "VP",
+    "MD",
+    "IR",
+    "HR",
+    "PR",
+    # 地区/国家
+    "US",
+    "UK",
+    "EU",
+    "UN",
+    "NY",
+    "DC",
+    "NA",
+    "APAC",
+    "EMEA",
+    "LATAM",
+    "HQ",
+    # 货币/财务指标
+    "USD",
+    "GBP",
+    "EUR",
+    "JPY",
+    "EPS",
+    "FCF",
+    "ARR",
+    "MRR",
+    "NRR",
+    "ACV",
+    "TCV",
+    "RPO",
+    "EBITDA",
+    "EBIT",
+    "GDP",
+    "NPV",
+    "IRR",
+    "CAGR",
+    "ROI",
+    "ROE",
+    "ROIC",
+    "GAAP",
+    "SGA",
+    "OPEX",
+    "CAPEX",
+    "YOY",
+    "QOQ",
+    "YTD",
+    "TTM",
+    # 财年
     "FY",
+    "FY24",
+    "FY25",
+    "FY26",
+    "FY27",
+    "Q1",
+    "Q2",
+    "Q3",
+    "Q4",
+    # 技术/产品
+    "AWS",
+    "API",
+    "LLM",
+    "ML",
+    "NLP",
+    "GPU",
+    "TPU",
+    "SaaS",
+    "SAAS",
+    "ERP",
+    "CRM",
+    "RPA",
+    "OCR",
+    "BI",
+    "IT",
+    "GEN",
+    "GPT",
+    # 资本市场
+    "ETF",
+    "IPO",
+    "PE",
+    "VC",
+    "MA",
+    "SEC",
+    "EDGAR",
+    "FMP",
+    "IQ",
+    # 企业管理
+    "KPI",
+    "OKR",
+    "SLA",
+    "ESG",
+    "R&D",
+    "M&A",
+    # 其他常见
+    "OK",
+    "ID",
+    "SG",
+    "CBP",
+    "TOC",
+    # 容易被误判为非本板块 ticker 的企业名称 / 通用术语缩写
+    # 这些词在公司名（"Total EBS Solutions"）或行业术语（"DTC 渠道"）中出现，
+    # 但都不是任何监控池 ticker；新增后须保持词频较低且与真实 ticker 无冲突
+    "EBS",   # Total EBS Solutions / Electronic Banking Services
+    "DLB",   # DLB Associates（咨询公司名）
+    "PMI",   # Post-Merger Integration / Philip Morris 国际（非监控池）
+    "DTC",   # Direct-to-Consumer
+    "ARG",   # 常见企业缩写（Argentina / 工厂代号等）
+    "DAP",   # UPS Digital Access Program
+    "ACA",   # Affordable Care Act
+    "DOD",   # Department of Defense（regex 仅匹配全大写，"DoD" 不会触发）
+    "SMB",   # Small and Medium Business
+    "AUM",   # Assets Under Management
+    "MIPS",  # IBM 主机性能单位（百万指令/秒）
+    "RFID",  # 射频识别技术
+    # 常见科技公司/品台名称缩写（全大写时易被误判为 ticker）
+    "NVIDIA",  # 英伟达
+    "GOOGLE",  # 谷歌
+    "APPLE",  # 苹果
+    "AMAZON",  # 亚马逊
+    "AZURE",  # 微软云
+    "OPENAI",  # OpenAI
+    "NEXTGEN",  # 常见项目代号
+    "BOOST",  # KBX 效率计划代号
+    "PARIS",  # 城市名
+    "FORD",   # 品牌名
 }
 
 
@@ -113,10 +262,21 @@ def _filter_by_ticker_whitelist(text: str, allowed_set: set[str]) -> str:
         return out
 
     _filtered_lines: list[str] = []
+    _skip_section = False  # 当标题行被丢弃时，跳过其后续内容直到下一个标题/分隔符
     for _line in (text or "").split("\n"):
+        _stripped = _line.strip()
+        # 遇到新标题或分隔符时，重置跳过状态
+        _is_heading = _stripped.startswith("#") or _stripped == "---"
+        if _is_heading:
+            _skip_section = False
+        # 若当前处于跳过节中，丢弃该行
+        if _skip_section:
+            logger.warning("Ticker白名单过滤：跳过孤立内容行: %s", _stripped[:80])
+            continue
+        # 只检查 [TICKER] 格式，裸全大写词不参与过滤
+        # 裸词（ARM/LEAP/NVIDIA等）是品牌名/术语，不应被过滤，否则每换板块都要手动加词
         bracket_tickers = {x.upper() for x in re.findall(r"\[([A-Za-z]{2,6})\]", _line)}
-        word_tickers = set(re.findall(r"\b([A-Z]{2,6})\b", _line))
-        _line_rogue = (bracket_tickers - _allowed) | (word_tickers - _allowed - _COMMON_ABBREVS)
+        _line_rogue = bracket_tickers - _allowed
         if not _line_rogue:
             _filtered_lines.append(_line)
             continue
@@ -124,6 +284,8 @@ def _filter_by_ticker_whitelist(text: str, allowed_set: set[str]) -> str:
             _filtered_lines.append(_redact_line(_line, _line_rogue))
             continue
         logger.warning("Ticker白名单过滤丢弃整行(rogue=%s): %s", _line_rogue, _line.strip())
+        if _is_heading:
+            _skip_section = True
         continue
     return "\n".join(_filtered_lines)
 
@@ -157,10 +319,10 @@ def _filter_non_sector_content(text: str, allowed_tickers: set[str]) -> str:
         # 提取行中所有被括号、方括号包围的词，或以「公司代码 —」开头的词
         # 这些位置才是真正的 ticker 引用
         ticker_refs = re.findall(
-            r"\[([A-Z]{1,5})\]|"  # [TICKER]
-            r"（([A-Z]{1,5})）|"  # （TICKER）
-            r"^[-•*]\s*([A-Z]{1,5})\s*[—–]|"  # - TICKER — 行首
-            r"\(([A-Z]{1,5})\)",  # (TICKER)
+            r"\[([A-Z0-9/]{1,6})\]|"  # [TICKER] 含数字和斜杠
+            r"（([A-Z0-9/]{1,6})）|"  # （TICKER）
+            r"^[-•*]\s*([A-Z0-9/]{1,6})\s*[—–]|"  # - TICKER — 行首
+            r"\(([A-Z0-9/]{1,6})\)",  # (TICKER)
             line,
         )
         # 展平匹配结果
@@ -354,11 +516,39 @@ def _validate_and_sanitize_financials(
         # 保存清空前的原始 Revenue，供净利率校验使用
         raw_revenue = rev
         if eb is not None and ni is not None and float(eb) < float(ni):
-            issues.append(
-                f"{sym} FY{y}: EBITDA {float(eb):.3g} < Net Income {float(ni):.3g}"
+            eb_f, ni_f = float(eb), float(ni)
+            rev_f = (
+                float(raw_revenue)
+                if raw_revenue is not None
+                else 0.0
             )
-            # 暂停该字段自动填入
-            setattr(r, "ebitda", None)
+            # 豁免条件 A：EBITDA 与 Net Income 同为负数（亏损期 SBC 重 SaaS 公司，
+            # 如 MDB —— D&A + 利息 + 税合并对净亏损做调整后 EBITDA 反而更亏；
+            # 方向一致时不视为数据错误）
+            _both_negative = eb_f < 0 and ni_f < 0
+            # 豁免条件 B：差额 < 营收 10%（小额一次性项，属正常财务波动）
+            _small_gap = (
+                rev_f > 0 and abs(ni_f - eb_f) < rev_f * 0.10
+            )
+            # 豁免条件 C：两者均为正且 NI ≤ EBITDA × 2.0（大额一次性税收抵免 /
+            # 递延税资产释放 / 投资收益，如 ZM —— NI 含一次性税务收益高于 EBITDA；
+            # 上界 2.0 倍仍能截住 NI=5×EBITDA 等真实数据错位）
+            _one_time_credit = (
+                eb_f > 0 and ni_f > 0 and ni_f <= eb_f * 2.0
+            )
+            if not (_both_negative or _small_gap or _one_time_credit):
+                issues.append(
+                    f"{sym} FY{y}: EBITDA {eb_f:.3g} < Net Income {ni_f:.3g}"
+                )
+                # 暂停该字段自动填入
+                setattr(r, "ebitda", None)
+            else:
+                logger.debug(
+                    "EBITDA < NI 豁免 ticker=%s FY=%s eb=%.3g ni=%.3g "
+                    "both_neg=%s small_gap=%s one_time_credit=%s",
+                    sym, y, eb_f, ni_f,
+                    _both_negative, _small_gap, _one_time_credit,
+                )
 
         # 1C-Net Income 双源核验：FMP vs SEC EDGAR XBRL
         sec_row = sec_by_year.get(int(y)) if isinstance(y, int) else None
@@ -456,8 +646,10 @@ def _validate_and_sanitize_financials(
     return sanitized_sorted, issues
 
 
-def _get_validated_financials(ticker: str, years: int = 3) -> tuple[list[Any], list[str]]:
-    """统一入口：Bloomberg → FMP 两级回退，再做合理性校验与字段降级。"""
+def _get_validated_financials(ticker: str, years: int = 3) -> tuple[list[Any], list[str], str]:
+    """统一入口：Bloomberg → FMP 两级回退，再做合理性校验与字段降级。
+    返回 (rows, issues, source_label)，source_label 为 'Bloomberg' 或 'FMP'。
+    """
     from research_automation.extractors.bloomberg_reader import get_financials_annual as bbg_annual
     from research_automation.extractors.fmp_client import get_financials
     from research_automation.models.financial import AnnualFinancials
@@ -501,7 +693,8 @@ def _get_validated_financials(ticker: str, years: int = 3) -> tuple[list[Any], l
                 for r in bbg_rows
             ]
             logger.info("Bloomberg 财务命中 ticker=%s %d 行", ticker, len(rows))
-            return _validate_and_sanitize_financials(ticker, rows)
+            sanitized, issues = _validate_and_sanitize_financials(ticker, rows)
+            return sanitized, issues, "Bloomberg"
     except Exception:
         logger.warning(
             "Bloomberg 财务读取失败 ticker=%s，回退 FMP", ticker, exc_info=True
@@ -509,7 +702,8 @@ def _get_validated_financials(ticker: str, years: int = 3) -> tuple[list[Any], l
 
     # FMP 回退
     rows = get_financials(ticker, years=years)
-    return _validate_and_sanitize_financials(ticker, rows)
+    sanitized, issues = _validate_and_sanitize_financials(ticker, rows)
+    return sanitized, issues, "FMP"
 
 
 _generation_locks: dict[str, threading.Lock] = {}
@@ -547,12 +741,27 @@ def _fmt_usd(v: float | None) -> str:
 
 
 def _fmt_trade_side_value(value: float | None, trade_count: int) -> str:
-    """有笔数但金额不可得时写「股数未披露」，与 ``insider_service`` 语义一致。"""
+    """金额格式化辅助。
+
+    与 ``insider_service`` 语义一致：
+    - ``trade_count <= 0`` → 无该侧交易，返回 ``"—"``
+    - 有交易但 notional 全部缺失（如全部 ``totalValue=None`` 且 ``price=0``）
+      → 返回 ``"金额未披露"``（旧版误写"股数未披露"，金额字段措辞修正）
+    - 计算结果绝对值 < $1000：通常对应 RSU/Phantom Stock 归属、期权行权释放等
+      非市场交易残值，叠加 1–2 笔小额市场买卖；此时附「金额异常偏小」提示
+      让读者去核对 SEC Form 4 原文，避免被误读为大规模交易
+    """
     if trade_count <= 0:
         return "—"
     if value is None:
-        return "股数未披露"
-    return _fmt_usd(value)
+        return "金额未披露"
+    formatted = _fmt_usd(value)
+    if abs(value) < 1000.0:
+        formatted = (
+            f"{formatted}（金额异常偏小，可能为受限股归属/期权行权，"
+            "请核查原始 Form 4 申报）"
+        )
+    return formatted
 
 
 def _md_escape_title(s: str, max_len: int = 200) -> str:
@@ -778,7 +987,7 @@ def generate_sector_report(
         f"- 业务变化（`business_change`）：**{business_n}**",
         f"- 新闻中含内部交易语境（`insider_trade`）：**{insider_news_n}**",
         f"- 其他（`other`）：**{other_n}**",
-        f"- 内部交易（FMP 申报）：{insider_line}",
+        f"- 内部交易（FMP / Bloomberg）：{insider_line}",
         "",
         "## 公司详情",
         "",
@@ -787,7 +996,8 @@ def generate_sector_report(
     for rec, signals, insider, _below, had_fetch_signals in per_company:
         t = rec.ticker
         disp = company_display_name(t, rec.company_name)
-        lines.append(f"### {t} — {disp}")
+        disp_sym = display_equity_ticker(rec)
+        lines.append(f"### {disp_sym} — {disp}")
         lines.append("")
         lines.append("#### 📰 新闻信号")
         lines.append("")
@@ -801,21 +1011,53 @@ def generate_sector_report(
                 title = _md_escape_title(str(s.get("title") or "(no title)"))
                 url = str(s.get("url") or "").strip()
                 ex = _excerpt(str(s.get("content") or ""))
-                lines.append(f"- **[{st}]** · 相关性 **{rs}** — {title}")
+                _axes = str(s.get("query_axis") or "")
+                _src_tags: list[str] = []
+                if "bloomberg_rss" in _axes:
+                    _src_tags.append("Bloomberg")
+                if "benzinga" in _axes:
+                    _src_tags.append("Benzinga")
+                _src_badge = f" `{'／'.join(_src_tags)}`" if _src_tags else ""
+                lines.append(
+                    f"- **[{st}]** · 相关性 **{rs}**{_src_badge} — {title}"
+                )
                 if url:
                     lines.append(f"  - 📎 [原文链接]({url})")
                 if ex:
                     lines.append(f"  - > {ex}")
                 lines.append("")
 
-        lines.append("#### 💼 内部交易（FMP）")
+        _src_label = insider.get("source") or "FMP / SEC Form 4"
+        _window_days = insider.get("days_back") or 30  # insider_service 统计窗口
+        lines.append(f"#### 💼 内部交易（{_src_label}）")
         lines.append("")
+
         bc = int(insider.get("buy_count") or 0)
         sc = int(insider.get("sell_count") or 0)
         tbv = insider.get("total_buy_value")
         tsv = insider.get("total_sell_value")
-        if insider.get("trade_count", 0) == 0:
-            lines.append("*暂无（窗口内无申报或无法解析日期）*")
+        trades_list = insider.get("trades") or []
+        sources = {
+            str(t.get("source") or "FMP")
+            for t in trades_list
+            if isinstance(t, dict)
+        }
+        src_label = insider.get("source") or (
+            "SEC Form 4" if sources == {"SEC_EDGAR_Form4"} else "FMP"
+        )
+        trade_count = int(insider.get("trade_count") or 0)
+
+        # 统一输出数据窗口说明（无论是否有数据都显示）
+        lines.append(f"*统计窗口：近 {_window_days} 天　｜　数据来源：{src_label}*")
+        lines.append("")
+
+        if trade_count == 0:
+            lines.append("- 买入：**—**")
+            lines.append("- 卖出：**—**")
+            lines.append(
+                "> *窗口内无可统计交易记录"
+                "（可能为无申报、RSU归属/期权行权等非市场交易，或数据源暂无覆盖）*"
+            )
         else:
             lines.append(
                 f"- 买入：**{bc}** 笔，总价值 **{_fmt_trade_side_value(float(tbv) if isinstance(tbv, (int, float)) and tbv == tbv else None, bc)}**"
@@ -830,14 +1072,16 @@ def generate_sector_report(
                     nm = str(it.get("insiderName") or "").strip()
                     tc = int(it.get("trades") or 0)
                     tv = it.get("total_value")
-                    fv = float(tv) if isinstance(tv, (int, float)) and tv == tv else None
+                    fv = (
+                        float(tv)
+                        if isinstance(tv, (int, float)) and tv == tv
+                        else None
+                    )
                     parts.append(
                         f"{nm}（{tc} 笔，约 {_fmt_trade_side_value(fv, tc)}）"
                     )
                 lines.append(f"- 主要内部人士：{'; '.join(parts)}")
-            lines.append(
-                f"- 窗口内申报条数：**{int(insider.get('trade_count') or 0)}**"
-            )
+            lines.append(f"- 窗口内申报条数：**{trade_count}**")
         lines.append("")
 
     # 调试统计（便于验收「噪音比例 / 去重 / 过期」）
@@ -964,25 +1208,8 @@ def _load_per_company_signals_and_insiders(
         filtered, below_n = _filter_sort_signals(signals, thr)
 
         try:
-            rows_all = get_insider_trades(t, limit=max(50, days_back * 3))
-            cutoff = date.today() - timedelta(days=max(1, int(days_back)))
-            filtered_trades: list[dict[str, Any]] = []
-            for r in rows_all:
-                if not isinstance(r, dict):
-                    continue
-                raw_d = str(r.get("transactionDate") or "").strip()[:10]
-                if len(raw_d) < 10:
-                    raw_d = str(r.get("filingDate") or "").strip()[:10]
-                if len(raw_d) < 10:
-                    continue
-                try:
-                    td = datetime.strptime(raw_d, "%Y-%m-%d").date()
-                except ValueError:
-                    continue
-                if td < cutoff:
-                    continue
-                filtered_trades.append(r)
-            insider = _summarize_insider_trades(filtered_trades)
+            insider_days = max(days_back, 30)  # insider 窗口最少30天
+            insider = get_insider_summary(t, days_back=insider_days)
         except Exception:
             logger.exception("内部交易汇总失败 ticker=%s", t)
             insider = {}
@@ -1104,7 +1331,7 @@ def _step0_sector_summary(
         t = rec.ticker
         disp = company_display_name(t, rec.company_name)
         try:
-            financials, _issues = _get_validated_financials(t, years=2)
+            financials, _issues, _fin_src = _get_validated_financials(t, years=2)
             if not financials:
                 continue
             latest = max(financials, key=lambda r: getattr(r, "year", 0) or 0)
@@ -1122,7 +1349,7 @@ def _step0_sector_summary(
             gm = getattr(latest, "gross_margin", None)
             ebitda = getattr(latest, "ebitda", None)
 
-            snap = f"{t}（{disp}）：Revenue ${float(rev)/1e9:.1f}B"
+            snap = f"{display_equity_ticker(rec)}（{disp}）：Revenue ${float(rev)/1e9:.1f}B"
             if rev_growth is not None:
                 snap += f" YoY {rev_growth:+.1f}%"
             if gm is not None:
@@ -1208,11 +1435,10 @@ def _step0b_company_snapshot_table(
     for rec, signals, _insider, _below, _had in per_company:
         t = rec.ticker
         try:
-            financials, fin_issues = _get_validated_financials(t, years=2)
+            financials, fin_issues, _fin_src = _get_validated_financials(t, years=2)
             if not financials:
                 lines.append(f"| {t} | — | — | — | — | — | — |")
                 continue
-
             latest = max(financials, key=lambda r: getattr(r, "year", 0) or 0)
             prev_list = [r for r in financials if (getattr(r, "year", 0) or 0) < (getattr(latest, "year", 0) or 0)]
             prev = max(prev_list, key=lambda r: getattr(r, "year", 0) or 0) if prev_list else None
@@ -1282,7 +1508,7 @@ def _step0b_company_snapshot_table(
             lines.append(f"| {t} | — | — | — | — | — | — |")
 
     lines.append("")
-    lines.append("*数据来源：FMP Annual Financials（最新财年）。本周关键信号来自 Benzinga。*")
+    lines.append("*数据来源：Bloomberg / FMP Annual Financials（最新财年，Bloomberg 优先）。本周关键信号来自 Benzinga。*")
     lines.append("")
     return lines
 
@@ -1314,7 +1540,9 @@ def _step1_sector_business_overview(
         found_any = True
         total = sum(d["absolute"] for d in data)
         total_b = total / 1e9
-        lines.append(f"**{disp} ({t})**　总收入 ${total_b:.1f}B")
+        lines.append(
+            f"**{disp} ({display_equity_ticker(rec)})**　总收入 ${total_b:.1f}B"
+        )
         for seg in data:
             lines.append(f"- {seg['segment']}: {seg['percentage']:.1f}%　(${seg['absolute']/1e9:.2f}B)")
         lines.append("")
@@ -1331,6 +1559,40 @@ def _get_revenue_segments(
     统一分部数据入口（供简介与 Step2 共用）。
     返回：(rows, fiscal_year, source_label)。
     """
+    # Bloomberg 优先：有数据直接返回，不走 FMP
+    try:
+        from research_automation.extractors.bloomberg_reader import (
+            get_segment_revenue as _bbg_get_segment,
+        )
+
+        bbg_rows = _bbg_get_segment(ticker, years=1)  # 只取最新一年
+        if bbg_rows:
+            # 找最新财年
+            latest_year = max(r["fiscal_year"] for r in bbg_rows)
+            # 转换为 sector_report 格式
+            year_rows = [r for r in bbg_rows if r["fiscal_year"] == latest_year]
+            total = sum(
+                float(r["revenue"])
+                for r in year_rows
+                if float(r["revenue"]) >= 100
+            )
+            out: list[dict[str, Any]] = []
+            for r in year_rows:
+                rev = float(r["revenue"])
+                if rev < 100:  # 小于 100M 跳过（Bloomberg 占位/调整项）
+                    continue
+                seg_row: dict[str, Any] = {
+                    "segment": r["segment_name"],
+                    "absolute": rev * 1e6,  # Bloomberg 单位是 Millions → 转成 dollars
+                }
+                if total > 0:
+                    seg_row["percentage"] = rev / total * 100
+                out.append(seg_row)
+            if out:
+                return out, latest_year, "Bloomberg PG_REVENUE"
+    except Exception as _bbg_err:
+        logger.debug("Bloomberg segment fallback: %s", _bbg_err)
+
     from research_automation.extractors.fmp_client import get_segment_revenue
     from research_automation.services.profile_service import (
         ProfileGenerationError,
@@ -1424,7 +1686,7 @@ def _step2_per_company_revenue_breakdown(
         if seg_total <= 0:
             return None
         try:
-            fin_rows, _issues = _get_validated_financials(ticker, years=4)
+            fin_rows, _issues, _fin_src = _get_validated_financials(ticker, years=4)
         except Exception:
             return None
         best_year: int | None = None
@@ -1451,7 +1713,7 @@ def _step2_per_company_revenue_breakdown(
         if fiscal_year is None:
             return None
         try:
-            fin_rows, _issues = _get_validated_financials(ticker, years=6)
+            fin_rows, _issues, _fin_src = _get_validated_financials(ticker, years=6)
         except Exception:
             return None
         for fr in fin_rows or []:
@@ -1559,6 +1821,7 @@ def _step2_per_company_revenue_breakdown(
         company_segment_data: dict[str, list] = {}
         covered = 0
         no_data_tickers: list[str] = []
+        source_labels: set[str] = set()
 
         for rec, *_ in per_company:
             t = rec.ticker
@@ -1567,6 +1830,8 @@ def _step2_per_company_revenue_breakdown(
                 enforced, _warn = _system_enforce_segment_dollars(t, data, _seg_year)
                 company_segment_data[t] = enforced
                 covered += 1
+                if _seg_source:
+                    source_labels.add(_seg_source)
             else:
                 no_data_tickers.append(t)
 
@@ -1633,8 +1898,9 @@ Americas、EMEA、Pacific、Latin、International、North、South 等），
             except Exception as e:
                 logger.warning("Step2 LLM 归类失败，fallback 到简单加总: %s", e)
 
+            _source_display = " + ".join(sorted(source_labels)) if source_labels else "FMP Revenue Segmentation"
             lines.append(
-                f"> **数据来源**：FMP Revenue Segmentation | **覆盖**：{covered}/{len(per_company)} 家公司 | "
+                f"> **数据来源**：{_source_display} | **覆盖**：{covered}/{len(per_company)} 家公司 | "
                 f"**暂无数据**：{', '.join(no_data_tickers) if no_data_tickers else '无'}"
             )
             lines.append("")
@@ -1706,20 +1972,32 @@ Americas、EMEA、Pacific、Latin、International、North、South 等），
     for rec, _signals, _insider, _below, _had in per_company:
         t = rec.ticker
         disp = company_display_name(t, rec.company_name)
-        lines.append(f"### {t} — {disp}")
+        disp_sym = display_equity_ticker(rec)
+        lines.append(f"### {disp_sym} — {disp}")
         lines.append("")
         data, year_used, seg_source = _get_revenue_segments(t)
         if not data:
             lines.append("**收入结构（产品线）：** *暂无可用分部数据（FMP未收录，10-K提取失败）*")
             lines.append("")
             continue
-        step6_rows, _step6_issues = _get_validated_financials(t, years=1)
-        step6_fy = None
+        # Step 6 财年：先在该公司的最近若干年财务数据中找与 Step 2 (year_used) 同年的行。
+        # 找到则视为对齐（避免 segment_revenue 表更新慢于 financials_annual 时大面积误报）；
+        # 找不到再退回到该公司 financials_annual 实际最新一行的 year。
+        step6_rows, _step6_issues, _fin_src = _get_validated_financials(t, years=3)
+        step6_fy: int | None = None
         if step6_rows:
-            try:
-                step6_fy = int(getattr(step6_rows[0], "year", 0) or 0) or None
-            except (TypeError, ValueError):
-                step6_fy = None
+            step6_years: list[int] = []
+            for _row in step6_rows:
+                try:
+                    _y = int(getattr(_row, "year", 0) or 0)
+                except (TypeError, ValueError):
+                    _y = 0
+                if _y > 0:
+                    step6_years.append(_y)
+            if isinstance(year_used, int) and year_used in step6_years:
+                step6_fy = year_used
+            elif step6_years:
+                step6_fy = max(step6_years)
         fy_check_msg = check_fiscal_year_consistency(t, year_used, step6_fy)
         data, calc_warn = _system_enforce_segment_dollars(t, data, year_used)
         total = 0.0
@@ -1789,35 +2067,101 @@ Americas、EMEA、Pacific、Latin、International、North、South 等），
         except Exception:
             pass
 
-        # 地理收入拆分（FMP geographic；与产品线高度重合或明显业务线用词时不展示）
-        geo_data = get_geographic_revenue(t, year_used) if year_used is not None else None
-        if geo_data:
-            geo_total = sum(g.get('absolute', 0) or 0 for g in geo_data)
-            verified_rev = _get_verified_total_revenue(t, year_used)
-            geo_coverage = geo_total / verified_rev if verified_rev and verified_rev > 0 else None
-            if geo_coverage is not None and geo_coverage < 0.85:
-                lines.append(
-                    f"**地理收入拆分（FY{year_label}）：** "
-                    f"*暂无公司级地理收入数据（FMP返回数据仅覆盖总收入的{geo_coverage:.0%}，疑为分部级数据，已过滤）*"
-                )
-                lines.append("")
-            else:
-                lines.append(f"**地理收入拆分（FY{year_label}）：**")
+        # 地理收入拆分：Bloomberg 优先，FMP 回退
+        from research_automation.extractors.bloomberg_reader import get_geo_revenue as _bbg_geo
+
+        geo_from_bbg = False
+        # 取5年数据，当最新年全为浮点null占位值时向前回退找真实数据
+        # （如JLL FY2022-2025全为~-2.4e-14，只有FY2021有真实数字）
+        bbg_geo = _bbg_geo(t, years=5)
+        if bbg_geo:
+            geo_from_bbg = True
+            _periods_seen: list[str] = []
+            _period_rows: dict[str, list] = {}
+            for _r in bbg_geo:
+                _pl = _r["period_label"]
+                if _pl not in _period_rows:
+                    _periods_seen.append(_pl)
+                    _period_rows[_pl] = []
+                _period_rows[_pl].append(_r)
+            _periods_sorted = sorted(_periods_seen, reverse=True)
+            bbg_rows: list = []
+            latest_year = _periods_sorted[0] if _periods_sorted else ""
+            for _pl in _periods_sorted:
+                _candidate = [
+                    r for r in _period_rows[_pl]
+                    if r["geography_name"].lower() != "worldwide"
+                    and float(r["revenue"]) >= 1
+                ]
+                if _candidate:
+                    bbg_rows = _candidate
+                    latest_year = _pl
+                    if _pl != _periods_sorted[0]:
+                        logger.info("geo_revenue 回退: %s 最新年(%s)全为占位值，回退到 %s",
+                                    t, _periods_sorted[0], _pl)
+                    break
+            if bbg_rows:
+                bbg_total = sum(r["revenue"] for r in bbg_rows)
+                # HCA 特判：Bloomberg 返回的是内部管理分部（American/Atlantic/National Group），
+                # 不是真正的地理区域，加一行说明避免误导
+                if t.upper() == "HCA":
+                    lines.append(
+                        "> ℹ️ 以下为 HCA 内部管理分部口径（American Group / Atlantic Group / "
+                        "National Group），非传统地理区域划分，该公司业务全部位于美国境内。"
+                    )
+                    lines.append("")
+                lines.append(f"**地理收入拆分（{latest_year}）：**")
                 lines.append("")
                 lines.append("| 地区 | 占比 | 收入 |")
                 lines.append("|------|------|------|")
-                for g in geo_data:
+                for r in bbg_rows:
+                    pct = r["revenue"] / bbg_total * 100 if bbg_total > 0 else 0
                     lines.append(
-                        f"| {g['region']} | {g['percentage']:.1f}% | "
-                        f"${g['absolute']/1e9:.2f}B |"
+                        f"| {r['geography_name']} | {pct:.1f}% | "
+                        f"${r['revenue']/1e3:.2f}B |"  # Bloomberg 单位是 millions
                     )
                 lines.append("")
-        elif year_used is not None:
-            lines.append(
-                f"**地理收入拆分（FY{year_label}）：** "
-                "*暂无地理收入拆分数据（FMP 无可用地理分部或与产品线拆分重合已过滤）*"
-            )
-            lines.append("")
+                lines.append(f"*（数据来源：Bloomberg PG_REVENUE，{latest_year}）*")
+                lines.append("")
+            else:
+                # 只有 Worldwide（或仅有占位/调整项被过滤），改为提示 Bloomberg 字段未返回拆分
+                lines.append(
+                    "**地理分布：** *Bloomberg PG_REVENUE 未返回地理分拆数据，"
+                    "如需查阅请参考公司年报*"
+                )
+                lines.append("")
+            geo_data = None  # 跳过 FMP 逻辑
+        else:
+            geo_data = get_geographic_revenue(t, year_used) if year_used is not None else None
+
+        if not geo_from_bbg:
+            if geo_data is not None and geo_data:
+                geo_total = sum(g.get('absolute', 0) or 0 for g in geo_data)
+                verified_rev = _get_verified_total_revenue(t, year_used)
+                geo_coverage = geo_total / verified_rev if verified_rev and verified_rev > 0 else None
+                if geo_coverage is not None and geo_coverage < 0.85:
+                    lines.append(
+                        f"**地理收入拆分（FY{year_label}）：** "
+                        f"*暂无公司级地理收入数据（FMP返回数据仅覆盖总收入的{geo_coverage:.0%}，疑为分部级数据，已过滤）*"
+                    )
+                    lines.append("")
+                else:
+                    lines.append(f"**地理收入拆分（FY{year_label}）：**")
+                    lines.append("")
+                    lines.append("| 地区 | 占比 | 收入 |")
+                    lines.append("|------|------|------|")
+                    for g in geo_data:
+                        lines.append(
+                            f"| {g['region']} | {g['percentage']:.1f}% | "
+                            f"${g['absolute']/1e9:.2f}B |"
+                        )
+                    lines.append("")
+            elif year_used is not None:
+                lines.append(
+                    f"**地理收入拆分（FY{year_label}）：** "
+                    "*暂无地理收入拆分数据（FMP 无可用地理分部或与产品线拆分重合已过滤）*"
+                )
+                lines.append("")
     return lines
 
 
@@ -1851,19 +2195,33 @@ def _step3_per_company_outlook(
         rec, _signals, _insider, _below, _had = row
         t = rec.ticker
         disp = company_display_name(t, rec.company_name)
+        disp_sym = display_equity_ticker(rec)
         chunk: list[str] = [
-            f"### {t} — {disp}",
+            f"### {disp_sym} — {disp}",
             "",
         ]
         try:
             profile = get_profile(t)
             fg = (profile.future_guidance or "").strip()
-            profile_field_sources = getattr(profile, "field_sources", None) or {}
-            fg_sources = profile_field_sources.get("future_guidance", [])
+            _fp_src = getattr(profile, "field_paragraph_ids", None) or {}
+            fg_sources = (
+                _fp_src.get("future_guidance", [])
+                if isinstance(_fp_src, dict)
+                else []
+            )
             if fg and fg not in ("原文未明确提及", "NOT_FOUND"):
+                # 取首句作为小标题（截到第一个句号/换行，最多 20 字）
+                _fg_first = fg.replace("\n", "。").split("。")[0].strip()
+                if _fg_first:
+                    _fg_subtitle = (
+                        _fg_first[:20] + "…" if len(_fg_first) > 20 else _fg_first
+                    )
+                    _fg_heading = f"**未来展望与指引：** *{_fg_subtitle}*"
+                else:
+                    _fg_heading = "**未来展望与指引：**"
                 chunk.extend(
                     [
-                        "**未来展望与指引：**",
+                        _fg_heading,
                         "",
                         fg,
                         "",
@@ -1894,29 +2252,82 @@ def _step3_per_company_outlook(
                     "Step3: industry_view 含 Risk Factors 模板句，跳过 ticker=%s", t
                 )
                 iv = ""
+            # 检测 LLM 自我回避表述（UPS 类「未对行业趋势...作出明确判断」），
+            # 这类内容对读者无价值，统一转换为占位文字。
+            _IV_NULL_PATTERNS = (
+                "无法归纳",
+                "未对行业趋势",
+                "未作出明确判断",
+                "未作出明确表述",
+                "未作出明确的判断",
+                "未做出明确判断",
+                "未做出明确的判断",
+                "未给出明确判断",
+                "未检出明确",
+                "未明确提及行业",
+                "未明确表述",
+                "未提供明确判断",
+                "未提及明确判断",
+                "不构成明确判断",
+                "不构成明确的判断",
+                "原文未明确",
+            )
+            if iv and any(p in iv for p in _IV_NULL_PATTERNS):
+                logger.debug(
+                    "Step3: industry_view 命中占位模式，转为统一占位 ticker=%s iv=%r",
+                    t,
+                    iv[:80],
+                )
+                iv = ""
+            _IV_PLACEHOLDER_LINE = (
+                "**行业判断（管理层视角）：** *原文未明确提及行业判断*"
+            )
             if iv and iv not in ("原文未明确提及", "NOT_FOUND"):
+                # 取首句作为小标题（截到第一个句号/换行，最多 20 字）
+                _iv_first = iv.replace("\n", "。").split("。")[0].strip()
+                if _iv_first:
+                    _iv_subtitle = (
+                        _iv_first[:20] + "…" if len(_iv_first) > 20 else _iv_first
+                    )
+                    _iv_heading = f"**行业判断（管理层视角）：** *{_iv_subtitle}*"
+                else:
+                    _iv_heading = "**行业判断（管理层视角）：**"
                 chunk.extend(
                     [
-                        "**行业判断（管理层视角）：**",
+                        _iv_heading,
                         "",
                         iv,
                     ]
                 )
                 if profile.industry_view_source:
-                    chunk.append(f"*来源：{profile.industry_view_source}*")
+                    _iv_src_raw = profile.industry_view_source.strip()
+                    if _iv_src_raw.startswith("earnings_call:"):
+                        _iv_qlabel = _iv_src_raw.split(":", 1)[-1].strip()
+                        chunk.append(f"*来源：Earning Call 逐字稿（{_iv_qlabel}）*")
+                    else:
+                        _iv_parts = _iv_src_raw.split(":", 1)
+                        _iv_pid = _iv_parts[0].strip()
+                        _iv_quote = (
+                            _iv_parts[1].strip() if len(_iv_parts) > 1 else ""
+                        )
+                        if _iv_quote:
+                            chunk.append(f"*来源：10-K {_iv_pid}*")
+                            chunk.append(
+                                f"> *原文依据：{_iv_quote[:120]}"
+                                f"{'…' if len(_iv_quote) > 120 else ''}*"
+                            )
+                        else:
+                            chunk.append(f"*来源：10-K {_iv_pid}*")
                 else:
                     # 有内容但无来源，不输出行业判断
-                    # 回退：移除已加入的 industry_view 内容
-                    while chunk and chunk[-1] != "**行业判断（管理层视角）：**":
+                    while chunk and chunk[-1] != _iv_heading:
                         chunk.pop()
                     if chunk:
-                        chunk.pop()  # 移除标题本身
-                    chunk.extend(["**行业判断（管理层视角）：** *无可溯源原文*", ""])
+                        chunk.pop()
+                    chunk.extend([_IV_PLACEHOLDER_LINE, ""])
                 chunk.append("")
             else:
-                chunk.extend(
-                    ["**行业判断（管理层视角）：** *原文未明确提及*", ""]
-                )
+                chunk.extend([_IV_PLACEHOLDER_LINE, ""])
             fwd_quotes = [
                 q
                 for q in (profile.key_quotes or [])
@@ -1927,6 +2338,21 @@ def _step3_per_company_outlook(
                 for q in fwd_quotes[:3]:
                     chunk.append(f"> **{q.speaker or 'UNKNOWN'}**：\"{q.quote}\"")
                     chunk.append(f"> *主题：{q.topic}*")
+                    _q_data_src = getattr(q, "data_source", None) or ""
+                    _q_sp_ids = getattr(q, "source_paragraph_ids", None) or []
+                    _q_src_parts: list[str] = []
+                    if _q_data_src == "earnings_call":
+                        _q_qlabel = getattr(q, "source_url", "") or ""
+                        _q_src_parts.append("来源：Earning Call 逐字稿")
+                        if _q_sp_ids:
+                            _q_src_parts.append(
+                                f"段落：{str(_q_sp_ids[0]).split(':')[-1]}"
+                            )
+                    elif _q_sp_ids:
+                        _pid_display = str(_q_sp_ids[0]).split(":")[-1]
+                        _q_src_parts.append(f"来源：10-K {_pid_display}")
+                    if _q_src_parts:
+                        chunk.append(f"> *{'　｜　'.join(_q_src_parts)}*")
                     chunk.append("")
         except ProfileGenerationError as e:
             chunk.append(f"*（画像生成失败：{e.message}）*")
@@ -1969,7 +2395,7 @@ def _step3_per_company_outlook(
         if '原文未明确提及' in blk_text and 'NOT_FOUND' in blk_text:
             continue
         # 控制单家输入长度，避免 prompt 爆炸；过低会截断关税/指引等长段落（如 PPG）
-        outlook_briefs.append(f"【{rec.ticker}】\n{blk_text[:1100]}")
+        outlook_briefs.append(f"【{display_equity_ticker(rec)}】\n{blk_text[:1100]}")
 
     if len(outlook_briefs) >= 2:
         briefs_text = '\n\n'.join(outlook_briefs)
@@ -1984,7 +2410,7 @@ def _step3_per_company_outlook(
 
         def _run_s3_block(_name: str, _task_rule: str) -> str:
             _prompt = f"{_task_rule}\n\n{_s3_common}"
-            _txt = _chat3(_prompt, max_tokens=1200, timeout=300.0)
+            _txt = _chat3(_prompt, max_tokens=3000, timeout=300.0)
             _round = 0
             while _round < 3 and (
                 _is_truncated_llm_output(_txt) or len((_txt or "").strip()) < 60
@@ -1997,7 +2423,7 @@ def _step3_per_company_outlook(
                 try:
                     _cont = _chat3(
                         f"以下是未完成的「{_name}」内容，请从中断处继续，只输出续写内容，不要重复已有内容：\n\n{_txt}",
-                        max_tokens=1000,
+                        max_tokens=3000,
                         timeout=300.0,
                     )
                     _txt = _txt.rstrip() + "\n" + _cont
@@ -2108,8 +2534,9 @@ def _step3_per_company_outlook(
                     content_types.append("未来展望/指引")
                 if has_industry:
                     content_types.append("行业判断")
+                _dsym = display_equity_ticker(rec)
                 lines.append(
-                    f"- **{rec.company_name or rec.ticker} ({rec.ticker})**："
+                    f"- **{rec.company_name or _dsym} ({_dsym})**："
                     f"10-K FY{filing_year} + Earning Call，来源：SEC EDGAR / FMP｜"
                     f"内容：{', '.join(content_types)}"
                 )
@@ -2129,9 +2556,10 @@ def _step3_per_company_outlook(
         else:
             t = rec.ticker
             disp = company_display_name(t, rec.company_name)
+            disp_sym = display_equity_ticker(rec)
             lines.extend(
                 [
-                    f"### {t} — {disp}",
+                    f"### {disp_sym} — {disp}",
                     "",
                     "*（画像段落未生成：并行任务无结果）*",
                     "",
@@ -2215,7 +2643,7 @@ def _step4_earning_call_section(
         baseline: dict[str, Any] = {}
         for ticker in tickers_in_order:
             try:
-                rows, _issues = _get_validated_financials(ticker, years=2)
+                rows, _issues, _fin_src = _get_validated_financials(ticker, years=2)
                 baseline.update(build_baseline_from_rows(ticker, rows))
             except Exception:
                 logger.exception("Step4 baseline构建失败 ticker=%s", ticker)
@@ -2261,10 +2689,10 @@ def _step4_earning_call_section(
 
             all_tickers_s4 = [rec.ticker for rec, *_ in per_company]
             _s4_guard = (
-                "严格要求：只输出本板块内容。所有结论必须有管理层原话或具体数字依据。"
-                "禁止推断、禁止投资建议、禁止输出额外板块或总结段落。\n"
+                "严格要求：只输出本板块内容。结论优先引用管理层原话或具体数字，若无精确数字则可引用管理层明确表述的战略方向或定性判断。"
+                "禁止凭空推断、禁止投资建议、禁止输出额外板块或总结段落。\n"
                 "输出格式要求：先2-4句连贯段落总结，再按主题或公司分组列支撑数据（小标题+bullet）；"
-                "每条必须标注来源公司和具体数字/原话。"
+                "每条必须标注来源公司，有数字则标注数字，无数字则引用管理层原话关键词。"
             )
             _s4_common = f"""以下是{_sector}板块本季度各公司Earning Call的关键内容：
 
@@ -2287,7 +2715,7 @@ def _step4_earning_call_section(
                     _plen,
                     _plen // 4,
                 )
-                _txt = _chat(_prompt, max_tokens=_max_tokens, timeout=300.0)
+                _txt = _chat(_prompt, task="finance", max_tokens=_max_tokens, timeout=300.0)
                 _round = 0
                 while _round < 3 and (
                     _is_truncated_llm_output(_txt) or len((_txt or "").strip()) < 60
@@ -2299,9 +2727,7 @@ def _step4_earning_call_section(
                     )
                     try:
                         _cont = _chat(
-                            f"以下是未完成的「{_name}」内容，请从中断处继续，只输出续写内容，不要重复已有内容：\n\n{_txt}",
-                            max_tokens=_max_tokens,
-                            timeout=300.0,
+                            f"以下是未完成的「{_name}」内容，请从中断处继续，只输出续写内容，不要重复已有内容：\n\n{_txt}", task="finance", max_tokens=_max_tokens, timeout=300.0,
                         )
                         _txt = _txt.rstrip() + "\n" + _cont
                     except Exception:
@@ -2313,9 +2739,13 @@ def _step4_earning_call_section(
             try:
                 s4_ai = _run_s4_block(
                     "AI部署与替代进展",
-                    "第1次——【AI部署与替代进展】\n只列出有具体数字或管理层原话支撑的AI部署事实。"
-                    "每条末尾标注（来源：公司名+数字）。按统一格式输出（先2-4句段落总结，再分组小标题+bullet支撑数据），禁止推断和点评。",
-                    1000,
+                    "第1次——【AI部署与替代进展】\n"
+                    "覆盖要求：必须为每一家有数据的公司单独输出至少一条bullet，不得遗漏。\n"
+                    "内容标准：优先列出有具体数字的AI部署事实（如订单金额、生产力提升%、月活增长%）；"
+                    "若无精确数字，则列出管理层明确提及的AI战略方向、产品名称或部署场景（如CTSH的AI Builder、MDB的Atlas向量搜索、PPG的AI应用）。\n"
+                    "每条末尾标注（来源：公司名+数字或关键词）。"
+                    "按统一格式输出（先2-4句段落总结，再分组小标题+bullet支撑数据），禁止推断和点评。",
+                    2000,
                 )
                 s4_people = _run_s4_block(
                     "人员与组织变动",
@@ -2325,13 +2755,14 @@ def _step4_earning_call_section(
                     "若摘录中未明确截止日期则不得引用该累计数字。"
                     "若同一公司在不同时间点有多个累计数字，只引用最新一个。"
                     "按统一格式输出（先2-4句段落总结，再分组小标题+bullet支撑数据），禁止推断和点评。",
-                    800,
+                    1200,
                 )
                 s4_fin = _run_s4_block(
                     "营收与盈利关键数据",
                     "第3次——【营收与盈利关键数据】\n只列出各公司本季核心财务数字，每条末尾标注（来源：公司名+财年/季度）。"
+                    "覆盖要求：必须为每一家有数据的公司单独输出至少一条bullet，不得遗漏或截断。"
                     "按统一格式输出（先2-4句段落总结，再分组小标题+bullet支撑数据），禁止任何评级或预测。",
-                    800,
+                    1500,
                 )
                 sector_summary = (
                     "【AI部署与替代进展】\n"
@@ -2375,25 +2806,37 @@ def _step4_earning_call_section(
                 # Reference 块
                 lines.append("**参考来源：**")
                 lines.append("")
+                requested_qlabel = f"{year}Q{quarter}"
                 for t, analysis in successful_analyses:
                     rec = rec_map.get(t)
                     company_name = rec.company_name if rec else t
-                    q_label = f"{year}Q{quarter}"
+                    # 优先使用 analysis.quarter（FMP 实际命中），其次回退请求季度
+                    actual_qlabel = (
+                        str(getattr(analysis, "quarter", "") or "").strip()
+                        or requested_qlabel
+                    )
+                    q_display = actual_qlabel
+                    if actual_qlabel != requested_qlabel:
+                        q_display = (
+                            f"{actual_qlabel}（请求 {requested_qlabel}，"
+                            f"FMP 实际命中 {actual_qlabel}）"
+                        )
                     source = "FMP API"
-                    # 列出该公司被引用的关键数据点
-                    data_points = []
-                    if analysis.summary:
-                        # 提取数字（简单正则）
-                        import re as _re4
-
-                        numbers = _re4.findall(r'\$[\d,\.]+[BMK]?|\d+\.?\d*%|\d+,?\d+', analysis.summary[:300])
-                        if numbers:
-                            data_points.append(f"关键数据：{', '.join(numbers[:5])}")
+                    # 只保留公司名、逐字稿季度、来源、Quotations/管理层观点条数；
+                    # 关键数字已在各公司详情正文中完整呈现，参考行不再罗列裸数字。
+                    data_points: list[str] = []
                     if analysis.quotations:
-                        data_points.append(f"Quotations：{len(analysis.quotations)} 条原话")
+                        data_points.append(
+                            f"Quotations：{len(analysis.quotations)} 条原话"
+                        )
                     if analysis.management_viewpoints:
-                        data_points.append(f"管理层观点：{len(analysis.management_viewpoints)} 条")
-                    ref_line = f"- **{company_name} ({t})**：Earning Call 逐字稿 {q_label}，来源：{source}"
+                        data_points.append(
+                            f"管理层观点：{len(analysis.management_viewpoints)} 条"
+                        )
+                    ref_line = (
+                        f"- **{company_name} ({t})**："
+                        f"Earning Call 逐字稿 {q_display}，来源：{source}"
+                    )
                     if data_points:
                         ref_line += f"｜{' ｜ '.join(data_points)}"
                     lines.append(ref_line)
@@ -2418,7 +2861,8 @@ def _step4_earning_call_section(
         for t in tickers_in_order:
             rec = rec_map[t]
             disp = company_display_name(t, rec.company_name)
-            lines.append(f"### {t} — {disp}")
+            disp_sym = display_equity_ticker(rec)
+            lines.append(f"### {disp_sym} — {disp}")
             lines.append("")
             outcome = results.get(t)
             if outcome is None:
@@ -2530,6 +2974,7 @@ def _step5_new_biz_acquisitions_insider(
     ],
     *,
     sector_summary_only: bool = False,
+    news_src_label: str = "Benzinga 公司新闻",
 ) -> list[str]:
     lines: list[str] = ["## Step 5｜新业务 / 收购 / Insider 异动", ""]
 
@@ -2634,7 +3079,13 @@ def _step5_new_biz_acquisitions_insider(
         parts = [f"【{t}】"]
         for s in biz_signals[:5]:
             title = str(s.get("title") or "")[:120]
-            parts.append(f"- {title}")
+            url = str(s.get("url") or "").strip()
+            _axes = str(s.get("query_axis") or "")
+            _src = "Bloomberg" if "bloomberg_rss" in _axes else "Benzinga"
+            if url:
+                parts.append(f"- [{title}]({url})　*{_src}*")
+            else:
+                parts.append(f"- {title}　*{_src}*")
         if insider_count > 0:
             bc = int(insider.get("buy_count") or 0)
             sc = int(insider.get("sell_count") or 0)
@@ -2667,11 +3118,20 @@ def _step5_new_biz_acquisitions_insider(
     if len(all_signals_brief) >= 1:
         briefs_text = '\n\n'.join(all_signals_brief)
         _allowed_tickers_s5 = ', '.join([rec.ticker for rec, *_ in per_company])
+        _allowed_tickers_s5_set = {
+            (getattr(rec, "ticker", "") or "").strip().upper()
+            for rec, *_ in per_company
+            if (getattr(rec, "ticker", "") or "").strip()
+        }
+        # 有数据公司列表（用于硬约束覆盖）
+        _coverage_tickers_str = ', '.join(coverage_tickers)
         _s5_guard = (
             "严格要求：只输出本板块内容。所有结论必须有管理层原话或具体数字依据。"
             "禁止推断、禁止投资建议、禁止输出额外板块或总结段落。\n"
             "输出格式要求：先2-4句连贯段落总结，再按主题或公司分组列支撑数据（小标题+bullet）；"
-            "每条必须标注来源公司和具体数字/原话。"
+            "每条必须标注来源公司和具体数字/原话。\n"
+            f"【覆盖硬约束】以下公司有数据输入，你的输出中必须覆盖每一家，每家至少一条 bullet，"
+            f"不得遗漏任何一家：{_coverage_tickers_str}"
         )
         _s5_common = f"""以下是板块各公司本周的新业务、收购并购及Insider交易信号：
 
@@ -2679,11 +3139,13 @@ def _step5_new_biz_acquisitions_insider(
 
 本板块监控公司白名单（严格只能引用以下公司，禁止提及任何不在此列表中的公司名称或ticker）：
 {_allowed_tickers_s5}
+
+重申覆盖要求：必须为以下每一家公司单独输出至少一条内容，不得跳过或合并省略：{_coverage_tickers_str}
 """
 
         def _run_s5_block(_name: str, _task_rule: str) -> str:
             _prompt = f"你是资深行业研究分析师。\n{_s5_guard}\n\n{_s5_common}\n{_task_rule}"
-            _txt = _chat5(_prompt, max_tokens=800, timeout=300.0)
+            _txt = _chat5(_prompt, max_tokens=2000, timeout=300.0)
             _round = 0
             while _round < 3 and (
                 _is_truncated_llm_output(_txt) or len((_txt or "").strip()) < 40
@@ -2696,7 +3158,7 @@ def _step5_new_biz_acquisitions_insider(
                 try:
                     _cont = _chat5(
                         f"以下是未完成的「{_name}」内容，请从中断处继续，只输出续写内容，不要重复已有内容：\n\n{_txt}",
-                        max_tokens=800,
+                        max_tokens=2000,
                         timeout=300.0,
                     )
                     _txt = _txt.rstrip() + "\n" + _cont
@@ -2710,14 +3172,16 @@ def _step5_new_biz_acquisitions_insider(
             s5_invest = _run_s5_block(
                 "重大投资与收购",
                 "第1次——【重大投资与收购】\n只列出有Benzinga新闻链接或Earning Call原文支撑的收购、投资事件。"
-                "格式：[公司代码] 事件描述（金额/规模）— 来源：Benzinga/Earning Call。"
-                "按统一格式输出（先2-4句段落总结，再分组小标题+bullet支撑数据），禁止推断战略意义，禁止额外内容。",
+                "格式：每条bullet必须以[公司代码]开头，例如：[ACN] 事件描述（金额/规模）— 来源：Benzinga/Earning Call。"
+                "严禁使用公司名称作为小标题后在其下方写bullet（容易张冠李戴）；每条bullet必须独立标注[公司代码]。"
+                "按统一格式输出（先2-4句段落总结，再所有bullet列表），禁止推断战略意义，禁止额外内容。",
             )
             s5_strategy = _run_s5_block(
                 "重大战略合作与其他动态",
                 "第2次——【重大战略合作与其他动态】\n只列出有Earning Call原文或Form 4申报支撑的战略合作、Insider交易。"
-                "格式：[公司代码] 事件描述 — 来源：Earning Call/Form 4。"
-                "按统一格式输出（先2-4句段落总结，再分组小标题+bullet支撑数据），禁止推断，禁止额外内容。",
+                "格式：每条bullet必须以[公司代码]开头，例如：[IBM] 事件描述 — 来源：Earning Call/Form 4。"
+                "严禁使用公司名称作为小标题后在其下方写bullet（容易张冠李戴）；每条bullet必须独立标注[公司代码]。"
+                "按统一格式输出（先2-4句段落总结，再所有bullet列表），禁止推断，禁止额外内容。",
             )
             sector_signal = (
                 "【重大投资与收购】\n"
@@ -2746,7 +3210,8 @@ def _step5_new_biz_acquisitions_insider(
             sector_signal = _filter_by_ticker_whitelist(sector_signal, _allowed_set_s5)
 
             def _strip_step5_embedded_disclaimers(_body: str) -> str:
-                """去掉模型在 sector 正文中复读的免责/来源行，与下方固定两行只保留一处。"""
+                """去掉模型在 sector 正文中复读的免责/来源行，与下方固定两行只保留一处。
+                同时去掉公司间的 --- 分隔线（Streamlit 会渲染成水平横线，影响阅读）。"""
                 out_ln: list[str] = []
                 for raw in (_body or "").splitlines():
                     s = raw.strip()
@@ -2762,11 +3227,54 @@ def _step5_new_biz_acquisitions_insider(
                         and ("数据来源" in s or "**数据来源**" in s or "评判标准" in s)
                     ):
                         continue
+                    # 去掉 LLM 在公司间插入的 --- 分隔线（Streamlit 渲染为水平横线）
+                    if s == "---":
+                        continue
                     out_ln.append(raw)
-                return "\n".join(out_ln)
+                # 清除连续的空加粗标题（标题行后紧接另一个标题或结尾，无实质内容）
+                _lines = out_ln if isinstance(out_ln, list) else "\n".join(out_ln).splitlines()
+                _out2: list[str] = []
+                i = 0
+                while i < len(_lines):
+                    line = _lines[i]
+                    stripped = line.strip()
+                    is_empty_md_heading = bool(re.match(r"^#{1,6}\s*$", stripped))
+                    is_bold_heading = bool(
+                        re.match(r"^\*\*[^*]+\*\*[:：]?\s*$", stripped)
+                    )
+                    if is_empty_md_heading:
+                        i += 1
+                        continue
+                    if is_bold_heading:
+                        j = i + 1
+                        while j < len(_lines) and not _lines[j].strip():
+                            j += 1
+                        next_is_heading = j < len(_lines) and bool(
+                            re.match(
+                                r"^\*\*[^*]+\*\*[:：]?\s*$",
+                                _lines[j].strip(),
+                            )
+                        )
+                        if j >= len(_lines) or next_is_heading:
+                            i = j
+                            continue
+                    _out2.append(line)
+                    i += 1
+                return "\n".join(_out2)
 
             sector_signal = _strip_step5_embedded_disclaimers(sector_signal)
-            lines.append("> **数据来源**：Benzinga 公司新闻 + FMP Insider 交易申报（Form 4）｜**评判标准**：收购/战略合作/异常 Insider 交易（买入>$1M 或卖出>$5M）")
+            sector_signal = _filter_non_sector_content(
+                sector_signal, _allowed_tickers_s5_set
+            )
+            # src_label 简化：只显示主要来源，不列各公司回退链
+            _insider_src_simple = (
+                "Bloomberg INSIDER_MONTHLY（优先）/ FMP / SEC Form 4（回退）"
+            )
+            lines.append(
+                f"> **数据来源**：{news_src_label}（含原文链接）+ Insider 交易申报（{_insider_src_simple}）｜"
+                f"**评判标准**：收购/战略合作/异常 Insider 交易（买入>\\$1M 或卖出>\\$5M）｜"
+                f"**注**：新闻链接已附于各条目，可直接点击核查原文"
+            )
             lines.append("> ⚠️ **以下为系统辅助总结，非原文直接提取，仅供参考。原文链接请展开各公司详情查看。**")
             lines.append("")
             lines.append(sector_signal)
@@ -2815,6 +3323,7 @@ def _step5_new_biz_acquisitions_insider(
     for rec, signals, insider, _below, _had in per_company:
         t = rec.ticker
         disp = company_display_name(t, rec.company_name)
+        disp_sym = display_equity_ticker(rec)
         biz_signals = [
             s
             for s in signals
@@ -2824,16 +3333,23 @@ def _step5_new_biz_acquisitions_insider(
         ec_items = ec_step5_items_by_ticker.get(t, [])
         if not biz_signals and int(insider.get("trade_count") or 0) == 0 and not ec_items:
             continue
-        lines.append(f"### {t} — {disp}")
+        lines.append(f"### {disp_sym} — {disp}")
         lines.append("")
         if biz_signals:
             lines.append("**新业务 / 收购信号：**")
             for s in biz_signals:
                 title = _md_escape_title(str(s.get("title") or "(no title)"))
                 url = str(s.get("url") or "").strip()
-                lines.append(
-                    f"- {title}" + (f" [📎 原文]({url})" if url else "")
-                )
+                _axes = str(s.get("query_axis") or "")
+                _src_tags: list[str] = []
+                if "bloomberg_rss" in _axes:
+                    _src_tags.append("Bloomberg")
+                if "benzinga" in _axes:
+                    _src_tags.append("Benzinga")
+                _src_badge = f" `{'／'.join(_src_tags)}`" if _src_tags else ""
+                lines.append(f"- {title}{_src_badge}")
+                if url:
+                    lines.append(f"  - 📎 [原文链接]({url})")
             lines.append("")
         if ec_items:
             lines.append("**电话会补充（新业务/战略动向）：**")
@@ -2841,22 +3357,22 @@ def _step5_new_biz_acquisitions_insider(
             for it in ec_items:
                 lines.append(f"- {it}")
             lines.append("")
-        bc = int(insider.get("buy_count") or 0)
-        sc = int(insider.get("sell_count") or 0)
-        tbv = insider.get("total_buy_value")
-        tsv = insider.get("total_sell_value")
-        lines.append("#### 💼 内部交易（FMP）")
-        lines.append("")
-        if int(insider.get("trade_count") or 0) == 0:
-            lines.append("*暂无*")
-        else:
+        # 仅当窗口内有实际交易时才渲染内部交易块，避免出现仅有标题 + “暂无” 的空块
+        if int(insider.get("trade_count") or 0) > 0:
+            bc = int(insider.get("buy_count") or 0)
+            sc = int(insider.get("sell_count") or 0)
+            tbv = insider.get("total_buy_value")
+            tsv = insider.get("total_sell_value")
+            _insider_source = insider.get("source") or "FMP"
+            lines.append(f"#### 💼 内部交易（{_insider_source}）")
+            lines.append("")
             lines.append(
                 f"- 买入：**{bc}** 笔，总价值 **{_fmt_trade_side_value(float(tbv) if isinstance(tbv, (int, float)) and tbv == tbv else None, bc)}**"
             )
             lines.append(
                 f"- 卖出：**{sc}** 笔，总价值 **{_fmt_trade_side_value(float(tsv) if isinstance(tsv, (int, float)) and tsv == tsv else None, sc)}**"
             )
-        lines.append("")
+            lines.append("")
     return lines
 
 
@@ -2875,19 +3391,23 @@ def _step6_annual_financial_table(
     """Step6: 年度财务数据表格（最近3年），含Net Debt/Equity"""
     lines: list[str] = ["## Step 6｜财务数据（年度）", ""]
 
-    company_data: list[tuple[str, str, list[Any]]] = []
+    company_data: list[tuple[str, str, str, list[Any]]] = []
     validation_issues: list[str] = []
     all_years: list[int] = []
+    fin_sources_used: set[str] = set()  # 收集实际命中的数据源
     for rec, _signals, _insider, _below, _had in per_company:
         t = rec.ticker
         disp = company_display_name(t, rec.company_name)
+        dsym = display_equity_ticker(rec)
         try:
-            rows, issues = _get_validated_financials(t, years=years)
+            rows, issues, fin_src = _get_validated_financials(t, years=years)
             validation_issues.extend(issues)
+            if rows:
+                fin_sources_used.add(fin_src)
         except Exception:
             logger.exception("Step6 年度财务拉取失败 ticker=%s", t)
             rows = []
-        company_data.append((t, disp, rows))
+        company_data.append((t, dsym, disp, rows))
         for r in rows:
             if r.year not in all_years:
                 all_years.append(r.year)
@@ -2942,13 +3462,13 @@ def _step6_annual_financial_table(
         lines.append("")
         lines.append(f"| Ticker | {year_headers} |")
         lines.append(sep_line)
-        for t, _disp, rows in company_data:
+        for _t_inner, dsym, _disp, rows in company_data:
             row_by_year = {r.year: r for r in rows}
             vals = " | ".join(
                 metric_fn(row_by_year[y]) if y in row_by_year else "—"
                 for y in all_years
             )
-            lines.append(f"| {t} | {vals} |")
+            lines.append(f"| {dsym} | {vals} |")
         lines.append("")
 
     lines.append("### Sector 汇总")
@@ -2961,7 +3481,7 @@ def _step6_annual_financial_table(
         for y in all_years:
             total = 0.0
             has_count = 0
-            for _, _, rows in company_data:
+            for _, _, _, rows in company_data:
                 row_by_year = {r.year: r for r in rows}
                 if y in row_by_year:
                     v = getattr(row_by_year[y], attr)
@@ -2980,8 +3500,15 @@ def _step6_annual_financial_table(
                 vals_out.append(fmt_b(total))
         lines.append(f"| **{metric_name}** | {' | '.join(vals_out)} |")
     lines.append("")
+    # 动态拼接数据来源标注（Bloomberg 优先，混合时并列显示）
+    if "Bloomberg" in fin_sources_used and "FMP" in fin_sources_used:
+        _fin_src_note = "Bloomberg Annual Financials（优先）/ FMP Annual Financials（回退）"
+    elif "Bloomberg" in fin_sources_used:
+        _fin_src_note = "Bloomberg Annual Financials"
+    else:
+        _fin_src_note = "FMP Annual Financials"
     lines.append(
-        "*数据来源：FMP Annual Financials。Net Debt/Equity = (总债务-现金)/股东权益。"
+        f"*数据来源：{_fin_src_note}。Net Debt/Equity = (总债务-现金)/股东权益。"
         "\\* 标记表示该年度覆盖公司不足半数，汇总仅供参考。*"
     )
     lines.append("")
@@ -3006,7 +3533,7 @@ def _step6_annual_financial_table(
             fv = fv / 100.0
         return fv
 
-    for t, _disp, rows in company_data:
+    for _t_inner, dsym, _disp, rows in company_data:
         row_by_year = {getattr(r, "year", None): r for r in rows}
         available_years = [
             y for y in all_years if y in row_by_year and row_by_year.get(y) is not None
@@ -3024,7 +3551,7 @@ def _step6_annual_financial_table(
                     if abs(gm_current - gm_prior) > 0.03:
                         flag = "↓" if gm_current < gm_prior else "↑"
                         notes.append(
-                            f"* {t} 毛利率 FY{prior_year}→FY{current_year} {flag}{abs(gm_current-gm_prior)*10000:.0f}bps，"
+                            f"* {dsym} 毛利率 FY{prior_year}→FY{current_year} {flag}{abs(gm_current-gm_prior)*10000:.0f}bps，"
                             "变化幅度较大，请核查是否涉及会计口径调整或一次性项目。"
                         )
 
@@ -3050,7 +3577,7 @@ def _step6_annual_financial_table(
                 ):
                     chg = ((ni_current - ni_prior) / abs(ni_prior)) * 100
                     notes.append(
-                        f"* {t} 净利润 FY{prior_year}→FY{current_year} 变化{chg:+.0f}%，"
+                        f"* {dsym} 净利润 FY{prior_year}→FY{current_year} 变化{chg:+.0f}%，"
                         "请确认是否含一次性项目（商誉减值、资产处置、税务调整等）。"
                     )
 
@@ -3061,7 +3588,7 @@ def _step6_annual_financial_table(
                     and ((ni_prior > 0 and ni_current < 0) or (ni_prior < 0 and ni_current > 0))
                 ):
                     notes.append(
-                        f"* {t} 净利润由{'盈利转亏损' if ni_current < 0 else '亏损转盈利'}，请核查转折原因。"
+                        f"* {dsym} 净利润由{'盈利转亏损' if ni_current < 0 else '亏损转盈利'}，请核查转折原因。"
                     )
 
         # (3) Net Debt/Equity 绝对值超过 5x（按可用年份逐年检查）
@@ -3078,7 +3605,7 @@ def _step6_annual_financial_table(
                 continue
             if abs(nd_eq) > 5:
                 notes.append(
-                    f"* {t} Net Debt/Equity FY{y} = {nd_eq:.2f}x，为极端值，"
+                    f"* {dsym} Net Debt/Equity FY{y} = {nd_eq:.2f}x，为极端值，"
                     "通常反映股东权益接近零或为负，建议结合资产负债表原始数据核实。"
                 )
 
@@ -3144,25 +3671,26 @@ def _step6_financial_table(
     from research_automation.extractors.fmp_client import get_quarterly_financials
 
     lines: list[str] = ["## Step 6｜财务数据（季度）", ""]
-    company_data: list[tuple[str, str, list[dict[str, Any]]]] = []
+    company_data: list[tuple[str, str, str, list[dict[str, Any]]]] = []
     for rec, _signals, _insider, _below, _had in per_company:
         t = rec.ticker
         disp = company_display_name(t, rec.company_name)
+        disp_sym = display_equity_ticker(rec)
         try:
             rows = get_quarterly_financials(t, quarters=quarters)
         except Exception:
             logger.exception("Step6 季度财务拉取失败 ticker=%s", t)
             rows = []
-        company_data.append((t, disp, rows))
+        company_data.append((t, disp_sym, disp, rows))
 
-    if not any(rows for _, _, rows in company_data):
+    if not any(rows for *_, rows in company_data):
         lines.append("*（FMP 季度数据不可用，请检查 FMP_API_KEY 或网络。）*")
         lines.append("")
         return lines
 
     all_quarters: list[str] = []
     seen: set[str] = set()
-    for _, _, rows in company_data:
+    for _, _, _, rows in company_data:
         for r in rows:
             q = r["quarter"]
             if q not in seen:
@@ -3184,13 +3712,13 @@ def _step6_financial_table(
         lines.append("")
         lines.append(header)
         lines.append(sep)
-        for t, _disp, rows in company_data:
+        for _t_inner, dsym, _disp, rows in company_data:
             by_q = {r["quarter"]: r for r in rows}
             vals = [
                 fmt_fn(by_q[q][metric_key]) if q in by_q else "—"
                 for q in display_quarters
             ]
-            lines.append(f"| {t} | " + " | ".join(vals) + " |")
+            lines.append(f"| {dsym} | " + " | ".join(vals) + " |")
         lines.append("")
 
     lines.append("### Sector 汇总")
@@ -3204,7 +3732,7 @@ def _step6_financial_table(
         totals = []
         for q in display_quarters:
             total, has = 0.0, False
-            for _, _, rows in company_data:
+            for _, _, _, rows in company_data:
                 by_q = {r["quarter"]: r for r in rows}
                 v = by_q[q][metric_key] if q in by_q else None
                 if v is not None:
@@ -3273,6 +3801,8 @@ def _executive_summary(
     step6_lines: list[str],
     sector_watch_items: list[str] | None = None,
     per_company: list | None = None,
+    *,
+    news_src_label: str = "Benzinga 公司新闻",
 ) -> list[str]:
     """执行摘要：汇总Earning Call、新业务、财务数据，生成sector级别的执行摘要。"""
     from research_automation.extractors.llm_client import chat_with_retry
@@ -3405,7 +3935,7 @@ def _executive_summary(
         company_snaps = []
         for rec, *_ in per_company:
             try:
-                rows, _issues = _get_validated_financials(rec.ticker, years=2)
+                rows, _issues, _fin_src = _get_validated_financials(rec.ticker, years=2)
                 baseline.update(build_baseline_from_rows(rec.ticker, rows))
                 if not rows or len(rows) < 2:
                     continue
@@ -3417,7 +3947,9 @@ def _executive_summary(
                 if rev and prev_rev and prev_rev != 0:
                     yoy = (float(rev) - float(prev_rev)) / abs(float(prev_rev)) * 100
                     yoy_list.append(yoy)
-                    company_snaps.append(f"{rec.ticker}: YoY {yoy:+.1f}%")
+                    company_snaps.append(
+                        f"{display_equity_ticker(rec)}: YoY {yoy:+.1f}%"
+                    )
                 gm = getattr(latest, "gross_margin", None)
                 if gm is not None:
                     gm_val = float(gm) * 100 if float(gm) < 2 else float(gm)
@@ -3516,7 +4048,7 @@ Sector财务快照：
             _plen,
             _plen // 4,
         )
-        text = chat_with_retry(prompt, max_tokens=max_tokens, timeout=300.0)
+        text = chat_with_retry(prompt, task="finance", max_tokens=max_tokens, timeout=300.0)
         _cont_round = 0
         while _cont_round < 3 and (
             _is_truncated_llm_output(text) or len((text or "").strip()) < min_len
@@ -3532,9 +4064,7 @@ Sector财务快照：
             )
             try:
                 _cont = chat_with_retry(
-                    _cont_prompt,
-                    max_tokens=max_tokens,
-                    timeout=300.0,
+                    _cont_prompt, task="finance", max_tokens=max_tokens, timeout=300.0,
                 )
                 text = text.rstrip() + "\n" + _cont
             except Exception:
@@ -3554,6 +4084,8 @@ Sector财务快照：
         sec_theme_prompt = _build_section_prompt(
             "🔑 本季核心主题",
             "任务要求：只输出跨3家以上公司出现的共同表述，每条必须附涉及公司名和原始数字，禁止推断。"
+            "严格要求：每家公司在整个输出中最多出现一次，禁止同一公司在不同主题条目中重复出现；"
+            "若某公司暂无数据支撑，直接省略，不得输出空内容占位。"
             + _coverage_rule,
         )
         sec_event_prompt = _build_section_prompt(
@@ -3588,8 +4120,73 @@ Sector财务快照：
         )
 
         sec_theme_text = _run_exec_section("🔑 本季核心主题", sec_theme_prompt, max_tokens=1200)
+
+        # 后处理：去除同一 ticker 在核心主题里的重复空条目
+        # 双遍扫描：
+        #   pass1 统计每个 ticker 是否存在"有实质内容"的行；
+        #   pass2 若当前行的 ticker 在别处已有实质内容、且本行正文极短(<5字符)，则丢弃。
+        # 这样无论"空在前 / 实质在前"都能正确去重，且不会误删有实质内容的重复引用。
+        def _dedup_theme_bullets(text: str) -> str:
+            if not text:
+                return text
+
+            _ticker_re = re.compile(r"\b([A-Z]{2,6}(?:/[A-Z])?)\b")
+
+            def _line_meta(line: str) -> tuple[list[str], bool]:
+                tickers = _ticker_re.findall(line)
+                if not tickers:
+                    return [], False
+                stripped = _ticker_re.sub("", line).strip("- :：、，。 ")
+                return tickers, len(stripped) < 5
+
+            all_lines = text.splitlines()
+            # pass1：统计每个 ticker 是否在某行作为"有实质内容"出现过
+            ticker_has_content: dict[str, bool] = {}
+            for line in all_lines:
+                tickers, is_empty = _line_meta(line)
+                for t in tickers:
+                    if not is_empty:
+                        ticker_has_content[t] = True
+                    else:
+                        ticker_has_content.setdefault(t, False)
+
+            # pass2：丢弃"本行为空、且行内每个 ticker 都已在别处有实质内容"的行
+            lines_out: list[str] = []
+            for line in all_lines:
+                tickers, is_empty = _line_meta(line)
+                if not tickers:
+                    lines_out.append(line)
+                    continue
+                if is_empty and all(ticker_has_content.get(t) for t in tickers):
+                    logger.debug(
+                        "核心主题去重：跳过重复空条目 %r", line[:80]
+                    )
+                    continue
+                lines_out.append(line)
+            return "\n".join(lines_out)
+
+        sec_theme_text = _dedup_theme_bullets(sec_theme_text)
+
+        # 清除 LLM 自加的重复 ## 级别标题（会破坏前端按 ## 切 section）
+        def _strip_redundant_h2(text: str) -> str:
+            if not text:
+                return text
+            lines = text.splitlines()
+            out: list[str] = []
+            for line in lines:
+                # 匹配 `## 🔑 ...` `## ⚡ ...` 这类被 LLM 重复的 H2 标题
+                if re.match(r"^##\s+[🔑⚡💬⚠️🏆📊📋📂🏢]", line.strip()):
+                    logger.debug("剔除 LLM 自加的 H2 重复标题: %r", line[:60])
+                    continue
+                out.append(line)
+            return "\n".join(out)
+
+        sec_theme_text = _strip_redundant_h2(sec_theme_text)
+
         sec_event_text = _run_exec_section("⚡ 重要事件", sec_event_prompt, max_tokens=800)
+        sec_event_text = _strip_redundant_h2(sec_event_text)
         sec_signal_text = _run_exec_section("💬 管理层关键信号", sec_signal_prompt, max_tokens=600)
+        sec_signal_text = _strip_redundant_h2(sec_signal_text)
         sec_signal_text = _strip_unauthorized_sections(
             sec_signal_text,
             ["编辑注", "免责声明", "格式说明"],
@@ -3599,13 +4196,16 @@ Sector财务快照：
             for rec, *_ in (per_company or [])
             if (getattr(rec, "ticker", "") or "").strip()
         }
+        sec_theme_text = _filter_non_sector_content(sec_theme_text, allowed_tickers)
         sec_event_text = _filter_non_sector_content(sec_event_text, allowed_tickers)
         sec_signal_text = _filter_non_sector_content(sec_signal_text, allowed_tickers)
         sec_risk_text = _run_exec_section("⚠️ 主要风险", sec_risk_prompt, max_tokens=800)
+        sec_risk_text = _strip_redundant_h2(sec_risk_text)
         sec_risk_text = _strip_unauthorized_sections(
             sec_risk_text,
             ["跨类别风险", "风险叠加", "交叉敞口", "时序结构", "语言层面"],
         )
+        sec_risk_text = _filter_non_sector_content(sec_risk_text, allowed_tickers)
 
         summary_parts = [
             "### 🔑 本季核心主题",
@@ -3615,13 +4215,13 @@ Sector财务快照：
             "---",
             "",
             "### ⚡ 重要事件",
-            "> 数据来源：Earning Call 逐字稿 + Benzinga 公司新闻 | 评判标准：涉及资本配置/人员/产品的实质性变化",
+            f"> 数据来源：Earning Call 逐字稿 + {news_src_label} | 评判标准：涉及资本配置/人员/产品的实质性变化",
             sec_event_text or "（无可用内容）",
             "",
             "---",
             "",
             "### 💬 管理层关键信号",
-            "> 数据来源：Earning Call 逐字稿原话 | 评判标准：CEO/CFO对业务趋势的直接表态",
+            "> 数据来源：Earning Call 逐字稿原话（逐字引用，发言人姓名来自原文）| 各公司详情页含段落溯源链接",
             sec_signal_text or "（无可用内容）",
             "",
             "---",
@@ -3633,58 +4233,70 @@ Sector财务快照：
         summary = "\n".join(summary_parts).strip()
         # ── 排名表：代码控制公司列表，LLM只填优势和风险 ──────────
         ranking_table = ""
+        ranked_tickers: list[str] = []
+        disp_by_internal: dict[str, str] = {}
+        skipped_displays: list[str] = []
         if per_company:
             # 收集有财务数据的公司
-            ranked_tickers = []
-            skipped_tickers = []
+            rank_pairs: list[tuple[str, str]] = []  # (internal ticker, Bloomberg display)
             for rec, *_ in per_company:
+                t = rec.ticker
+                dsym = display_equity_ticker(rec)
                 try:
-                    rows, _ = _get_validated_financials(rec.ticker, years=1)
+                    rows, _, _fin_src = _get_validated_financials(t, years=1)
                     if rows:
                         latest = max(rows, key=lambda r: getattr(r, "year", 0) or 0)
                         rev = getattr(latest, "revenue", None)
                         # 必须有有效Revenue才能参与排名
                         if rev is not None and float(rev) > 0:
-                            ranked_tickers.append(rec.ticker)
+                            rank_pairs.append((t, dsym))
                         else:
-                            skipped_tickers.append(rec.ticker)
+                            skipped_displays.append(dsym)
                             logger.info(
                                 "排名表跳过 %s：Revenue 不可用或为零",
-                                rec.ticker,
+                                t,
                             )
                 except Exception:
-                    skipped_tickers.append(rec.ticker)
+                    skipped_displays.append(dsym)
 
-            if ranked_tickers:
-                # 构建每家公司的财务摘要供LLM参考
-                company_contexts = []
-                for t in ranked_tickers:
-                    try:
-                        rows, _ = _get_validated_financials(t, years=2)
-                        if not rows:
-                            company_contexts.append(f"{t}: 财务数据不可用")
-                            continue
-                        latest = max(rows, key=lambda r: getattr(r, "year", 0) or 0)
-                        prev_list = [r for r in rows if (getattr(r, "year", 0) or 0) < (getattr(latest, "year", 0) or 0)]
-                        prev = max(prev_list, key=lambda r: getattr(r, "year", 0) or 0) if prev_list else None
-                        rev = getattr(latest, "revenue", None)
-                        prev_rev = getattr(prev, "revenue", None) if prev else None
-                        yoy = ((float(rev) - float(prev_rev)) / abs(float(prev_rev)) * 100) if rev and prev_rev and prev_rev != 0 else None
-                        gm = getattr(latest, "gross_margin", None)
-                        ni = getattr(latest, "net_income", None)
-                        ctx = f"{t}: Revenue ${float(rev)/1e9:.1f}B" if rev else f"{t}:"
-                        if yoy is not None:
-                            ctx += f" YoY {yoy:+.1f}%"
-                        if gm is not None:
-                            gm_val = float(gm) * 100 if float(gm) < 2 else float(gm)
-                            ctx += f", GM {gm_val:.1f}%"
-                        if ni is not None:
-                            ctx += f", NI ${float(ni)/1e9:.2f}B"
-                        company_contexts.append(ctx)
-                    except Exception:
-                        company_contexts.append(f"{t}: 数据获取失败")
+            ranked_tickers = [a for a, _ in rank_pairs]
+            disp_by_internal = dict(rank_pairs)
 
-                ranking_prompt = f"""你是资深行业研究分析师。以下是{sector}板块各公司的财务数据摘要：
+        if ranked_tickers:
+            rank_displays = [disp_by_internal[t] for t in ranked_tickers]
+            _skip_disp = skipped_displays
+            # 构建每家公司的财务摘要供LLM参考
+            company_contexts = []
+            for internal_t in ranked_tickers:
+                dsym = disp_by_internal[internal_t]
+                try:
+                    rows, _, _fin_src = _get_validated_financials(internal_t, years=2)
+                    if not rows:
+                        company_contexts.append(f"{dsym}: 财务数据不可用")
+                        continue
+                    latest = max(rows, key=lambda r: getattr(r, "year", 0) or 0)
+                    prev_list = [r for r in rows if (getattr(r, "year", 0) or 0) < (getattr(latest, "year", 0) or 0)]
+                    prev = max(prev_list, key=lambda r: getattr(r, "year", 0) or 0) if prev_list else None
+                    rev = getattr(latest, "revenue", None)
+                    prev_rev = getattr(prev, "revenue", None) if prev else None
+                    yoy = ((float(rev) - float(prev_rev)) / abs(float(prev_rev)) * 100) if rev and prev_rev and prev_rev != 0 else None
+                    gm = getattr(latest, "gross_margin", None)
+                    ni = getattr(latest, "net_income", None)
+                    ctx = (
+                        f"{dsym}: Revenue ${float(rev)/1e9:.1f}B" if rev else f"{dsym}:"
+                    )
+                    if yoy is not None:
+                        ctx += f" YoY {yoy:+.1f}%"
+                    if gm is not None:
+                        gm_val = float(gm) * 100 if float(gm) < 2 else float(gm)
+                        ctx += f", GM {gm_val:.1f}%"
+                    if ni is not None:
+                        ctx += f", NI ${float(ni)/1e9:.2f}B"
+                    company_contexts.append(ctx)
+                except Exception:
+                    company_contexts.append(f"{dsym}: 数据获取失败")
+
+            ranking_prompt = f"""你是资深行业研究分析师。以下是{sector}板块各公司的财务数据摘要：
 
 {chr(10).join(company_contexts)}
 
@@ -3696,7 +4308,7 @@ Sector财务快照：
 {{
   "rankings": [
     {{
-      "ticker": "CTSH",
+      "ticker": "CTSH US Equity",
       "rank": 1,
       "core_advantage": "核心优势描述（附具体数字，30字以内）",
       "main_risk": "主要风险描述（20字以内）"
@@ -3704,8 +4316,8 @@ Sector财务快照：
   ]
 }}
 
-必须覆盖以下全部 {len(ranked_tickers)} 家公司，按基本面强弱从强到弱排序，一家都不能省略：
-{', '.join(ranked_tickers)}
+必须覆盖以下全部 {len(ranked_tickers)} 家公司，按基本面强弱从强到弱排序，一家都不能省略；JSON 字段 ticker 必须使用以下 Bloomberg Equity 全称（逐项一致）：
+{', '.join(rank_displays)}
 
 要求：
 1. 每家公司必须出现，不得跳过任何一家
@@ -3713,56 +4325,69 @@ Sector财务快照：
 3. 只基于提供的数据，不捏造
 4. 排名靠前的公司优势要明显强于靠后的"""
 
-                try:
-                    ranking_raw = chat_with_retry(ranking_prompt, max_tokens=2200, timeout=300.0)
-                    ranking_data = _parse_llm_json_payload(ranking_raw)
-                    if ranking_data and "rankings" in ranking_data:
-                        rankings = ranking_data["rankings"]
-                        # 确保所有公司都在，补全缺失的
-                        covered = {r.get("ticker", "").upper() for r in rankings}
-                        for t in ranked_tickers:
-                            if t.upper() not in covered:
-                                rankings.append({
-                                    "ticker": t,
-                                    "rank": len(rankings) + 1,
-                                    "core_advantage": "财务数据可用，本季Earning Call覆盖有限",
-                                    "main_risk": "数据覆盖不足，需人工补充"
-                                })
-                        # 按rank排序
-                        rankings.sort(key=lambda x: int(x.get("rank", 99)))
-                        # 重新编号确保连续
-                        _skip_note = f"（以下公司因财务数据不足未参与排名：{', '.join(skipped_tickers)}）" if skipped_tickers else ""
-                        table_lines = [
-                            "### 🏆 相对强弱排序",
-                            f"> 数据来源：综合财务快照 + 管理层前瞻指引 + 重要事件 | 评判标准：当前基本面动能与指引置信度的综合评估 {_skip_note}",
-                            "",
-                            "| 排名 | 公司 | 核心优势 | 主要风险 |",
-                            "|------|------|----------|----------|",
-                        ]
-                        for i, r in enumerate(rankings, 1):
-                            ticker = r.get("ticker", "")
-                            adv = r.get("core_advantage", "—").replace("|", "｜")
-                            risk = r.get("main_risk", "—").replace("|", "｜")
-                            table_lines.append(f"| {i} | **{ticker}** | {adv} | {risk} |")
-                        table_lines.append("")
-                        ranking_table = "\n".join(table_lines)
-                    else:
-                        logger.warning("排名表LLM返回JSON解析失败，使用降级方案")
-                        # 降级：只用公司列表生成空表
-                        _skip_note = f"（以下公司因财务数据不足未参与排名：{', '.join(skipped_tickers)}）" if skipped_tickers else ""
-                        table_lines = [
-                            "### 🏆 相对强弱排序",
-                            f"> 数据来源：综合财务快照 + 管理层前瞻指引 | 评判标准：财务数据 {_skip_note}",
-                            "",
-                            "| 排名 | 公司 | 核心优势 | 主要风险 |",
-                            "|------|------|----------|----------|",
-                        ]
-                        for i, t in enumerate(ranked_tickers, 1):
-                            table_lines.append(f"| {i} | **{t}** | — | — |")
-                        table_lines.append("")
-                        ranking_table = "\n".join(table_lines)
-                except Exception:
-                    logger.exception("排名表生成失败，跳过")
+            try:
+                ranking_raw = chat_with_retry(ranking_prompt, task="finance", max_tokens=2200, timeout=300.0)
+                ranking_data = _parse_llm_json_payload(ranking_raw)
+                if ranking_data and "rankings" in ranking_data:
+                    rankings = ranking_data["rankings"]
+                    # 确保所有公司都在，补全缺失的
+                    covered = {str(r.get("ticker", "")).strip().upper() for r in rankings}
+                    for internal_t in ranked_tickers:
+                        dsym = disp_by_internal[internal_t]
+                        if (
+                            internal_t.upper() not in covered
+                            and dsym.upper() not in covered
+                        ):
+                            rankings.append({
+                                "ticker": dsym,
+                                "rank": len(rankings) + 1,
+                                "core_advantage": "财务数据可用，本季Earning Call覆盖有限",
+                                "main_risk": "数据覆盖不足，需人工补充"
+                            })
+                    # 按rank排序
+                    rankings.sort(key=lambda x: int(x.get("rank", 99)))
+                    # 重新编号确保连续
+                    _skip_note = (
+                        f"（以下公司因财务数据不足未参与排名：{', '.join(_skip_disp)}）"
+                        if _skip_disp
+                        else ""
+                    )
+                    table_lines = [
+                        "### 🏆 相对强弱排序",
+                        f"> 数据来源：综合财务快照 + 管理层前瞻指引 + 重要事件 | 评判标准：当前基本面动能与指引置信度的综合评估 {_skip_note}",
+                        "",
+                        "| 排名 | 公司 | 核心优势 | 主要风险 |",
+                        "|------|------|----------|----------|",
+                    ]
+                    for i, r in enumerate(rankings, 1):
+                        ticker = r.get("ticker", "")
+                        adv = r.get("core_advantage", "—").replace("|", "｜")
+                        risk = r.get("main_risk", "—").replace("|", "｜")
+                        table_lines.append(f"| {i} | **{ticker}** | {adv} | {risk} |")
+                    table_lines.append("")
+                    ranking_table = "\n".join(table_lines)
+                else:
+                    logger.warning("排名表LLM返回JSON解析失败，使用降级方案")
+                    # 降级：只用公司列表生成空表
+                    _skip_note = (
+                        f"（以下公司因财务数据不足未参与排名：{', '.join(_skip_disp)}）"
+                        if _skip_disp
+                        else ""
+                    )
+                    table_lines = [
+                        "### 🏆 相对强弱排序",
+                        f"> 数据来源：综合财务快照 + 管理层前瞻指引 | 评判标准：财务数据 {_skip_note}",
+                        "",
+                        "| 排名 | 公司 | 核心优势 | 主要风险 |",
+                        "|------|------|----------|----------|",
+                    ]
+                    for i, internal_t in enumerate(ranked_tickers, 1):
+                        dsym = disp_by_internal[internal_t]
+                        table_lines.append(f"| {i} | **{dsym}** | — | — |")
+                    table_lines.append("")
+                    ranking_table = "\n".join(table_lines)
+            except Exception:
+                logger.exception("排名表生成失败，跳过")
         # ── 排名表生成结束 ──────────────────────────────────────
         try:
             checker_result = run_post_generation_check(
@@ -3782,14 +4407,39 @@ Sector财务快照：
             raise
         return []
 
+    # 动态财务数据来源标签（与 Step 6 / Step 0 数据覆盖表逻辑一致）
+    _es_fin_sources: set[str] = set()
+    if per_company:
+        for _es_rec, *_ in per_company:
+            try:
+                _, _, _es_src = _get_validated_financials(_es_rec.ticker, years=1)
+                if _es_src:
+                    _es_fin_sources.add(_es_src)
+            except Exception:
+                pass
+    if "Bloomberg" in _es_fin_sources and "FMP" in _es_fin_sources:
+        _es_fin_label = "Bloomberg Annual Financials（优先）/ FMP Annual Financials（回退）"
+    elif "Bloomberg" in _es_fin_sources:
+        _es_fin_label = "Bloomberg Annual Financials"
+    else:
+        _es_fin_label = "FMP Annual Financials"
+
     # 生成 Reference 块
     ref_lines = ["**参考来源：**", ""]
     ref_lines.append("| 板块 | 数据来源 | 覆盖范围 |")
     ref_lines.append("|------|---------|---------|")
-    ref_lines.append("| 📊 财务快照 | FMP Annual Financials API | 最新财年 Revenue YoY、Gross Margin，覆盖全部可用美股标的 |")
+    ref_lines.append(
+        f"| 📊 财务快照 | {_es_fin_label} | "
+        "最新财年 Revenue YoY、Gross Margin，覆盖全部可用标的 |"
+    )
     ref_lines.append("| 🔑 本季核心主题 | Earning Call 逐字稿（FMP / SEC EDGAR） | 跨3家以上公司出现的共同表述，每条结论附具体数字 |")
-    ref_lines.append("| ⚡ 重要事件 | Earning Call 逐字稿 + Benzinga 公司新闻 | 涉及资本配置/人员/产品的实质性变化 |")
-    ref_lines.append("| 💬 管理层关键信号 | Earning Call 逐字稿原话 | CEO/CFO 直接表态，附发言人姓名 |")
+    ref_lines.append(
+        f"| ⚡ 重要事件 | Earning Call 逐字稿 + {news_src_label} | 涉及资本配置/人员/产品的实质性变化 |"
+    )
+    ref_lines.append(
+        "| 💬 管理层关键信号 | Earning Call 逐字稿原话（逐字引用，发言人姓名来自原文） | "
+        "CEO/CFO 直接表态；各公司详情页含段落溯源链接 |"
+    )
     ref_lines.append("| ⚠️ 主要风险 | Earning Call 前瞻性表述（含 expect/may/consider） | 管理层主动披露的不确定因素 |")
     ref_lines.append("")
 
@@ -3798,7 +4448,8 @@ Sector财务快照：
         ref_lines.append("")
         covered = []
         for rec, *_ in per_company:
-            covered.append(f"{rec.ticker}（{rec.company_name or rec.ticker}）")
+            dsym = display_equity_ticker(rec)
+            covered.append(f"{dsym}（{rec.company_name or rec.ticker}）")
         ref_lines.append("、".join(covered))
         ref_lines.append("")
 
@@ -3850,7 +4501,7 @@ Sector财务快照：
             except (EarningsAnalysisError, Exception):
                 earnings_ok = False
             if not profile_ok or not earnings_ok:
-                missing_analysis.append(t)
+                missing_analysis.append(display_equity_ticker(rec))
 
         if missing_analysis:
             lines_out.insert(
@@ -3887,17 +4538,28 @@ def _step_overview_sector(
 
     # 区分"有效覆盖"与"数据暂不可用"公司
     # 判断标准：Bloomberg → FMP → SEC 任一来源有财务数据 = 有效
+    # 同时收集实际命中的数据源标签（用于数据覆盖表标注，与 Step 6 底注逻辑一致）：
+    # _get_validated_financials 的第三返回值 + 各公司画像 data_source_label 中含 Bloomberg 时补记 Bloomberg
     data_available: list[str] = []
     data_unavailable: list[str] = []
+    _fin_sources_check: set[str] = set()
     for rec, *_ in per_company:
         try:
-            rows, _ = _get_validated_financials(rec.ticker, years=1)
+            rows, _, _fin_src = _get_validated_financials(rec.ticker, years=1)
             if rows and rows[0].revenue:
-                data_available.append(rec.ticker)
+                data_available.append(display_equity_ticker(rec))
+                if _fin_src:
+                    _fin_sources_check.add(_fin_src)
             else:
-                data_unavailable.append(rec.ticker)
+                data_unavailable.append(display_equity_ticker(rec))
         except Exception:
-            data_unavailable.append(rec.ticker)
+            data_unavailable.append(display_equity_ticker(rec))
+        try:
+            _pr = get_profile(rec.ticker)
+            if "Bloomberg" in (getattr(_pr, "data_source_label", None) or ""):
+                _fin_sources_check.add("Bloomberg")
+        except Exception:
+            pass
 
     effective_count = len(data_available)
     unavailable_count = len(data_unavailable)
@@ -3928,12 +4590,14 @@ def _step_overview_sector(
     for rec, *_ in per_company:
         try:
             profile = get_profile(rec.ticker)
-            cb = (profile.core_business or "").strip()[:150]
+            cb = (profile.core_business or "").strip()[:300]
             if cb:
-                company_biz.append(f"{rec.ticker}（{rec.company_name or rec.ticker}）：{cb}")
+                dsym = display_equity_ticker(rec)
+                company_biz.append(f"{dsym}（{rec.company_name or rec.ticker}）：{cb}")
         except (ProfileGenerationError, Exception):
+            dsym = display_equity_ticker(rec)
             company_biz.append(
-                f"{rec.ticker}（{rec.company_name or rec.ticker}）：业务信息暂不可用"
+                f"{dsym}（{rec.company_name or rec.ticker}）：业务信息暂不可用"
             )
 
     if company_biz:
@@ -3946,12 +4610,14 @@ def _step_overview_sector(
 
 要求：
 1. 按业务类型分组，每组列出公司名称（ticker）
-2. 每组用一句话描述该类型的共同特征
-3. 格式：【业务类型】：ACN、BAH、CTSH（X家）— 简要描述
+2. 每组描述必须具体列举：①核心产品名称或服务类型（如"MongoDB Atlas文档数据库""Zoom视频会议与Contact Center""UPS航空包裹与医疗冷链物流"）②典型客户行业或客户类型（如"跨国制造商""中小企业开发者""美国联邦机构"）③若有代表性数字或市场地位可加入（如"190家医院""50+国家"）
+3. 格式：【业务类型】：ACN、BAH、CTSH（X家）— 为[具体客户类型]提供[具体产品/服务名称]，例如：为跨国企业及美国联邦机构提供ERP实施、AI代理开发（Accenture AI）、政府IT合同及零信任网络安全方案
 4. 所有公司必须出现在某个分组中，不得遗漏
 5. 分组数量3-6个为宜，不要过度细分
-6. 中文输出，ticker保留英文
-7. 禁止输出任何以#开头的标题行"""
+6. 中文输出，ticker和产品名保留英文
+7. 禁止输出任何以#开头的标题行
+8. 严格禁止使用的词汇：高附加值、综合解决方案、端到端、多元化、专业服务、全方位、一体化（除非后面立即跟具体内容说明）
+9. 输出完毕前，检查以下所有 ticker 是否都已出现在某个分组中：{', '.join([b.split('（')[0].split('：')[0].strip() for b in company_biz])}。若有遗漏，补齐后再结束。"""
 
         _pov = len(prompt)
         logger.info(
@@ -3961,7 +4627,51 @@ def _step_overview_sector(
         )
 
         try:
-            overview = _chat(prompt, max_tokens=600, timeout=300.0)
+            _all_tickers = [
+                parts[0]
+                for b in company_biz
+                for parts in [b.split("（")[0].split("：")[0].strip().split()]
+                if parts
+            ]
+            overview = None
+            _ov = ""
+            for _attempt in range(5):  # 最多尝试5次
+                _ov = _chat(prompt, max_tokens=16000, timeout=300.0)
+                missing = [t for t in _all_tickers if t not in (_ov or "")]
+                if not missing:
+                    overview = _ov
+                    break
+                logger.warning("板块概览缺少公司 %s，重试 attempt=%s", missing, _attempt)
+            overview = (overview or _ov or "").strip()
+
+            # 多组中文长描述易触达 max_tokens 硬截断；续写（与 Step3 类似）
+            _ov_round = 0
+            while _ov_round < 3 and _is_truncated_llm_output(overview):
+                logger.warning(
+                    "板块概览（业务分组）疑似截断，尝试续写 round=%s",
+                    _ov_round,
+                )
+                try:
+                    _cont = _chat(
+                        "以下是未完成的「业务构成分布」正文，请从中断处继续写完剩余句子与分组，"
+                        "只输出续写部分，不要重复已输出的段落。\n\n"
+                        + (overview or ""),
+                        max_tokens=16000,
+                        timeout=300.0,
+                    )
+                    overview = (overview or "").rstrip() + "\n" + (_cont or "").strip()
+                except Exception:
+                    logger.warning("板块概览（业务分组）续写失败，使用已有内容")
+                    break
+                _ov_round += 1
+            overview = (overview or "").strip()
+            # 过滤 LLM 自我核查行（--- 后「核查/已检查：…全部覆盖/涵盖」等）
+            overview = re.sub(
+                r"\n?---\n(核查|已检查)[：，,][^\n]*全部[覆盖涵盖][。.]?\n?",
+                "",
+                overview,
+                flags=re.DOTALL,
+            ).strip()
             lines.append("**业务构成分布：**")
             lines.append("")
             lines.append(overview)
@@ -3972,13 +4682,21 @@ def _step_overview_sector(
                 raise
 
     # 数据覆盖情况（用实际数据填充）
+    # 动态判断财务数据来源标签（与 Step 6 底注逻辑一致，复用上方 loop 收集的 _fin_sources_check）
+    if "Bloomberg" in _fin_sources_check and "FMP" in _fin_sources_check:
+        _cov_fin_label = "Bloomberg（优先）/ FMP（回退）"
+    elif "Bloomberg" in _fin_sources_check:
+        _cov_fin_label = "Bloomberg Annual Financials"
+    else:
+        _cov_fin_label = "FMP Annual Financials"
+
     lines.append("**数据覆盖情况：**")
     lines.append("")
     lines.append("| 数据项 | 覆盖公司数 | 说明 |")
     lines.append("|--------|------------|------|")
     lines.append(f"| 监控公司总数 | {total} 家 | 含所有活跃标的 |")
     lines.append(
-        f"| 财务数据（FMP） | {effective_count} 家 | "
+        f"| 财务数据（{_cov_fin_label}） | {effective_count} 家 | "
         + (f"缺失：{', '.join(data_unavailable)}" if data_unavailable else "全部覆盖")
         + " |"
     )
@@ -4013,7 +4731,8 @@ def _step_company_cards(
     for rec, *_ in per_company:
         t = rec.ticker
         disp = company_display_name(t, rec.company_name)
-        lines.append(f"### {t} — {disp}")
+        disp_sym = display_equity_ticker(rec)
+        lines.append(f"### {disp_sym} — {disp}")
         lines.append("")
 
         try:
@@ -4110,89 +4829,139 @@ def _step_company_cards(
                 lines.append("**收入结构（产品线）：** *暂无可用分部数据（FMP未收录，10-K提取失败）*")
                 lines.append("")
 
-            # 地理收入分布（剔除与产品线同名或明显业务线用词的误填）
-            from research_automation.extractors.fmp_client import (
-                _normalize_revenue_label,
-                _region_label_looks_like_product_line,
-            )
+            # 地理收入分布：Bloomberg 优先
+            from research_automation.extractors.bloomberg_reader import get_geo_revenue as _bbg_geo
 
-            seg_norms: set[str] = set()
-            for seg in segs or []:
-                if hasattr(seg, "segment_name"):
-                    nm = getattr(seg, "segment_name", None) or ""
-                else:
-                    sd = seg if isinstance(seg, dict) else {}
-                    nm = (
-                        (sd.get("segment") or sd.get("name", ""))
-                        if sd
-                        else ""
+            bbg_geo = _bbg_geo(t, years=5)
+            _h_periods: list[str] = []
+            _h_period_rows: dict[str, list] = {}
+            for _hr in bbg_geo:
+                _hpl = _hr["period_label"]
+                if _hpl not in _h_period_rows:
+                    _h_periods.append(_hpl)
+                    _h_period_rows[_hpl] = []
+                _h_period_rows[_hpl].append(_hr)
+            _h_periods_sorted = sorted(_h_periods, reverse=True)
+            bbg_rows = []
+            latest_year = _h_periods_sorted[0] if _h_periods_sorted else (bbg_geo[0]["period_label"] if bbg_geo else "")
+            for _hpl in _h_periods_sorted:
+                _hcandidate = [
+                    r for r in _h_period_rows[_hpl]
+                    if r["geography_name"].lower() != "worldwide"
+                    and float(r["revenue"]) >= 1
+                ]
+                if _hcandidate:
+                    bbg_rows = _hcandidate
+                    latest_year = _hpl
+                    break
+            if bbg_rows:
+                bbg_total = sum(r["revenue"] for r in bbg_rows)
+                latest_year = latest_year
+                # HCA 特判：Bloomberg 返回的是内部管理分部，非真实地理拆分
+                if t.upper() == "HCA":
+                    lines.append(
+                        "> ℹ️ 以下为 HCA 内部管理分部口径（American Group / Atlantic Group / "
+                        "National Group），非传统地理区域划分，该公司业务全部位于美国境内。"
                     )
-                nn = _normalize_revenue_label(str(nm))
-                if nn:
-                    seg_norms.add(nn)
-
-            geos_filtered: list[Any] = []
-            for geo in profile.revenue_by_geography or []:
-                if hasattr(geo, "segment_name"):
-                    gname = getattr(geo, "segment_name", None) or ""
-                elif hasattr(geo, "region_name"):
-                    gname = getattr(geo, "region_name", None) or ""
-                else:
-                    gd = geo if isinstance(geo, dict) else {}
-                    gname = (
-                        gd.get("region_name")
-                        or gd.get("segment_name")
-                        or gd.get("region")
-                        or gd.get("name", "")
-                    )
-                if _region_label_looks_like_product_line(str(gname)):
-                    continue
-                if _normalize_revenue_label(str(gname)) in seg_norms:
-                    continue
-                geos_filtered.append(geo)
-
-            geos = geos_filtered
-            if geos:
+                    lines.append("")
                 lines.append("**地理分布：**")
                 lines.append("")
-                for geo in geos[:4]:  # 最多显示4条
-                    geo_dict = geo if isinstance(geo, dict) else None
-                    region_name = getattr(geo, "region_name", None)
-                    if region_name is not None:
-                        name = region_name or ""
-                        pct_raw = getattr(geo, "percentage", None)
-                    elif hasattr(geo, "segment_name"):
-                        name = getattr(geo, "segment_name", None) or ""
-                        pct_raw = getattr(geo, "percentage", None)
-                    else:
-                        name = (
-                            (geo_dict.get("region") or geo_dict.get("name", ""))
-                            if geo_dict is not None
-                            else ""
-                        )
-                        pct_raw = geo_dict.get("percentage") if geo_dict is not None else None
-
-                    pct = None
-                    if pct_raw is not None:
-                        try:
-                            if isinstance(pct_raw, str):
-                                pct = float(pct_raw.replace("%", "").strip())
-                            else:
-                                pct = float(pct_raw)
-                        except (ValueError, TypeError):
-                            pass
-
-                    if name:
-                        geo_line = f"- {name}"
-                        if pct is not None:
-                            geo_line += f"：{pct:.1f}%"
-                        lines.append(geo_line)
+                for r in bbg_rows:
+                    pct = r["revenue"] / bbg_total * 100 if bbg_total > 0 else 0
+                    lines.append(f"- {r['geography_name']}：{pct:.1f}%（${r['revenue']/1e3:.2f}B）")
                 lines.append("")
-            else:
+                lines.append(f"*（数据来源：Bloomberg PG_REVENUE，{latest_year}）*")
+                lines.append("")
+            elif bbg_geo:  # 仅 Worldwide / 占位行
                 lines.append(
-                    "**地理分布：** *暂无地理收入拆分数据（画像中无可用地理项或与产品线重合已过滤）*"
+                    "**地理分布：** *Bloomberg PG_REVENUE 未返回地理分拆数据，"
+                    "如需查阅请参考公司年报*"
                 )
                 lines.append("")
+            else:
+                # 地理收入分布（剔除与产品线同名或明显业务线用词的误填）
+                from research_automation.extractors.fmp_client import (
+                    _normalize_revenue_label,
+                    _region_label_looks_like_product_line,
+                )
+
+                seg_norms: set[str] = set()
+                for seg in segs or []:
+                    if hasattr(seg, "segment_name"):
+                        nm = getattr(seg, "segment_name", None) or ""
+                    else:
+                        sd = seg if isinstance(seg, dict) else {}
+                        nm = (
+                            (sd.get("segment") or sd.get("name", ""))
+                            if sd
+                            else ""
+                        )
+                    nn = _normalize_revenue_label(str(nm))
+                    if nn:
+                        seg_norms.add(nn)
+
+                geos_filtered: list[Any] = []
+                for geo in profile.revenue_by_geography or []:
+                    if hasattr(geo, "segment_name"):
+                        gname = getattr(geo, "segment_name", None) or ""
+                    elif hasattr(geo, "region_name"):
+                        gname = getattr(geo, "region_name", None) or ""
+                    else:
+                        gd = geo if isinstance(geo, dict) else {}
+                        gname = (
+                            gd.get("region_name")
+                            or gd.get("segment_name")
+                            or gd.get("region")
+                            or gd.get("name", "")
+                        )
+                    if _region_label_looks_like_product_line(str(gname)):
+                        continue
+                    if _normalize_revenue_label(str(gname)) in seg_norms:
+                        continue
+                    geos_filtered.append(geo)
+
+                geos = geos_filtered
+                if geos:
+                    lines.append("**地理分布：**")
+                    lines.append("")
+                    for geo in geos[:4]:  # 最多显示4条
+                        geo_dict = geo if isinstance(geo, dict) else None
+                        region_name = getattr(geo, "region_name", None)
+                        if region_name is not None:
+                            name = region_name or ""
+                            pct_raw = getattr(geo, "percentage", None)
+                        elif hasattr(geo, "segment_name"):
+                            name = getattr(geo, "segment_name", None) or ""
+                            pct_raw = getattr(geo, "percentage", None)
+                        else:
+                            name = (
+                                (geo_dict.get("region") or geo_dict.get("name", ""))
+                                if geo_dict is not None
+                                else ""
+                            )
+                            pct_raw = geo_dict.get("percentage") if geo_dict is not None else None
+
+                        pct = None
+                        if pct_raw is not None:
+                            try:
+                                if isinstance(pct_raw, str):
+                                    pct = float(pct_raw.replace("%", "").strip())
+                                else:
+                                    pct = float(pct_raw)
+                            except (ValueError, TypeError):
+                                pass
+
+                        if name:
+                            geo_line = f"- {name}"
+                            if pct is not None:
+                                geo_line += f"：{pct:.1f}%"
+                            lines.append(geo_line)
+                    lines.append("")
+                else:
+                    lines.append(
+                        "**地理分布：** *暂无地理收入拆分数据（画像中无可用地理项或与产品线重合已过滤）*"
+                    )
+                    lines.append("")
 
         except ProfileGenerationError as e:
             lines.append(f"*（画像生成失败：{e.message}）*")
@@ -4300,6 +5069,20 @@ def generate_six_step_sector_report(
             )
 
         _companies, per_company, _stats, _fetch_tot = loaded
+
+        # 动态推断新闻来源标签（读 query_axis，比扫 URL 更准确）
+        _news_providers: set[str] = set()
+        for _, _sigs, *_ in per_company:
+            for _s in (_sigs or []):
+                _axes = str(_s.get("query_axis") or "")
+                if "bloomberg_rss" in _axes:
+                    _news_providers.add("Bloomberg RSS")
+                if "benzinga" in _axes:
+                    _news_providers.add("Benzinga")
+        if not _news_providers:
+            _news_providers.add("Benzinga")  # fallback，与现有行为一致
+        _news_src_label = " / ".join(sorted(_news_providers)) + " 公司新闻"
+
         now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
         lines: list[str] = [
             f"# 行业报告（六步结构）：{sec}",
@@ -4342,6 +5125,17 @@ def generate_six_step_sector_report(
                 pass
 
         lines.extend(_step0b_company_snapshot_table(per_company))
+
+        # 板块概览（LLM）：最早执行，减轻后续 Step 并发时的速率限制影响
+        overview_lines = _get_lines_cache("overview") if not force_refresh else None
+        if not overview_lines:
+            logger.info("板块概览缓存未命中，重新生成 sector=%s", sec)
+            overview_lines = _step_overview_sector(sec, per_company)
+            if overview_lines:
+                _set_lines_cache("overview", overview_lines)
+        else:
+            logger.info("板块概览命中缓存 sector=%s", sec)
+
         lines.extend(_step2_per_company_revenue_breakdown(per_company))
 
         # Step3：有缓存直接用，没有才调LLM（空列表视为未命中；force_refresh 跳过 step 缓存）
@@ -4371,7 +5165,9 @@ def generate_six_step_sector_report(
             logger.info("Step4命中缓存 sector=%s", sec)
 
         # Step5/6不含LLM，每次重新生成保证新鲜度
-        step5_lines = _step5_new_biz_acquisitions_insider(per_company)
+        step5_lines = _step5_new_biz_acquisitions_insider(
+            per_company, news_src_label=_news_src_label
+        )
         step6_lines = _step6_annual_financial_table(per_company, years=3)
         step6_quarterly_data = _step6_quarterly_charts_section(sec, per_company)
 
@@ -4382,7 +5178,19 @@ def generate_six_step_sector_report(
         if not exec_summary_lines_cached:
             logger.info("执行摘要缓存未命中，重新生成 sector=%s", sec)
             exec_summary_lines = _executive_summary(
-                sec, step4_lines, step5_lines, step6_lines, sector_watch_items, per_company
+                sec,
+                step4_lines,
+                step5_lines,
+                step6_lines,
+                sector_watch_items,
+                per_company,
+                news_src_label=_news_src_label,
+            )
+            logger.warning(
+                "执行摘要返回行数=%d, 前3行=%r, 是否含'执行摘要'=%s",
+                len(exec_summary_lines) if exec_summary_lines else 0,
+                exec_summary_lines[:3] if exec_summary_lines else None,
+                any("执行摘要" in (ln or "") for ln in (exec_summary_lines or [])),
             )
             if exec_summary_lines:
                 _set_lines_cache("exec_summary", exec_summary_lines)
@@ -4390,7 +5198,6 @@ def generate_six_step_sector_report(
             logger.info("执行摘要命中缓存 sector=%s", sec)
             exec_summary_lines = exec_summary_lines_cached
 
-        overview_lines = _step_overview_sector(sec, per_company)
         company_cards_lines = _step_company_cards(per_company)
         # 执行摘要插入报告最前面（header之后）
         header_lines = lines[:4]  # # 标题、生成时间、新闻窗口、空行
@@ -4407,8 +5214,24 @@ def generate_six_step_sector_report(
         lines.extend(step4_lines)
         lines.extend(step5_lines)
         lines.extend(step6_lines)
-        # ── 缓存写入 ──────────────────────────────────────────────
+        # ── LLM自我修正文字泄漏清洗 ──────────────────────────────
+        # 过滤形如「修正版（格式统一）：」「修正版：」「格式统一版：」等LLM自述前缀
+        import re as _re
+        _leak_pattern = _re.compile(
+            r"^(修正版[\s（(][^）)]*[）)]?[:：]\s*|格式统一版[:：]\s*|重新整理版[:：]\s*|"
+            r"以下是修正[^：：\n]*[:：]\s*|以下是重新[^：：\n]*[:：]\s*)",
+            _re.MULTILINE,
+        )
+        lines = [_leak_pattern.sub("", ln) for ln in lines]
+        # 过滤 LLM 自我核查行（--- 后「核查/已检查：…全部覆盖/涵盖」等）
         report_md = "\n".join(lines).rstrip() + "\n"
+        report_md = re.sub(
+            r"\n?---\n(核查|已检查)[：，,][^\n]*全部[覆盖涵盖][。.]?\n?",
+            "",
+            report_md,
+            flags=re.DOTALL,
+        ).rstrip() + "\n"
+        # ── 缓存写入 ──────────────────────────────────────────────
         save_report_cache(sec, cache_year, cache_quarter, report_md)
         # 季度图表数据附加到report对象上供前端使用
         return report_md, step6_quarterly_data

@@ -31,9 +31,13 @@ _POOL_SEARCH_LABELS: dict[str, str] = {
     "ZM": "Zoom",
     "RTO": "Rentokil Initial",
     "BT/A LN": "BT Group",
+    "BT/A": "BT Group",
     "FRE GY": "Fresenius",
+    "FRE": "Fresenius",
     "KBX GY": "Knorr-Bremse",
+    "KBX": "Knorr-Bremse",
     "DHL GY": "Deutsche Post DHL",
+    "DHL": "Deutsche Post DHL",
 }
 
 # 与 AI 就业替代 / 数字化用工主题强相关的标的（用于相关性 +1，压低纯消费等弱相关噪音）
@@ -49,9 +53,13 @@ _STRONG_THEME_TICKERS: frozenset[str] = frozenset(
         "MDB",
         "ZM",
         "BT/A LN",
+        "BT/A",
         "FRE GY",
+        "FRE",
         "KBX GY",
+        "KBX",
         "DHL GY",
+        "DHL",
         "RTO",
     }
 )
@@ -274,6 +282,73 @@ def _row_relevant_to_ticker(
     lab = (company_label or "").strip()
     if len(lab) >= 4 and lab.lower() in (b + " " + u).lower():
         return True
+    return False
+
+
+# 对易与通用英文词冲突的 ticker，要求标题/正文必须出现至少一个"实体级关键词"，
+# 否则视为同名噪音过滤掉。键为大写 internal ticker（兼容含空格的"BT/A LN"，
+# 该 ticker 与通用词无冲突，无需登记）。
+_TICKER_REQUIRED_KEYWORDS: dict[str, tuple[str, ...]] = {
+    # Target Corporation（Target 是高频通用英文词，如 "takeover target"）
+    "TGT": (
+        "Target Corporation",
+        "Target Corp",
+        "Target's",
+        "Target store",
+        "Target stores",
+        "Brian Cornell",  # 现任 CEO
+        "$TGT",
+        "(TGT)",
+        "NYSE:TGT",
+        "NYSE: TGT",
+    ),
+    # Rentokil Initial（RTO 易与 "return to office" 缩写冲突）
+    "RTO": (
+        "Rentokil",
+        "Rentokil Initial",
+        "$RTO",
+        "(RTO)",
+        "LON:RTO",
+        "LON: RTO",
+    ),
+    # Estée Lauder（EL 在英文里太常见，词边界仍可能误中代码相似上下文）
+    "EL": (
+        "Estée Lauder",
+        "Estee Lauder",
+        "Lauder family",
+        "Fabrizio Freda",
+        "Stéphane de La Faverie",
+        "Stephane de La Faverie",
+        "$EL",
+        "(EL)",
+        "NYSE:EL",
+        "NYSE: EL",
+    ),
+    # Dollar General（DG 是数据库 / 部门常见缩写）
+    "DG": (
+        "Dollar General",
+        "$DG",
+        "(DG)",
+        "NYSE:DG",
+        "NYSE: DG",
+    ),
+}
+
+
+def _passes_required_keywords(row: dict[str, Any], ticker: str) -> bool:
+    """对易误触发的 ticker 做"必含实体关键词"校验。
+
+    未登记的 ticker 直接放行（不影响其他公司行为）；登记后必须命中至少一个
+    关键词（大小写不敏感、匹配标题+正文）才返回 True。
+    """
+    sym = (ticker or "").strip().upper()
+    keywords = _TICKER_REQUIRED_KEYWORDS.get(sym)
+    if not keywords:
+        return True
+    haystack = (_blob(row) + " " + str(row.get("url") or "")).lower()
+    for kw in keywords:
+        if kw.lower() in haystack:
+            return True
     return False
 
 
@@ -554,6 +629,15 @@ def fetch_signals_for_ticker(
             continue
         if not _row_relevant_to_ticker(row, sym, company_label or None):
             acc.dropped_other += 1
+            continue
+        if not _passes_required_keywords(row, sym):
+            logger.warning(
+                "通用词 ticker 同名噪音过滤 ticker=%s url=%s title=%r",
+                sym,
+                (url or "")[:120],
+                (title or "")[:120],
+            )
+            acc.dropped_noise += 1
             continue
         if _is_analyst_noise(row):
             acc.dropped_other += 1

@@ -1058,8 +1058,44 @@ def get_earnings_transcript(
             }
         )
 
+    # FMP 实际命中的财年/财季可能与请求不一致（如请求 2026Q2，FMP 仅有 2026Q1）
+    # 把 raw 的 year + period 解析出来，并以请求参数为兜底
+    actual_year: int = int(year)
+    actual_quarter: int = int(quarter)
+    try:
+        raw_y = row.get("year")
+        if isinstance(raw_y, int):
+            actual_year = raw_y
+        elif raw_y is not None and str(raw_y).strip().isdigit():
+            actual_year = int(str(raw_y).strip())
+    except (TypeError, ValueError):
+        pass
+    try:
+        raw_p = row.get("period")
+        if isinstance(raw_p, str):
+            m = re.search(r"[1-4]", raw_p)
+            if m:
+                actual_quarter = int(m.group(0))
+        elif isinstance(raw_p, int) and 1 <= raw_p <= 4:
+            actual_quarter = raw_p
+    except (TypeError, ValueError):
+        pass
+
+    actual_quarter_label = f"{actual_year}Q{actual_quarter}"
+    if actual_quarter_label != f"{year}Q{quarter}":
+        logger.info(
+            "FMP 逐字稿实际季度与请求不一致 ticker=%s 请求=%sQ%s 实际=%s",
+            sym,
+            year,
+            quarter,
+            actual_quarter_label,
+        )
+
     return {
-        "quarter": f"{year}Q{quarter}",
+        "quarter": actual_quarter_label,
+        "requested_quarter": f"{year}Q{quarter}",
+        "fiscal_year": actual_year,
+        "fiscal_quarter": actual_quarter,
         "date": date_str,
         "content": content,
     }

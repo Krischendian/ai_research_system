@@ -1,4 +1,17 @@
-"""LLM 封装：优先 Claude（Anthropic），回退 OpenAI。"""
+"""LLM 封装：优先 Claude（Anthropic），回退 OpenAI。
+
+模型选择优先级（Claude 路径）：
+  1. 调用方显式传入 ``model`` 参数
+  2. 环境变量 ``ANTHROPIC_MODEL``（默认模型，适用所有调用）
+  3. 内置默认：``claude-sonnet-4-6``
+
+金融专用模型评估：
+  在 ``.env`` 中设置 ``ANTHROPIC_MODEL_FINANCE`` 可为行业报告等金融任务指定不同模型，
+  通过 ``chat(..., task="finance")`` 触发。若未设置则与默认模型一致。
+  示例：
+    ANTHROPIC_MODEL=claude-sonnet-4-6
+    ANTHROPIC_MODEL_FINANCE=claude-opus-4-6   # 行业报告用更强模型
+"""
 from __future__ import annotations
 
 import logging
@@ -19,10 +32,28 @@ def _ensure_env() -> None:
     load_dotenv(_ROOT / ".env")
 
 
+def _resolve_claude_model(model: str | None, task: str | None) -> str:
+    """
+    解析最终使用的 Claude 模型名：
+    - 调用方传入 model → 直接使用
+    - task=="finance" 且设置了 ANTHROPIC_MODEL_FINANCE → 使用金融专用模型
+    - 否则 → ANTHROPIC_MODEL 环境变量，兜底 claude-sonnet-4-6
+    """
+    if model:
+        return model
+    if task == "finance":
+        finance_model = (os.getenv("ANTHROPIC_MODEL_FINANCE") or "").strip()
+        if finance_model and finance_model not in _PLACEHOLDER_KEYS:
+            logger.debug("使用金融专用模型: %s", finance_model)
+            return finance_model
+    return (os.getenv("ANTHROPIC_MODEL") or "").strip() or "claude-sonnet-4-6"
+
+
 def chat(
     prompt: str,
     *,
     model: str | None = None,
+    task: str | None = None,
     timeout: float = 60.0,
     max_tokens: int | None = None,
     response_format: dict[str, str] | None = None,
@@ -30,8 +61,10 @@ def chat(
     """
     调用 LLM，返回助手回复文本。优先使用 Claude（Anthropic），回退 OpenAI。
 
-    ``max_tokens`` 可选，用于限制输出长度（Claude 默认 8096；OpenAI 未传则不设）。
-    ``response_format`` 传 ``{"type": "json_object"}`` 时强制返回 JSON。
+    ``model``：显式指定模型名（覆盖环境变量）。
+    ``task``：任务类型标签，当前支持 ``"finance"``，用于触发 ``ANTHROPIC_MODEL_FINANCE``。
+    ``max_tokens``：可选，限制输出长度（Claude 默认 8096；OpenAI 未传则不设）。
+    ``response_format``：传 ``{"type": "json_object"}`` 时强制返回 JSON。
     - 未配置有效密钥：抛出 ``ValueError``
     - API 错误：抛出 ``RuntimeError``
     """
@@ -39,10 +72,11 @@ def chat(
 
     anthropic_key = (os.getenv("ANTHROPIC_API_KEY") or "").strip()
     if anthropic_key and anthropic_key not in _PLACEHOLDER_KEYS:
+        resolved_model = _resolve_claude_model(model, task)
         return _chat_claude(
             prompt,
             api_key=anthropic_key,
-            model=model or os.getenv("ANTHROPIC_MODEL") or "claude-sonnet-4-6",
+            model=resolved_model,
             timeout=timeout,
             max_tokens=max_tokens,
             response_format=response_format,
@@ -131,17 +165,19 @@ def chat_with_retry(
     prompt: str,
     *,
     max_retries: int = 5,
+    task: str | None = None,
     **kwargs: Any,
 ) -> str:
     """
     对 ``chat`` 做有限次重试（默认最多 5 次调用），主要针对连接类错误。
     相邻重试间隔为 10s / 30s / 60s；若仍需继续等待，之后固定为 60s。
     其余参数与 :func:`chat` 相同（如 ``timeout``、``max_tokens``、``response_format``）。
+    ``task``：透传给 ``chat``，用于触发金融专用模型（``ANTHROPIC_MODEL_FINANCE``）。
     """
     last: BaseException | None = None
     for attempt in range(max_retries):
         try:
-            return chat(prompt, **kwargs)
+            return chat(prompt, task=task, **kwargs)
         except Exception as e:
             last = e
             if attempt >= max_retries - 1 or not _is_retryable_llm_transport_error(e):
@@ -201,6 +237,11 @@ def _chat_claude(
             t = getattr(block, "text", None)
             if isinstance(t, str) and t:
                 parts.append(t)
+        logger.info(
+            "Claude stop_reason=%s output_tokens=%s",
+            resp.stop_reason,
+            resp.usage.output_tokens,
+        )
         return "".join(parts).strip()
     except Exception as e:
         raise RuntimeError(f"Claude API 调用失败: {e}") from e

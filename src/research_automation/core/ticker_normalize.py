@@ -25,10 +25,17 @@ _EXCHANGE_SUFFIX_MAP: dict[str, str] = {
 # 非美股在FMP无逐字稿，但财务数据可能有ISIN查询
 _BLOOMBERG_TO_FMP: dict[str, str] = {
     "BT/A LN": "BT-A.L",
+    "BT/A": "BT-A.L",
     "FRE GY": "FRE.DE",
+    "FRE": "FRE.DE",
     "KBX GY": "KBX.DE",
+    "KBX": "KBX.DE",
     "DHL GY": "DHL.DE",
+    "DHL": "DHL.DE",
 }
+
+# DB 种子简码：无空格后缀时仍为非美股（10-K vs 20-F、SEC CIK 语义）
+_PRIMARY_NON_US_TICKERS: frozenset[str] = frozenset({"FRE", "KBX", "DHL", "BT/A"})
 
 # 缓存路径安全化：把非法字符替换为下划线
 _UNSAFE_CHARS = re.compile(r"[/\\:*?\"<>|. ]")
@@ -59,7 +66,7 @@ def bloomberg_to_fmp(bloomberg_ticker: str) -> str | None:
 def is_us_equity(ticker: str) -> bool:
     """
     判断是否为美股（无交易所后缀 且 不含特殊字符）。
-    BT/A LN → False，ACN → True
+    BT/A LN → False；种子简码 BT/A / FRE / KBX / DHL → False；ACN → True
     """
     t = (ticker or "").strip()
     # 有空格说明有交易所后缀（Bloomberg格式）
@@ -67,6 +74,8 @@ def is_us_equity(ticker: str) -> bool:
         return False
     # 含 . 说明是非美股FMP格式（BT-A.L）
     if "." in t:
+        return False
+    if normalize_equity_ticker(t) in _PRIMARY_NON_US_TICKERS:
         return False
     return True
 

@@ -65,10 +65,14 @@ _PROFILE_CACHE_VERSION = 1
 # 非美股 internal ticker → FMP company profile API symbol
 _FMP_PROFILE_TICKER_MAP: dict[str, str] = {
     "DHL GY": "DHL.DE",
+    "DHL": "DHL.DE",
     "FRE GY": "FRE.DE",
+    "FRE": "FRE.DE",
     "KBX GY": "KBX.DE",
+    "KBX": "KBX.DE",
     "RTO": "RTO",
     "BT/A LN": "BT-A.L",
+    "BT/A": "BT-A.L",
 }
 
 _PROFILE_SECTION_HEADERS: tuple[tuple[str, str], ...] = (
@@ -77,6 +81,44 @@ _PROFILE_SECTION_HEADERS: tuple[tuple[str, str], ...] = (
     ("ITEM_8_NOTES_SEGMENTS", "item8_notes"),
     ("ITEM_1A_RISK_FACTORS", "item1a"),
 )
+
+
+def _is_truncated_llm_output(text: str) -> bool:
+    """空输出或句末非完整结束标点则视为可能被硬截断，可触发续写。
+
+    与 ``sector_report_service._is_truncated_llm_output`` 保持一致：覆盖结束
+    标点、未闭合中文/英文 ``（``、未闭合 ``[TICKER`` 三类典型截断，避免画像里
+    的 ``industry_view`` 等中文短字段以「美国关税政策（」之类未闭合括号收尾。
+    """
+    t = (text or "").rstrip()
+    if not t:
+        return True
+    if t[-1] not in (
+        "。",
+        "！",
+        "？",
+        ".",
+        "!",
+        "?",
+        "\"",
+        "”",
+        "）",
+        ")",
+        "；",
+        "…",
+    ):
+        return True
+    # 末尾是「）」但是最后一行以「（X家）」等结束且没有「—」描述，也视为截断
+    last_line = t.split("\n")[-1].strip()
+    if last_line.endswith("）") and "—" not in last_line:
+        return True
+    # 末尾遗留未闭合的中文 / 英文左括号
+    if re.search(r"[（(][^）)]{0,50}$", t):
+        return True
+    # 末尾遗留未闭合的 [TICKER
+    if re.search(r"\[[A-Za-z]{1,6}$", t):
+        return True
+    return False
 
 
 class ProfileGenerationError(Exception):
@@ -395,6 +437,22 @@ def _earnings_deep_link_url(ticker: str, quarter_label: str) -> str:
     return f"{origin}/DeepDive?ticker={sym}&quarter={q}"
 
 
+def _fmp_transcript_url(ticker: str, quarter_label: str) -> str:
+    sym = (ticker or "").strip().upper()
+    ql = (quarter_label or "").strip()
+    m = re.match(r"(\d{4})Q(\d)", ql, re.IGNORECASE)
+    if m:
+        year, quarter = m.group(1), m.group(2)
+        return (
+            "https://financialmodelingprep.com/financial-statements/"
+            f"earnings-call-transcript/{sym}?year={year}&quarter={quarter}"
+        )
+    return (
+        "https://financialmodelingprep.com/financial-statements/"
+        f"earnings-call-transcript/{sym}"
+    )
+
+
 def _merge_earnings_quotations_into_profile(
     payload: dict[str, Any],
     symbol: str,
@@ -436,6 +494,7 @@ def _merge_earnings_quotations_into_profile(
 
     qlabel = str(analysis.quarter or f"{filing_year}Q4").strip()
     deep_url = _earnings_deep_link_url(symbol, qlabel)
+    fmp_url = _fmp_transcript_url(symbol, qlabel)
 
     for eq in analysis.quotations or []:
         sp_ids = [str(x) for x in (eq.source_paragraph_ids or []) if x]
@@ -447,6 +506,7 @@ def _merge_earnings_quotations_into_profile(
                 "source_paragraph_ids": sp_ids,
                 "data_source": "earnings_call",
                 "source_url": deep_url,
+                "fmp_transcript_url": fmp_url,
             }
         )
 
@@ -459,6 +519,207 @@ def _merge_earnings_quotations_into_profile(
         payload["data_source_label"] = (payload.get("data_source_label") or "").rstrip() + note
 
     return sp_map
+
+
+def _enrich_guidance_from_earnings_call(
+    payload: dict[str, Any],
+    symbol: str,
+    filing_year: int,
+) -> None:
+    """
+    当 10-K 未能提取到 future_guidance / industry_view 时，
+    从数据库中的 EARNINGS_CALL 段落补充提取。
+    只在字段为空时才调用，不覆盖已有内容。
+    """
+    from research_automation.core.database import get_connection
+
+    _EMPTY = {"原文未明确提及", "NOT_FOUND", "null", ""}
+
+    fg = (payload.get("future_guidance") or "").strip()
+    iv = (payload.get("industry_view") or "").strip()
+
+    if fg not in _EMPTY and iv not in _EMPTY:
+        return  # 两个字段都有内容，不需要补充
+
+    # 从数据库拉电话会段落
+    try:
+        conn = get_connection()
+        try:
+            rows = conn.execute(
+                """
+                SELECT content FROM document_paragraphs
+                WHERE ticker = ?
+                  AND doc_type = 'EARNINGS_CALL'
+                  AND LENGTH(content) > 100
+                ORDER BY context_year DESC, para_index ASC
+                LIMIT 80
+                """,
+                (symbol,),
+            ).fetchall()
+        finally:
+            conn.close()
+    except Exception:
+        logger.exception("_enrich_guidance: 拉取电话会段落失败 ticker=%s", symbol)
+        return
+
+    if not rows:
+        return
+
+    transcript_text = "\n\n".join(r[0] for r in rows if r[0])
+    if len(transcript_text) < 100:
+        return
+
+    # 截断避免超长
+    transcript_text = transcript_text[:12000]
+
+    prompt = f"""你是严谨的财报电话会「抽取」助手，只从下方原文中提取，禁止推断和脑补。
+
+公司代码：{symbol}
+数据来源：财报电话会逐字稿
+
+请从以下逐字稿中提取两个字段：
+
+1. future_guidance：管理层对未来业绩、营收/利润指引、战略方向的明确表述，用中文概括（100-200字）。
+   - 必须有原文依据，使用情态词：预计/计划/目标/可能
+   - 若原文无相关内容，返回 null
+
+2. industry_view：管理层对行业趋势、竞争环境、宏观背景的明确判断，用中文概括（不超过80字）。
+   - 必须有原文依据
+   - 若原文无相关内容，返回 null
+
+输出格式：仅一个JSON对象，例如：
+{{"future_guidance": "...", "industry_view": "..."}}
+
+【电话会逐字稿原文】
+{transcript_text}
+"""
+
+    try:
+        reply = chat(
+            prompt,
+            response_format={"type": "json_object"},
+            timeout=60.0,
+            max_tokens=4000,
+        )
+        # 清洗常见导致 JSON 解析失败的字符
+        _cleaned = (
+            reply.replace("\u201c", '"')
+            .replace("\u201d", '"')  # 中文双引号 "" → "
+            .replace("\u2018", "'")
+            .replace("\u2019", "'")  # 中文单引号 '' → '
+            .replace("\u3001", ",")  # 中文顿号 、→ ,
+            .replace("\uff0c", ",")  # 全角逗号 ，→ ,
+        )
+        # 多层容错解析
+        try:
+            result = _extract_json_object(_cleaned)
+        except (json.JSONDecodeError, ValueError):
+            # 第二层：正则直接抠两个字段，跳过 JSON 整体解析
+            result = {}
+            for field in ("future_guidance", "industry_view"):
+                # 匹配 "field": "内容" 或 "field": null
+                m = re.search(
+                    rf'"{field}"\s*:\s*("(?:[^"\\]|\\.)*"|null)',
+                    _cleaned,
+                    re.DOTALL,
+                )
+                if m:
+                    val = m.group(1)
+                    if val == "null":
+                        result[field] = None
+                    else:
+                        # 去掉首尾引号，还原转义
+                        result[field] = (
+                            val[1:-1].replace('\\"', '"').replace("\\n", " ").strip()
+                        )
+
+        quarter_label = f"{filing_year}Q4"
+
+        # 指引/行业判断动词词典——用于识别 LLM 输出是否构成"明确表述"
+        _GUIDANCE_VERBS = (
+            "预计", "预期", "预测", "计划", "目标", "可能", "指引",
+            "展望", "承诺", "重申", "上调", "下调", "维持", "拟定",
+            "争取", "希望", "guidance", "outlook", "expect", "plan",
+            "target", "intend",
+        )
+        _INDUSTRY_VERBS = (
+            "行业", "竞争", "需求", "供给", "市场", "宏观", "政策",
+            "客户", "增速", "整合", "渗透", "份额", "趋势", "格局",
+            "周期", "industry", "market", "demand", "supply",
+            "competitive", "macro",
+        )
+
+        _PLACEHOLDER_FG = "逐字稿已获取但未检出明确指引表述，请查阅原文"
+        _PLACEHOLDER_IV = "逐字稿已获取但未检出明确行业判断表述，请查阅原文"
+
+        def _is_meaningful(raw: str, keywords: tuple[str, ...]) -> bool:
+            """判断 LLM 抽取的中文短段是否"形似完整有效内容"。
+
+            过滤掉「管理层提出」「公司将」一类被半截 / 偷懒的 4–10 字开头。
+            """
+            t = (raw or "").strip()
+            if not t or t.lower() in ("null", "none", ""):
+                return False
+            if len(t) < 20:
+                return False
+            if _is_truncated_llm_output(t):
+                return False
+            t_low = t.lower()
+            if not any(k.lower() in t_low for k in keywords):
+                return False
+            return True
+
+        if fg in _EMPTY:
+            raw_fg = (result.get("future_guidance") or "").strip()
+            if raw_fg and raw_fg.lower() not in ("null", "none", ""):
+                if _is_meaningful(raw_fg, _GUIDANCE_VERBS):
+                    payload["future_guidance"] = (
+                        f"【电话会{quarter_label}】{raw_fg}"
+                    )
+                else:
+                    logger.warning(
+                        "_enrich_guidance: future_guidance 抽取结果过短/无效 "
+                        "ticker=%s qlabel=%s raw=%r → 改写占位",
+                        symbol,
+                        quarter_label,
+                        raw_fg,
+                    )
+                    payload["future_guidance"] = (
+                        f"【电话会{quarter_label}】{_PLACEHOLDER_FG}"
+                    )
+                fp = payload.get("field_paragraph_ids")
+                if not isinstance(fp, dict):
+                    fp = {}
+                    payload["field_paragraph_ids"] = fp
+                fp["future_guidance"] = ["earnings_call"]
+
+        if iv in _EMPTY:
+            raw_iv = (result.get("industry_view") or "").strip()
+            if raw_iv and raw_iv.lower() not in ("null", "none", ""):
+                if _is_meaningful(raw_iv, _INDUSTRY_VERBS):
+                    payload["industry_view"] = (
+                        f"【电话会{quarter_label}】{raw_iv}"
+                    )
+                else:
+                    logger.warning(
+                        "_enrich_guidance: industry_view 抽取结果过短/无效 "
+                        "ticker=%s qlabel=%s raw=%r → 改写占位",
+                        symbol,
+                        quarter_label,
+                        raw_iv,
+                    )
+                    payload["industry_view"] = (
+                        f"【电话会{quarter_label}】{_PLACEHOLDER_IV}"
+                    )
+                payload["industry_view_source"] = f"earnings_call:{quarter_label}"
+                fp = payload.get("field_paragraph_ids")
+                if not isinstance(fp, dict):
+                    fp = {}
+                    payload["field_paragraph_ids"] = fp
+                fp["industry_view"] = ["earnings_call"]
+
+    except Exception:
+        logger.exception("_enrich_guidance: LLM提取失败 ticker=%s", symbol)
 
 
 _CORPORATE_ACTION_TYPES = frozenset({"new_business", "acquisition", "partnership"})
@@ -1276,6 +1537,7 @@ def get_profile(ticker: str) -> BusinessProfile:
             prompt,
             response_format={"type": "json_object"},
             timeout=120.0,
+            max_tokens=4000,
         )
     except ValueError as e:
         raise ProfileGenerationError(f"语言模型未就绪：{e}") from e
@@ -1386,6 +1648,7 @@ def get_profile(ticker: str) -> BusinessProfile:
     earnings_sp_map = _merge_earnings_quotations_into_profile(
         payload, symbol, filing_year
     )
+    _enrich_guidance_from_earnings_call(payload, symbol, filing_year)
     _normalize_corporate_actions(
         payload,
         merged_excerpt,
@@ -1401,6 +1664,31 @@ def get_profile(ticker: str) -> BusinessProfile:
     for pid, txt in earnings_sp_map.items():
         if pid in cited:
             payload["source_paragraphs"][pid] = txt
+
+    # industry_view 末尾若疑似截断（未闭合括号、`[TICKER` 等），续写最多 2 轮
+    iv_text = (payload.get("industry_view") or "").strip()
+    if iv_text and _is_truncated_llm_output(iv_text):
+        _round = 0
+        while _round < 2 and _is_truncated_llm_output(iv_text):
+            try:
+                cont = chat(
+                    "以下内容未完成，请从中断处继续，只输出续写内容，"
+                    "不要重复已有内容，保持中文表述与原句风格；"
+                    f"若已自然结束请只回复一个句号：\n\n{iv_text}",
+                    max_tokens=1500,
+                    timeout=60.0,
+                )
+            except Exception:
+                logger.exception(
+                    "industry_view 续写失败 ticker=%s round=%s", symbol, _round
+                )
+                break
+            cont = (cont or "").strip()
+            if not cont:
+                break
+            iv_text = iv_text.rstrip() + cont
+            _round += 1
+        payload["industry_view"] = iv_text
 
     try:
         _profile_obj = BusinessProfile.model_validate(payload)

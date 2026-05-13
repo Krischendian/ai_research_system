@@ -2,7 +2,7 @@
 r"""
 每日简报定时任务
 建议 cron 配置（纽约时间 08:05，UTC 12:05）：
-    5 12 * * 1-5 cd /Users/krisfan/Desktop/untitled\ folder && PYTHONPATH=src /path/to/venv/bin/python3 scripts/scheduled_brief.py >> logs/brief_cron.log 2>&1
+    5 12 * * 1-5 cd /Users/krisfan/Desktop/untitled\ folder.nosync && PYTHONPATH=src /path/to/venv/bin/python3 scripts/scheduled_brief.py >> logs/brief_cron.log 2>&1
 """
 from __future__ import annotations
 

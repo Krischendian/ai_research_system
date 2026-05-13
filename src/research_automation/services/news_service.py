@@ -202,14 +202,15 @@ def get_company_news(
 
     fd = _normalize_news_date(from_date)
     td = _normalize_news_date(to_date)
-    bz = benzinga_get_company_news(sym, fd, td)
-    if bz:
-        return [benzinga_news_dict_to_raw_article(it, sym) for it in bz]
-
-    out: list[RawArticle] = []
-    for it in finnhub_get_company_news(sym, from_date, to_date):
-        out.append(company_news_item_to_raw_article(it, sym))
-    return out
+    bz_articles = [
+        benzinga_news_dict_to_raw_article(it, sym)
+        for it in benzinga_get_company_news(sym, fd, td)
+    ]
+    fh_articles = [
+        company_news_item_to_raw_article(it, sym)
+        for it in finnhub_get_company_news(sym, from_date, to_date)
+    ]
+    return merge_finnhub_and_rss(bz_articles, fh_articles)
 
 
 def raw_article_to_profile_news_fields(article: RawArticle) -> dict[str, str] | None:

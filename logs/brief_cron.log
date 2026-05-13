@@ -175,3 +175,50 @@ OSError: [Errno 11] Resource deadlock avoided
 2026-05-01 12:05:43,249 WARNING research_automation.services.daily_brief_service: LLM公司摘要失败: [Errno 11] Resource deadlock avoided
 2026-05-01 12:05:43,258 INFO scheduled_brief: sector=Technology 完成，简报长度=10543 字符
 2026-05-01 12:05:43,258 INFO scheduled_brief: === 定时任务完成 成功=3 失败=0 ===
+2026-05-04 12:05:00,795 INFO scheduled_brief: === 每日简报定时任务启动 纽约时间=2026-05-04 12:05 EDT ===
+Traceback (most recent call last):
+  File "/Users/krisfan/Desktop/untitled folder/scripts/scheduled_brief.py", line 91, in <module>
+    run()
+  File "/Users/krisfan/Desktop/untitled folder/scripts/scheduled_brief.py", line 67, in run
+    sectors = _get_all_sectors()
+              ^^^^^^^^^^^^^^^^^^
+  File "/Users/krisfan/Desktop/untitled folder/scripts/scheduled_brief.py", line 41, in _get_all_sectors
+    conn = get_connection()
+           ^^^^^^^^^^^^^^^^
+  File "/Users/krisfan/Desktop/untitled folder/src/research_automation/core/database.py", line 26, in get_connection
+    conn = sqlite3.connect(path)
+           ^^^^^^^^^^^^^^^^^^^^^
+sqlite3.OperationalError: disk I/O error
+Fatal Python error: init_import_site: Failed to import the site module
+Python runtime state: initialized
+Traceback (most recent call last):
+  File "<frozen importlib._bootstrap>", line 1360, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1331, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 935, in _load_unlocked
+  File "<frozen importlib._bootstrap>", line 1176, in exec_module
+  File "<frozen site>", line 624, in <module>
+  File "<frozen site>", line 607, in main
+  File "<frozen site>", line 526, in venv
+OSError: [Errno 11] Resource deadlock avoided
+Fatal Python error: init_import_site: Failed to import the site module
+Python runtime state: initialized
+Traceback (most recent call last):
+  File "<frozen importlib._bootstrap>", line 1360, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1331, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 935, in _load_unlocked
+  File "<frozen importlib._bootstrap>", line 1176, in exec_module
+  File "<frozen site>", line 624, in <module>
+  File "<frozen site>", line 607, in main
+  File "<frozen site>", line 526, in venv
+OSError: [Errno 11] Resource deadlock avoided
+Fatal Python error: init_import_site: Failed to import the site module
+Python runtime state: initialized
+Traceback (most recent call last):
+  File "<frozen importlib._bootstrap>", line 1360, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1331, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 935, in _load_unlocked
+  File "<frozen importlib._bootstrap>", line 1176, in exec_module
+  File "<frozen site>", line 624, in <module>
+  File "<frozen site>", line 607, in main
+  File "<frozen site>", line 526, in venv
+OSError: [Errno 11] Resource deadlock avoided

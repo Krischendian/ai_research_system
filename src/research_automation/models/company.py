@@ -56,8 +56,12 @@ class KeyManagementQuote(BaseModel):
         None,
         description="电话会条目跳转深度分析页的 URL（含 ticker、quarter）",
     )
+    fmp_transcript_url: Optional[str] = Field(
+        None,
+        description="FMP 网页版逐字稿链接，供外部溯源核查",
+    )
 
-    @field_validator("data_source", "source_url", mode="before")
+    @field_validator("data_source", "source_url", "fmp_transcript_url", mode="before")
     @classmethod
     def _empty_str_to_none(cls, v: object) -> object:
         if v == "":
