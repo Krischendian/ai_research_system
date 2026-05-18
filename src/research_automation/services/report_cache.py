@@ -34,6 +34,22 @@ def _ensure_table(conn) -> None:
     conn.commit()
 
 
+def has_cached_report(sector: str, year: int, quarter: int) -> bool:
+    """仅检查是否存在缓存（不读取 report_md 正文）。"""
+    conn = get_connection()
+    try:
+        init_db(conn)
+        _ensure_table(conn)
+        cur = conn.execute(
+            "SELECT 1 FROM sector_report_cache "
+            "WHERE sector=? AND year=? AND quarter=? LIMIT 1",
+            (sector, year, quarter),
+        )
+        return cur.fetchone() is not None
+    finally:
+        conn.close()
+
+
 def get_cached_report(sector: str, year: int, quarter: int) -> str | None:
     """
     读取缓存报告。有缓存返回markdown字符串，无缓存返回None。

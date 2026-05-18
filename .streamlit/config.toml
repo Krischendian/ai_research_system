@@ -1,8 +1,0 @@
-# 大仓库 / 慢盘（含桌面路径）上，默认文件监视会拖慢启动与运行。
-# 关闭后：改 Python 代码需手动在浏览器里「重新运行」或刷新。
-[server]
-fileWatcherType = "none"
-runOnSave = false
-
-[browser]
-gatherUsageStats = false

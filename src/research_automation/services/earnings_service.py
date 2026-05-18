@@ -25,9 +25,6 @@ from research_automation.core.paragraph_text import (
 )
 from research_automation.core.ticker_normalize import is_us_equity
 from research_automation.extractors import fmp_client
-# from research_automation.extractors.earningscall_lib import (
-#     get_transcript_from_earningscall,
-# )
 from research_automation.extractors.sec_8k_client import (
     fetch_transcript_from_8k,
     search_8k_transcript,
