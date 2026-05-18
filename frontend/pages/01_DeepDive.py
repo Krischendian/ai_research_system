@@ -553,9 +553,8 @@ if st.session_state.queried:
             rows = p.get("financials") or []
             if not rows:
                 st.info(
-                    "暂无财务数据。请在项目根执行："
-                    "`PYTHONPATH=src python scripts/batch_fetch_financials.py --ticker "
-                    f"{p.get('ticker') or ticker} --force` 从 **SEC EDGAR** 抓取后再查询。"
+                    "暂无财务数据。请确认 `.env` 中 FMP / Bloomberg 配置后，"
+                    f"通过 API `GET /api/v1/companies/{p.get('ticker') or ticker}/financials` 重试。"
                 )
             else:
                 trend_fig = _financial_trend_figure(rows)

@@ -10,7 +10,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-# 与 scripts/batch_fetch_financials.py 一致，避免未设置 PYTHONPATH 时找不到包
+# 与项目根运行方式一致，避免未设置 PYTHONPATH 时找不到包
 _ROOT = Path(__file__).resolve().parents[1]
 _SRC = _ROOT / "src"
 if str(_SRC) not in sys.path:

@@ -1,3 +1,0 @@
-
-=== AI job replacement ===
-WARNING:research_automation.services.hallucination_guard:情态词漂移 field=future_guidance risk=HIGH certain_hits=['正在', '实现'] modal_hits=['expect', 'plan', 'may']

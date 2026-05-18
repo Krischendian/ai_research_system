@@ -4,14 +4,19 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
+from research_automation.api.openapi_meta import COMMON_ERROR_RESPONSES
 from research_automation.services.search_service import answer_question, keyword_search
 
 router = APIRouter(tags=["search"])
 
 
 class SearchRequest(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={"example": {"query": "guidance revenue", "limit": 10}},
+    )
+
     query: str = Field("", description="搜索关键词（空白则返回空列表）")
     limit: int = Field(20, ge=1, le=200, description="最大返回条数")
 
@@ -20,13 +25,22 @@ class SearchResponse(BaseModel):
     results: list[dict[str, Any]]
 
 
-@router.post("/search", response_model=SearchResponse)
+@router.post(
+    "/search",
+    response_model=SearchResponse,
+    summary="关键词搜索本地文档",
+    responses={500: COMMON_ERROR_RESPONSES[500]},
+)
 def post_search(body: SearchRequest) -> SearchResponse:
     rows = keyword_search(body.query, limit=body.limit)
     return SearchResponse(results=rows)
 
 
 class AskRequest(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={"example": {"question": "ACN 管理层对 AI 投入的主要表述是什么？"}},
+    )
+
     question: str = Field("", description="用户问题")
 
 
@@ -35,9 +49,14 @@ class AskResponse(BaseModel):
     sources: list[dict[str, Any]]
 
 
-@router.post("/search/ask", response_model=AskResponse)
+@router.post(
+    "/search/ask",
+    response_model=AskResponse,
+    summary="检索增强问答（RAG）",
+    responses={500: COMMON_ERROR_RESPONSES[500], 503: COMMON_ERROR_RESPONSES[503]},
+)
 def post_search_ask(body: AskRequest) -> AskResponse:
-    """基于关键词检索片段的 RAG 简答（gpt-4o-mini）。"""
+    """基于 `data/` 关键词检索片段，调用 LLM 生成简答并附来源列表。"""
     try:
         out = answer_question(body.question)
     except ValueError as e:

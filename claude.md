@@ -102,7 +102,7 @@ Streamlit (app.py + frontend/pages/*.py)
 - `is_data_fresh()`
 
 ### 行业六步报告
-- 入口：`frontend/pages/04_SectorReport.py` 或 `scripts/generate_sector_report.py`
+- 入口：`frontend/pages/04_SectorReport.py`
 - 核心：`services/sector_report_service.py` → `generate_six_step_sector_report`
 - 耗时：10～20 分钟+（force_refresh 更长）
 - 缓存：`sector_report_cache`（整份）+ `step_cache`（step3/4/exec_summary/overview 等）

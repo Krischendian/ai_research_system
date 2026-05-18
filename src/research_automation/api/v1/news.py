@@ -1,6 +1,7 @@
 """晨报新闻路由（v1：RSS + LLM）。"""
 from fastapi import APIRouter, HTTPException, Query
 
+from research_automation.api.openapi_meta import COMMON_ERROR_RESPONSES
 from research_automation.models.news import (
     MorningBrief,
     OvernightNewsResponse,
@@ -13,7 +14,12 @@ from research_automation.services.overnight_service import get_overnight_news
 router = APIRouter(prefix="/news", tags=["news"])
 
 
-@router.get("/overnight", response_model=OvernightNewsResponse)
+@router.get(
+    "/overnight",
+    response_model=OvernightNewsResponse,
+    summary="隔夜新闻要点",
+    responses={500: COMMON_ERROR_RESPONSES[500], 503: COMMON_ERROR_RESPONSES[503]},
+)
 def overnight_brief(
     sector: str | None = Query(None, description="板块名称，如 AI_Job_Replacement"),
 ) -> OvernightNewsResponse:
@@ -31,7 +37,12 @@ def overnight_brief(
         ) from e
 
 
-@router.get("/yesterday-summary", response_model=YesterdaySummaryResponse)
+@router.get(
+    "/yesterday-summary",
+    response_model=YesterdaySummaryResponse,
+    summary="昨日新闻总结",
+    responses={500: COMMON_ERROR_RESPONSES[500], 503: COMMON_ERROR_RESPONSES[503]},
+)
 def yesterday_summary(
     sector: str | None = Query(None, description="板块名称，如 AI_Job_Replacement"),
 ) -> YesterdaySummaryResponse:
@@ -49,7 +60,12 @@ def yesterday_summary(
         ) from e
 
 
-@router.get("/morning-brief", response_model=MorningBrief)
+@router.get(
+    "/morning-brief",
+    response_model=MorningBrief,
+    summary="自动化晨报",
+    responses={500: COMMON_ERROR_RESPONSES[500], 503: COMMON_ERROR_RESPONSES[503]},
+)
 def morning_brief() -> MorningBrief:
     """
     拉取 Reuters/Bloomberg 等 RSS，经 LLM 生成中文摘要并分为宏观/公司。

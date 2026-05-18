@@ -1,27 +1,58 @@
-# env
+# --- Secrets & local env ---
 .env
+.env.*
+!.env.example
 
-# python
+# --- Python ---
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.py.bak
+*.bak
+*.bak2
+*.bak3
 
-# virtual env
+# --- Virtualenv & test caches ---
 venv/
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
 
-# mac
+# --- macOS ---
 .DS_Store
+*.textClipping
 
-# SEC / 原始 10-K 缓存（体积大、可重建）
-data/raw/
+# --- IDE (keep shared settings if present) ---
+# .vscode/
 
-# 宏观 RSS 磁盘缓存（可重建）
-data/cache/
-
-# vscode
-.vscode/daily_brief_cache.db
-*.pyc
-__pycache__/
-data/reports/scheduler_last_runs.json
-morning_brief_export_*.md
+# --- Local databases (regenerable) ---
 data/research.db
+data/**/*.db
 daily_brief_cache.db
+*.db-journal
+
+# --- Generated reports / exports (API & cron output) ---
+data/reports/**
+!data/reports/.gitkeep
+morning_brief_export_*.md
+final_report*.txt
+earnings_cache_export.json
+openapi.json
+
+# --- Logs ---
+logs/
+*.log
+
+# --- Archives & one-off uploads ---
+src_upload.zip
+
+# --- Root-level ad-hoc debug scripts ---
+test_filter.py
+test_fixes.py
+test_ticker.py
+
+# --- Large / reproducible data caches ---
+data/raw/
+data/cache/

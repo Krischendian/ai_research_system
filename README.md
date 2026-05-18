@@ -17,8 +17,7 @@
 | 电话会 | 逐字稿：**FMP** → EDGAR 8-K → sec-api.io + LLM；部分非美股 ticker 映射到 FMP symbol；**`analysis.quarter` 反映 FMP 实际命中季度**（与请求不同时打日志） | `GET /api/v1/companies/{ticker}/earnings?quarter=2024Q4` |
 | 新闻简报 | 隔夜、昨日总结、晨报（RSS + LLM）；可带 `sector`；**通用词 ticker 噪音过滤**（`TGT`/`RTO`/`EL`/`DG` 需含实体级关键词） | `GET /api/v1/news/*` |
 | 搜索与问答 | 本地 `data/` 关键词检索 + 简答 RAG | `POST /api/v1/search`、`POST /api/v1/search/ask` |
-| 行业报告 | 板块概览 + 公司卡片 + **执行摘要**（多子块；前端按 `##` 切片 Tab）+ Step0b/2/3/4/5/6；**产品线分部 / 地理收入** 在连上 Bloomberg PG 时 **Bloomberg 优先**；**数据覆盖表 / 财务快照** 来源标签综合 `_get_validated_financials` 与画像 `data_source_label`（含 Bloomberg 字样时并入）；Step5 内部交易走 `get_insider_summary`，**引用块脚注**为固定简述（不再拼接每司回退链）；Step4/5 强制 bullet 以 `[TICKER]` 开头；执行摘要与 Step5 正文含 **`_strip_redundant_h2` / `_filter_non_sector_content` / `_dedup_theme_bullets`** 等后处理（见 §6） | `frontend/pages/04_SectorReport.py`、`scripts/generate_sector_report.py` |
-| 调度 | APScheduler 生命周期；隔夜报告、昨日总结、财务批处理等 | `GET/POST /api/v1/system/*` |
+| 行业报告 | 板块概览 + 公司卡片 + **执行摘要**（多子块；前端按 `##` 切片 Tab）+ Step0b/2/3/4/5/6；**产品线分部 / 地理收入** 在连上 Bloomberg PG 时 **Bloomberg 优先**；**数据覆盖表 / 财务快照** 来源标签综合 `_get_validated_financials` 与画像 `data_source_label`（含 Bloomberg 字样时并入）；Step5 内部交易走 `get_insider_summary`，**引用块脚注**为固定简述（不再拼接每司回退链）；Step4/5 强制 bullet 以 `[TICKER]` 开头；执行摘要与 Step5 正文含 **`_strip_redundant_h2` / `_filter_non_sector_content` / `_dedup_theme_bullets`** 等后处理（见 §6） | `frontend/pages/04_SectorReport.py` |
 | PDF 逐字稿注入 | 本地脚本将 **Bloomberg PDF** 文本写入 `step_cache`（`__earnings__` / `step4_analysis`），绕过拉取链路 | 根目录 `inject_transcripts.py` |
 
 ---
@@ -122,20 +121,10 @@
 │       ├── 05_DailyBrief.py
 │       └── 06_SectorMatrix.py
 │
-├── scripts/
-│   ├── run_streamlit.sh
-│   ├── generate_sector_report.py
-│   ├── scheduled_brief.py
-│   ├── batch_fetch_financials.py
-│   ├── seed_ai_job_replacement.py
-│   ├── notion_export.py
-│   ├── test_tavily_signals.py
-│   ├── test_core_business_quality.py
-│   └── recreate_venv.sh
+├── run_streamlit.sh             # 使用项目 venv 启动 Streamlit
 │
 ├── src/research_automation/
-│   ├── main.py                  # FastAPI + CORS + lifespan 调度
-│   ├── scheduler.py
+│   ├── main.py                  # FastAPI + CORS
 │   ├── api/v1/                  # financials / profiles / earnings / news / search / system
 │   ├── core/                    # database, company_manager, ticker_normalize, sector_config, …
 │   ├── extractors/              # fmp_client, sec_edgar, llm_client, bloomberg_reader, …
@@ -145,7 +134,6 @@
 │                                # signal_fetcher, …
 │
 ├── tests/
-├── backend/                     # requirements 片段，由根 requirements.txt 引入
 └── project_plan.md
 ```
 
@@ -165,8 +153,6 @@
 | GET | `/api/v1/news/morning-brief` | 晨报 |
 | POST | `/api/v1/search` | Body：`{ "query", "limit" }` 关键词搜索 |
 | POST | `/api/v1/search/ask` | Body：`{ "question" }` 检索 + 简答 |
-| GET | `/api/v1/system/status` | 调度器状态与上次任务结果 |
-| POST | `/api/v1/system/scheduler/trigger` | Body：`{ "job": "batch\|overnight\|daily\|reports" }`；需 `SCHEDULER_ENABLE_MANUAL_TRIGGER=1` |
 
 交互式文档：启动 uvicorn 后访问 **`/docs`**。
 
@@ -493,6 +479,55 @@ conn.close()
 - **Streamlit** 需在浏览器里 **Cmd+R / Ctrl+R**（`st.session_state` 会缓存旧 Markdown）。
 - 改 `.env` 后请重启 **uvicorn** 与 **Streamlit**。
 
+### 8.2 导出 / 导入 `__earnings__` 缓存（本地 → 服务器）
+
+`step_cache` 表列名为 **`generated_at`**（不是 `created_at`），主键为 **`(sector, year, quarter, step, ticker)`**。在项目根目录执行（`data/research.db` 路径按你部署调整）。
+
+**本地：导出**
+
+```bash
+PYTHONPATH=src python3 -c "
+import sqlite3, json
+conn = sqlite3.connect('data/research.db')
+conn.row_factory = sqlite3.Row
+rows = conn.execute(\"SELECT * FROM step_cache WHERE sector='__earnings__'\").fetchall()
+data = [dict(r) for r in rows]
+with open('earnings_cache_export.json', 'w', encoding='utf-8') as f:
+    json.dump(data, f, ensure_ascii=False)
+print(f'导出 {len(data)} 条')
+conn.close()
+"
+```
+
+**传输**（示例）：
+
+```bash
+scp earnings_cache_export.json user@your-droplet:/opt/research_app/
+```
+
+**服务器：导入**（在含 `data/research.db` 的目录执行，`PYTHONPATH` 指向 `src` 与否均可，此处直接用 `sqlite3`）：
+
+```bash
+cd /opt/research_app   # 示例
+venv/bin/python3 -c "
+import sqlite3, json
+with open('earnings_cache_export.json', encoding='utf-8') as f:
+    data = json.load(f)
+conn = sqlite3.connect('data/research.db')
+for row in data:
+    conn.execute('''
+        INSERT OR REPLACE INTO step_cache
+        (sector, year, quarter, step, ticker, content, generated_at, cache_version)
+        VALUES (:sector, :year, :quarter, :step, :ticker, :content, :generated_at, :cache_version)
+    ''', row)
+conn.commit()
+print(f'导入 {len(data)} 条')
+conn.close()
+"
+```
+
+导入前请确认服务器 SQLite schema 与本地一致（同一代码版本迁移的 `research.db`）。若 JSON 来自旧库缺列，需先 `ALTER TABLE` 或改导出字段列表。
+
 ---
 
 ## 9. 环境变量
@@ -520,8 +555,6 @@ cp .env.example .env
 | `NEWS_TIMEZONE` | 隔夜 / 昨日时间窗（默认 `America/New_York`） |
 | `REPORT_RELEVANCE_THRESHOLD` | 行业报告新闻 relevance 下限（0–3） |
 | `SECTOR_REPORT_STRICT_LLM` | 设为 `1` / `true` 等时，板块级 LLM 失败**不吞异常**，便于调试 |
-| `SCHEDULER_TIMEZONE` / `SCHEDULER_TEST_MODE` / `SCHEDULER_ENABLE_MANUAL_TRIGGER` | APScheduler 时区、测试模式（启动后约 15s 触发一次）、手动触发开关 |
-| `NOTION_API_TOKEN` | `scripts/notion_export.py` |
 
 ---
 
@@ -539,11 +572,11 @@ cp .env.example .env
 
 ### 10.1 依赖版本（`requirements*.txt` 下限）
 
-根目录 **`requirements.txt`** 合并 **`backend/requirements.txt`** 与 **`frontend/requirements.txt`**，并额外要求 `json-repair>=0.30.0`、`psycopg2-binary>=2.9.9`（Bloomberg 只读库可选）。
+根目录 **`requirements.txt`** 包含 **`src/research_automation`** 后端依赖与 **`frontend/requirements.txt`**，并额外要求 `json-repair>=0.30.0`、`psycopg2-binary>=2.9.9`（Bloomberg 只读库可选）。
 
 | 区域 | 主要包（下限示例） |
 |------|---------------------|
-| 后端 | `fastapi>=0.109`、`uvicorn[standard]>=0.27`、`pydantic>=2`、`pandas>=2`、`openai>=1`、`APScheduler>=3.10`、`earningscall>=1`、`feedparser>=6`、`beautifulsoup4>=4.12`、`lxml>=5` |
+| 后端 | `fastapi>=0.109`、`uvicorn[standard]>=0.27`、`pydantic>=2`、`pandas>=2`、`openai>=1`、`earningscall>=1`、`feedparser>=6`、`beautifulsoup4>=4.12`、`lxml>=5` |
 | 前端 | `streamlit>=1.31`、`requests>=2.31`、`plotly>=5.18` |
 | 开发 | `requirements-dev.txt`：在上式基础上 `pytest>=8` |
 
@@ -573,11 +606,11 @@ cd /path/to/project
 或：
 
 ```bash
-./scripts/run_streamlit.sh         # 默认 8501
-./scripts/run_streamlit.sh 8502    # 须与 main.py CORS 一致
+./run_streamlit.sh         # 默认 8501
+./run_streamlit.sh 8502    # 须与 main.py CORS 一致
 ```
 
-- **路径含空格**：`cd` 加引号；勿写成 `cd "..."./scripts/...`。
+- **路径含空格**：`cd` 时对整个项目路径加引号。
 - **首次启动**：冷导入可能 1～3 分钟无输出。
 - **性能**：`.nosync` 仅减少 iCloud 同步；大仓库建议放在 `~/Developer/...` 等非桌面路径。
 
@@ -586,17 +619,12 @@ cd /path/to/project
 
 ---
 
-## 11. 脚本与运维
+## 11. 运维命令
 
 ```bash
 source venv/bin/activate
-PYTHONPATH=src python3 scripts/generate_sector_report.py
-PYTHONPATH=src python3 scripts/scheduled_brief.py
-PYTHONPATH=src python3 scripts/batch_fetch_financials.py
-PYTHONPATH=src python3 scripts/seed_ai_job_replacement.py
 python3 inject_transcripts.py
 PYTHONPATH=src python3 test_bbg.py                # 分部数据来源烟测（见文件内 ticker 列表）
-python3 scripts/notion_export.py                  # 需 NOTION_API_TOKEN
 python3 -m py_compile src/research_automation/services/sector_report_service.py
 ```
 
@@ -658,8 +686,6 @@ print(_passes_required_keywords({'title':'Activist Builds Stake in Takeover Targ
 "
 ```
 
-定时任务示例见 `scripts/scheduled_brief.py` 文件头；`cd` 路径须与本机一致。
-
 ---
 
 ## 12. 测试
@@ -706,7 +732,7 @@ PYTHONPATH=src pytest tests/services/test_post_generation_checker.py -q
 ## 14. 常见问题
 
 - **ImportError**：加 `PYTHONPATH=src`，在项目根执行。
-- **`plotly` 找不到**：使用 `./venv/bin/python3` 或 `./scripts/run_streamlit.sh`。
+- **`plotly` 找不到**：使用 `./venv/bin/python3` 或 `./run_streamlit.sh`。
 - **`psycopg2`**：在 venv 中 `pip install -r requirements.txt`；Bloomberg 路径为惰性导入。
 - **uvicorn 疯狂 Reloading**：使用 `--reload-dir src`。
 - **CORS**：Streamlit 源端口须在 `main.py` 的 `allow_origins` 中。
